@@ -1,0 +1,77 @@
+{
+  "title": "AgentTargetConfig",
+  "description": "Schema for an agent target configuration in the AI Agent Hub.",
+  "type": "object",
+  "required": [
+    "id",
+    "displayName",
+    "extensionId",
+    "enabled",
+    "targets",
+    "autoSync"
+  ],
+  "definitions": {
+    "targetLocationConfig": {
+      "type": "object",
+      "required": ["enabled", "path", "format", "mergeStrategy"],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "path": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string",
+          "enum": ["markdown", "json", "yaml", "plaintext"]
+        },
+        "mergeStrategy": {
+          "type": "string",
+          "enum": ["copy-files", "single-bundle-file", "append"]
+        },
+        "bundleFileName": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "extensionId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "targets": {
+      "type": "object",
+      "required": ["skill", "rule", "hook", "tool"],
+      "properties": {
+        "skill": { "$ref": "#/definitions/targetLocationConfig" },
+        "rule": { "$ref": "#/definitions/targetLocationConfig" },
+        "hook": { "$ref": "#/definitions/targetLocationConfig" },
+        "tool": { "$ref": "#/definitions/targetLocationConfig" }
+      },
+      "additionalProperties": false
+    },
+    "autoSync": {
+      "type": "boolean"
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "updatedAt": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

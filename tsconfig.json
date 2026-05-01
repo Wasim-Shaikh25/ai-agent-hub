@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "commonjs",
+    "outDir": "./out",
+    "rootDir": "./src",
+    "lib": ["ES2022"],
+    "sourceMap": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "declaration": true
+  },
+  "include": ["src/**/*", "hub-content/**/*", "schemas/**/*"],
+  "exclude": ["node_modules", "out", "**/*.test.ts"]
+}

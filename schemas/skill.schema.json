@@ -1,0 +1,51 @@
+{
+  "title": "SkillItem",
+  "description": "Schema for a skill item managed by the AI Agent Hub.",
+  "type": "object",
+  "required": [
+    "name",
+    "type",
+    "enabled",
+    "description",
+    "content",
+    "format"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "const": "skill"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["builtin", "user"]
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "description": {
+      "type": "string"
+    },
+    "content": {
+      "type": "string"
+    },
+    "format": {
+      "type": "string",
+      "enum": ["markdown", "json", "yaml", "plaintext"]
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "updatedAt": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
