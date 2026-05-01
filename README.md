@@ -76,6 +76,69 @@ gh release download --repo WDPR-Lodging/ai-agent-hub \
 code --install-extension ai-agent-hub.vsix
 ```
 
+### Installing a Specific Version
+
+Every merged PR creates a tagged GitHub Release (e.g., `v1.2.0`).
+To install a particular version:
+
+**Using the GitHub CLI:**
+
+```bash
+gh release download v1.2.0 \
+  --repo WDPR-Lodging/ai-agent-hub \
+  --pattern "*.vsix" --dir .
+code --install-extension ai-agent-hub.vsix
+```
+
+**From the Releases page:**
+
+1. Go to
+   [Releases](https://github.disney.com/WDPR-Lodging/ai-agent-hub/releases).
+2. Find the version you need (e.g., `v1.2.0`).
+3. Download the `ai-agent-hub.vsix` from that release's assets.
+4. Install it:
+
+```text
+code --install-extension ai-agent-hub.vsix
+```
+
+**Building a specific version from source:**
+
+```bash
+git clone https://github.disney.com/WDPR-Lodging/ai-agent-hub.git
+cd ai-agent-hub
+git checkout v1.2.0
+npm install
+npm run build
+npm run package
+code --install-extension ai-agent-hub-*.vsix
+```
+
+> **Note:** Installing an older version over a newer one works fine.
+> VS Code will use whichever version you install last. To confirm
+> the active version, open the Extensions sidebar and search for
+> "AI Agent Hub".
+
+### Uninstalling
+
+**From the command line:**
+
+```bash
+code --uninstall-extension ai-agent-hub.ai-agent-hub
+```
+
+**From VS Code UI:**
+
+1. Open the Extensions sidebar (`Ctrl+Shift+X` / `Cmd+Shift+X`).
+2. Search for "AI Agent Hub".
+3. Click the gear icon on the extension and select **Uninstall**.
+4. Reload VS Code when prompted.
+
+> **Note:** Uninstalling the extension does not remove any files it
+> synced to agent target folders (e.g., `.kiro/steering/`,
+> `.cursor/rules/`). Delete those manually if you no longer need
+> them.
+
 ## Quick Start
 
 1. Open VS Code after installing the extension.
