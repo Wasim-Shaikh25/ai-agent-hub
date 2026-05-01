@@ -3,6 +3,7 @@ import { Registry } from './registry';
 import { AgentConfigStore } from './agentConfig';
 import { FileWriter } from './fileWriter';
 import { Storage } from './storage';
+import { HubUpdater } from './hubUpdater';
 import { ItemType, SyncResult, AgentSyncResult } from './types';
 
 /** The three content categories processed during a sync. */
@@ -28,6 +29,8 @@ export class SyncEngine {
     private readonly agentConfig: AgentConfigStore,
     private readonly fileWriter: FileWriter,
     private readonly storage: Storage,
+    private readonly hubUpdater?: HubUpdater,
+    private readonly extensionPath?: string,
   ) {}
 
   /**
@@ -62,6 +65,15 @@ export class SyncEngine {
     const agentResults: AgentSyncResult[] = [];
 
     try {
+      // Fetch latest hub content from remote before syncing
+      if (this.hubUpdater && this.extensionPath) {
+        const updated = await this.hubUpdater.fetchLatest(this.extensionPath);
+        if (updated) {
+          // Reload registry so new/changed builtin items are picked up
+          this.registry.initialize(this.extensionPath);
+        }
+      }
+
       const enabledConfigs = this.agentConfig.getEnabled();
 
       for (const config of enabledConfigs) {

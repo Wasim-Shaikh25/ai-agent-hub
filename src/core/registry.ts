@@ -37,6 +37,9 @@ export class Registry {
    */
   initialize(extensionPath: string): void {
     for (const type of ITEM_TYPES) {
+      // Clear existing items to avoid duplicates on re-init
+      this.collections[type] = [];
+
       const builtinDir = path.join(extensionPath, 'hub-content', `${type}s`);
       if (fs.existsSync(builtinDir)) {
         const files = fs
