@@ -32,7 +32,7 @@ const ALL_TABS: readonly TabType[] = [
 
 /**
  * Manages the main Hub webview panel with six tabs:
- * Skills, Rules, Hooks, Tools, Agents, and Sync.
+ * Skills, Rules, Hooks, Agents, and Sync.
  *
  * Implements singleton panel behaviour — calling {@link open}
  * when a panel already exists will reveal it instead of

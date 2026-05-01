@@ -16,7 +16,7 @@ const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook'];
 /**
  * In-memory item store for all Hub content.
  *
- * Manages four collections (skills, rules, hooks, tools),
+ * Manages three collections (skills, rules, hooks),
  * each containing both builtin items loaded from disk and
  * user items persisted via {@link Storage}.
  */

@@ -177,7 +177,6 @@ hub-content/
   skills/    — Skill markdown files
   rules/     — Rule markdown files
   hooks/     — Hook markdown files
-  tools/     — (reserved for future use)
 ```
 
 Each content file uses YAML front matter for metadata:
