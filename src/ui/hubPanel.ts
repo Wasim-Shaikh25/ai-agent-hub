@@ -519,7 +519,7 @@ export class HubPanel {
           </div>
           <div>
             <label style="font-size:0.8em;opacity:0.6;display:block;margin-bottom:2px;">Port</label>
-            <input type="number" id="mcp-port" value="3100" min="1024" max="65535" style="width:100%" />
+            <input type="number" id="mcp-port" value="${this.nextAvailablePort(servers)}" min="1024" max="65535" style="width:100%" />
           </div>
           <div>
             <label style="font-size:0.8em;opacity:0.6;display:block;margin-bottom:2px;">Extra Args (space-separated)</label>
@@ -575,6 +575,16 @@ export class HubPanel {
     }).join('');
 
     return addForm + list;
+  }
+
+  /** Returns the next available port starting from 3100. */
+  private nextAvailablePort(servers: McpServerConfig[]): number {
+    const usedPorts = new Set(servers.map((s) => s.port));
+    let port = 3100;
+    while (usedPorts.has(port)) {
+      port++;
+    }
+    return port;
   }
 
   private renderSyncResult(result: SyncResult): string {

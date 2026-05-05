@@ -30,6 +30,11 @@ export class McpStore {
       throw new Error('Port must be between 1024 and 65535');
     }
 
+    const existing = this.getAll();
+    if (existing.some((s) => s.port === fields.port)) {
+      throw new Error(`Port ${fields.port} is already in use by another MCP server`);
+    }
+
     const now = new Date().toISOString();
     const config: McpServerConfig = {
       ...fields,
