@@ -102,12 +102,15 @@ export class SetupPanel {
     this.post({ type: 'removed', id });
   }
 
-  private onAdd(dn?: string, _ext?: string): void {
+  private onAdd(dn?: string, ext?: string): void {
     if (!dn) { this.post({ type: 'validationErrors', id: '', errors: ['Agent name is required.'] }); return; }
     const now = new Date().toISOString();
-    const slug = dn.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    // Use the real extensionId if provided (from a detected agent card),
+    // otherwise generate a manual slug so it doesn't duplicate the detected card.
+    const extensionId = ext && ext.trim() ? ext.trim()
+      : `manual.${dn.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`;
     const config: AgentTargetConfig = {
-      id: randomUUID(), displayName: dn, extensionId: `manual.${slug}`, enabled: true,
+      id: randomUUID(), displayName: dn, extensionId, enabled: true,
       targets: defaultTargets(), autoSync: false, createdAt: now, updatedAt: now,
     };
     this.agentConfig.save(config);
