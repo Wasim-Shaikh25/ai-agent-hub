@@ -102,7 +102,7 @@ export class HubUpdater {
     }
 
     let copied = 0;
-    const subdirs = ['skills', 'rules', 'hooks'];
+    const subdirs = ['skills', 'rules', 'hooks', 'workflows', 'agents'];
 
     for (const sub of subdirs) {
       const srcDir = path.join(srcBase, sub);

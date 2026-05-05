@@ -9,8 +9,8 @@
 // Item types
 // ---------------------------------------------------------------------------
 
-/** The three content categories managed by the Hub. */
-export type ItemType = 'skill' | 'rule' | 'hook';
+/** The five content categories managed by the Hub. */
+export type ItemType = 'skill' | 'rule' | 'hook' | 'workflow' | 'agent';
 
 /** Where a Hub item originated. */
 export type ItemSource = 'builtin' | 'user';
@@ -24,12 +24,29 @@ export type HookTrigger = 'before' | 'after' | 'always';
 /** Strategy used to write content into an agent's target path. */
 export type MergeStrategy = 'copy-files' | 'single-bundle-file' | 'append';
 
+/**
+ * File extension conventions used by different AI agent targets.
+ *
+ * - 'md': Standard markdown (e.g., Kiro steering files)
+ * - 'instructions-md': Suffixed with -instructions.md (e.g., GitHub Copilot)
+ * - 'mdc': Cursor rule format (.mdc)
+ * - 'prompt-md': Suffixed with .prompt.md (e.g., GitHub Copilot prompts)
+ */
+export type FileExtensionFormat = 'md' | 'instructions-md' | 'mdc' | 'prompt-md';
+
 // ---------------------------------------------------------------------------
-// Tab types for the Hub UI (6 tabs)
+// Tab types for the Hub UI
 // ---------------------------------------------------------------------------
 
-/** The five tabs rendered in the main Hub webview panel. */
-export type TabType = 'skills' | 'rules' | 'hooks' | 'agents' | 'sync';
+/** The tabs rendered in the main Hub webview panel. */
+export type TabType =
+  | 'skills'
+  | 'rules'
+  | 'hooks'
+  | 'workflows'
+  | 'agents'
+  | 'repos'
+  | 'sync';
 
 // ---------------------------------------------------------------------------
 // Hub items
@@ -65,8 +82,18 @@ export interface HookItem extends HubItem {
   trigger: HookTrigger;
 }
 
+/** A workflow item managed by the Hub. */
+export interface WorkflowItem extends HubItem {
+  type: 'workflow';
+}
+
+/** An agent configuration item managed by the Hub. */
+export interface AgentItem extends HubItem {
+  type: 'agent';
+}
+
 /** Discriminated union of all concrete Hub item types. */
-export type AnyHubItem = SkillItem | RuleItem | HookItem;
+export type AnyHubItem = SkillItem | RuleItem | HookItem | WorkflowItem | AgentItem;
 
 // ---------------------------------------------------------------------------
 // Agent configuration
@@ -86,6 +113,8 @@ export interface TargetLocationConfig {
   path: string;
   /** How files are organized in the target folder. */
   fileLayout: FileLayout;
+  /** File extension format for this target. */
+  fileExtension: FileExtensionFormat;
 }
 
 /** Full configuration record for a single agent target. */
@@ -105,7 +134,31 @@ export const SUBFOLDER_FILENAMES: Record<ItemType, string> = {
   skill: 'SKILL.md',
   rule: 'RULE.md',
   hook: 'HOOK.md',
+  workflow: 'WORKFLOW.md',
+  agent: 'AGENT.md',
 };
+
+// ---------------------------------------------------------------------------
+// Repo-level sync configuration
+// ---------------------------------------------------------------------------
+
+/** A repository target where specific content can be synced. */
+export interface RepoSyncTarget {
+  readonly id: string;
+  /** Display name for the repo (e.g., "my-frontend-app") */
+  name: string;
+  /** Absolute local path to the repository root. */
+  repoPath: string;
+  /** Which agent target config to use for file layout/paths. */
+  agentTargetId: string;
+  /** Which content types to sync to this repo. */
+  enabledContentTypes: ItemType[];
+  /** Optional: specific item IDs to sync (empty = all enabled). */
+  selectedItemIds: string[];
+  enabled: boolean;
+  readonly createdAt: string; // ISO 8601
+  updatedAt: string;         // ISO 8601
+}
 
 // ---------------------------------------------------------------------------
 // Agent detection
@@ -127,12 +180,21 @@ export interface DetectedAgentCandidate {
 export interface SyncResult {
   readonly timestamp: string; // ISO 8601
   readonly agentResults: AgentSyncResult[];
+  readonly repoResults: RepoSyncResult[];
 }
 
 /** Per-agent, per-content-type outcome of a sync operation. */
 export interface AgentSyncResult {
   readonly agentName: string;
   readonly contentType: ItemType;
+  readonly filesWritten: string[];
+  readonly errors: string[];
+}
+
+/** Per-repo outcome of a sync operation. */
+export interface RepoSyncResult {
+  readonly repoName: string;
+  readonly repoPath: string;
   readonly filesWritten: string[];
   readonly errors: string[];
 }

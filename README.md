@@ -174,9 +174,11 @@ Hub content lives in the `hub-content/` directory:
 
 ```text
 hub-content/
-  skills/    — Skill markdown files
-  rules/     — Rule markdown files
-  hooks/     — Hook markdown files
+  skills/      — Skill markdown files (.skill.md)
+  rules/       — Rule markdown files (.rule.md)
+  hooks/       — Hook markdown files (.hook.md)
+  workflows/   — Workflow markdown files (.workflow.md)
+  agents/      — Agent persona files (.agent.md)
 ```
 
 Each content file uses YAML front matter for metadata:
@@ -196,6 +198,29 @@ description: Short description of what this skill does.
 Instructions for the AI agent go here.
 ```
 
+### Content Types
+
+| Type       | Purpose                                          | File Format          |
+| ---------- | ------------------------------------------------ | -------------------- |
+| **Skill**  | Reusable coding instructions and behaviors       | `.skill.md`          |
+| **Rule**   | Guardrails, standards, and naming conventions    | `.rule.md`           |
+| **Hook**   | Event-driven triggers (before/after actions)     | `.hook.md`           |
+| **Workflow**| Step-by-step processes (review, deploy, etc.)   | `.workflow.md`       |
+| **Agent**  | Agent persona definitions and system prompts     | `.agent.md`          |
+
+### File Extension Formats per Agent Target
+
+Different AI agents expect different file formats. The Hub handles
+this automatically based on your agent target configuration:
+
+| Agent Target    | Extension Format       | Example Output                    |
+| --------------- | ---------------------- | --------------------------------- |
+| Kiro            | `.md`                  | `clean-code.md`                   |
+| Cursor          | `.mdc`                 | `clean-code.mdc`                  |
+| GitHub Copilot  | `-instructions.md`     | `clean-code-instructions.md`      |
+| GitHub Copilot  | `.prompt.md`           | `clean-code.prompt.md`            |
+| Amazon Q        | `.md`                  | `clean-code.md`                   |
+
 ## Supported Agent Targets
 
 AI Agent Hub can sync content to any agent that reads markdown or
@@ -209,6 +234,35 @@ config files from the workspace. Tested targets include:
 
 The setup wizard auto-detects installed agent extensions and
 configures paths automatically.
+
+## Repo-Level Sync
+
+In addition to syncing globally, you can target specific
+repositories. This is useful when you want certain skills or rules
+to apply only to particular projects.
+
+### How It Works
+
+1. Run **AI Agent Hub: Open** and go to the Repos tab.
+2. Click "Add Repo" and provide:
+   - A display name (e.g., "my-frontend-app")
+   - The local path to the repository
+   - Which agent target config to use (e.g., Cursor, Kiro)
+   - Which content types to sync (skills, rules, hooks, etc.)
+   - Optionally, specific items to include (default: all enabled)
+3. On the next sync, content is written directly into that repo's
+   agent config folder.
+
+### Example
+
+You have a Cursor-configured agent target. You add a repo at
+`C:\projects\my-app` and select only "skills" and "rules". On sync,
+the Hub writes your enabled skills and rules into
+`C:\projects\my-app\.cursor\rules\` (or whichever path your Cursor
+target is configured to use).
+
+You can add as many repos as you need. Each repo can have different
+content types and even different item selections.
 
 ## Versioning
 

@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
 import { Registry } from './registry';
 import { AgentConfigStore } from './agentConfig';
+import { RepoSyncStore } from './repoSyncStore';
 import { FileWriter } from './fileWriter';
 import { Storage } from './storage';
 import { HubUpdater } from './hubUpdater';
-import { ItemType, SyncResult, AgentSyncResult } from './types';
+import { ItemType, SyncResult, AgentSyncResult, RepoSyncResult } from './types';
 
 /** The three content categories processed during a sync. */
-const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook'];
+const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'agent'];
 
 /**
  * Orchestrates syncing enabled Hub items to all enabled
@@ -31,6 +32,7 @@ export class SyncEngine {
     private readonly storage: Storage,
     private readonly hubUpdater?: HubUpdater,
     private readonly extensionPath?: string,
+    private readonly repoSyncStore?: RepoSyncStore,
   ) {}
 
   /**
@@ -42,7 +44,7 @@ export class SyncEngine {
   async sync(): Promise<SyncResult> {
     if (this.syncing) {
       vscode.window.showInformationMessage('A sync is already in progress.');
-      return { timestamp: new Date().toISOString(), agentResults: [] };
+      return { timestamp: new Date().toISOString(), agentResults: [], repoResults: [] };
     }
 
     // Check confirmation setting
@@ -57,12 +59,13 @@ export class SyncEngine {
         'Sync',
       );
       if (answer !== 'Sync') {
-        return { timestamp: new Date().toISOString(), agentResults: [] };
+        return { timestamp: new Date().toISOString(), agentResults: [], repoResults: [] };
       }
     }
 
     this.syncing = true;
     const agentResults: AgentSyncResult[] = [];
+    const repoResults: RepoSyncResult[] = [];
 
     try {
       // Fetch latest hub content from remote before syncing
@@ -97,6 +100,55 @@ export class SyncEngine {
           });
         }
       }
+
+      // Sync to repo-level targets
+      if (this.repoSyncStore) {
+        const enabledRepos = this.repoSyncStore.getEnabled();
+
+        for (const repo of enabledRepos) {
+          const agentCfg = enabledConfigs.find((c) => c.id === repo.agentTargetId);
+          if (!agentCfg) {
+            repoResults.push({
+              repoName: repo.name,
+              repoPath: repo.repoPath,
+              filesWritten: [],
+              errors: [`Agent target "${repo.agentTargetId}" not found`],
+            });
+            continue;
+          }
+
+          const filesWritten: string[] = [];
+          const errors: string[] = [];
+
+          for (const type of repo.enabledContentTypes) {
+            const target = agentCfg.targets[type];
+            if (!target || !target.enabled) {
+              continue;
+            }
+
+            let items = this.registry.getEnabledItems(type);
+            // Filter to selected items if specified
+            if (repo.selectedItemIds.length > 0) {
+              items = items.filter((i) => repo.selectedItemIds.includes(i.id));
+            }
+            if (items.length === 0) {
+              continue;
+            }
+
+            const repoTarget = { ...target, path: `${repo.repoPath}/${target.path}` };
+            const result = await this.fileWriter.write(items, repoTarget, type);
+            filesWritten.push(...result.filesWritten);
+            errors.push(...result.errors);
+          }
+
+          repoResults.push({
+            repoName: repo.name,
+            repoPath: repo.repoPath,
+            filesWritten,
+            errors,
+          });
+        }
+      }
     } finally {
       this.syncing = false;
     }
@@ -104,6 +156,7 @@ export class SyncEngine {
     const syncResult: SyncResult = {
       timestamp: new Date().toISOString(),
       agentResults,
+      repoResults,
     };
 
     // Persist last sync result for the Sync tab

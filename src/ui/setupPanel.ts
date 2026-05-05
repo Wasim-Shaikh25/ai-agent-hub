@@ -3,17 +3,19 @@ import { randomUUID } from 'crypto';
 import { AgentConfigStore } from '../core/agentConfig';
 import {
   DetectedAgentCandidate, AgentTargetConfig,
-  ItemType, TargetLocationConfig, FileLayout,
+  ItemType, TargetLocationConfig, FileLayout, FileExtensionFormat,
 } from '../core/types';
 import { PathUtils } from '../utils/pathUtils';
 import { getNonce, getBaseStyles, getBaseScriptSetup } from './webviewHtml';
 
-const CONTENT_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook'];
+const CONTENT_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'agent'];
 
 const PATH_HINTS: Record<ItemType, string> = {
   skill: '.kiro/steering  or  .cursor/rules',
   rule: '.kiro/steering  or  .github/instructions',
   hook: '.kiro/hooks',
+  workflow: '.kiro/steering  or  .cursor/rules',
+  agent: '.kiro/steering  or  .github/prompts',
 };
 
 export class SetupPanel {
@@ -283,19 +285,30 @@ function slugExample(ct: ItemType): string {
 }
 
 function defaultTarget(): TargetLocationConfig {
-  return { enabled: false, path: '', fileLayout: 'flat' };
+  return { enabled: false, path: '', fileLayout: 'flat', fileExtension: 'md' };
 }
 
 function defaultTargets(): Record<ItemType, TargetLocationConfig> {
-  return { skill: defaultTarget(), rule: defaultTarget(), hook: defaultTarget() };
+  return {
+    skill: defaultTarget(),
+    rule: defaultTarget(),
+    hook: defaultTarget(),
+    workflow: defaultTarget(),
+    agent: defaultTarget(),
+  };
 }
 
 function buildTargets(raw?: Partial<Record<ItemType, Partial<TargetLocationConfig>>>): Record<ItemType, TargetLocationConfig> {
   const r = defaultTargets();
   if (!raw) return r;
-  for (const ct of ['skill','rule','hook'] as ItemType[]) {
+  for (const ct of ['skill', 'rule', 'hook', 'workflow', 'agent'] as ItemType[]) {
     const s = raw[ct];
-    if (s) r[ct] = { enabled: s.enabled ?? false, path: s.path ?? '', fileLayout: (s.fileLayout as FileLayout) ?? 'flat' };
+    if (s) r[ct] = {
+      enabled: s.enabled ?? false,
+      path: s.path ?? '',
+      fileLayout: (s.fileLayout as FileLayout) ?? 'flat',
+      fileExtension: (s.fileExtension as FileExtensionFormat) ?? 'md',
+    };
   }
   return r;
 }

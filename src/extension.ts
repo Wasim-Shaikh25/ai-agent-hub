@@ -9,6 +9,7 @@ import { AgentConfigStore } from './core/agentConfig';
 import { FileWriter } from './core/fileWriter';
 import { SyncEngine } from './core/syncEngine';
 import { HubUpdater } from './core/hubUpdater';
+import { RepoSyncStore } from './core/repoSyncStore';
 import { HubPanel } from './ui/hubPanel';
 import { SetupPanel } from './ui/setupPanel';
 import { openHub } from './commands/openHub';
@@ -38,6 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const agentConfig = new AgentConfigStore(storage);
     const fileWriter = new FileWriter(pathUtils);
     const hubUpdater = new HubUpdater(context.globalStorageUri.fsPath);
+    const repoSyncStore = new RepoSyncStore(storage);
     const syncEngine = new SyncEngine(
       registry,
       agentConfig,
@@ -45,6 +47,7 @@ export function activate(context: vscode.ExtensionContext): void {
       storage,
       hubUpdater,
       context.extensionPath,
+      repoSyncStore,
     );
 
     // Load builtin content from hub-content/
