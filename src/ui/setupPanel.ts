@@ -419,13 +419,14 @@ export class SetupPanel {
 
     const repoSection = `
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--vscode-panel-border);">
-        <strong style="font-size:0.9em;">Repo-Level Sync</strong>
-        <p class="hint" style="margin:4px 0 8px;">
-          Add specific repos where this agent's content should be synced independently.
-          Each repo can have its own paths and file extensions.
-        </p>
+        <button class="btn-secondary" data-act="showRepoForm" data-id="${cfg.id}"
+          id="btn-add-repo-${cfg.id}">+ Add to Repo</button>
 
-        <div id="repo-form-${cfg.id}" style="display:none;border:1px solid var(--vscode-panel-border);border-radius:4px;padding:10px;margin-bottom:8px;">
+        <div id="repo-form-${cfg.id}" style="display:none;margin-top:10px;border:1px solid var(--vscode-panel-border);border-radius:4px;padding:10px;">
+          <strong style="font-size:0.9em;display:block;margin-bottom:6px;">Repo-Level Sync</strong>
+          <p class="hint" style="margin:0 0 10px;">
+            Configure paths and file extensions for each content type within this repo.
+          </p>
           <div style="margin-bottom:10px;">
             <label class="dim" style="font-size:0.8em;display:block;margin-bottom:4px;">Repo Name</label>
             <input type="text" class="repo-name" data-id="${cfg.id}"
@@ -436,18 +437,12 @@ export class SetupPanel {
             <input type="text" class="repo-path" data-id="${cfg.id}"
               placeholder="C:\\projects\\my-app  or  /home/user/projects/my-app" style="width:100%" />
           </div>
-          <p class="dim" style="font-size:0.8em;margin-bottom:6px;">
-            Configure which content types to sync and their target paths within this repo:
-          </p>
           ${repoRows}
           <div style="display:flex;gap:8px;margin-top:8px;">
             <button class="btn-primary" data-act="saveRepo" data-id="${cfg.id}">Save Repo</button>
             <button class="btn-secondary" data-act="cancelRepo" data-id="${cfg.id}">Cancel</button>
           </div>
         </div>
-
-        <button class="btn-secondary" data-act="showRepoForm" data-id="${cfg.id}"
-          id="btn-add-repo-${cfg.id}">+ Add to Repo</button>
 
         <div class="repo-list" data-id="${cfg.id}" style="margin-top:8px;"></div>
       </div>`;
