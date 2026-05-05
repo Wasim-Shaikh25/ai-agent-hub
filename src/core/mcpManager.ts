@@ -28,11 +28,21 @@ export class McpManager {
     this.setState(config.id, { configId: config.id, status: 'starting' });
 
     const url = `http://localhost:${config.port}`;
-    const args = ['--yes', config.packageName, ...config.args];
+
+    // Wrap the stdio MCP server with mcp-proxy so it exposes HTTP/SSE endpoints.
+    // Command: npx --yes mcp-proxy --port <port> -- npx --yes <package> [...args]
+    const proxyArgs = [
+      '--yes',
+      'mcp-proxy',
+      '--port', String(config.port),
+      '--',
+      'npx', '--yes', config.packageName,
+      ...config.args,
+    ];
     const env = { ...process.env, ...config.env };
 
     try {
-      const child = spawn('npx', args, {
+      const child = spawn('npx', proxyArgs, {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: process.platform === 'win32',
@@ -144,7 +154,7 @@ export class McpManager {
    */
   generateRuleMarkdown(config: McpServerConfig): string {
     const state = this.getState(config.id);
-    const url = state.url ?? `http://localhost:${config.port}`;
+    const baseUrl = state.url ?? `http://localhost:${config.port}`;
     const status = state.status;
 
     return `# MCP Tool: ${config.name}
@@ -156,42 +166,47 @@ export class McpManager {
 
 - **Name**: ${config.name}
 - **Package**: \`${config.packageName}\`
-- **Endpoint**: \`${url}\`
+- **Base URL**: \`${baseUrl}\`
+- **Endpoints**: \`${baseUrl}/mcp\` (Streamable HTTP) · \`${baseUrl}/sse\` (SSE)
 - **Status**: ${status}
 
 ## How to Use This MCP Server
 
-This MCP server is running locally inside the AI Agent Hub extension.
-You can call its tools directly over HTTP using the MCP protocol.
+This MCP server is running locally inside the AI Agent Hub extension,
+exposed via [mcp-proxy](https://www.npmjs.com/package/mcp-proxy).
 
-### Calling a Tool
+### Step 1 — List Available Tools
 
-To invoke a tool from this MCP server, make an HTTP POST request:
-
-\`\`\`
-POST ${url}/call
-Content-Type: application/json
-
-{
-  "tool": "<tool-name>",
-  "arguments": { "<arg>": "<value>" }
-}
+\`\`\`bash
+curl -s -X POST ${baseUrl}/mcp \\
+  -H "Content-Type: application/json" \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
 \`\`\`
 
-### Listing Available Tools
+### Step 2 — Call a Tool
 
+\`\`\`bash
+curl -s -X POST ${baseUrl}/mcp \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 2,
+    "method": "tools/call",
+    "params": {
+      "name": "<tool-name>",
+      "arguments": { "<arg>": "<value>" }
+    }
+  }'
 \`\`\`
-GET ${url}/tools
-\`\`\`
 
-### Example Usage in a Prompt
+### Using in a Prompt
 
-When asked to use this MCP server, you can say:
+When asked to use this MCP server, say:
 
-> "Use the ${config.name} MCP server at \`${url}\` to call the
-> \`<tool-name>\` tool with the following arguments: ..."
-
-The AI agent will make the HTTP call and return the result.
+> "Use the ${config.name} MCP server. First call
+> \`POST ${baseUrl}/mcp\` with
+> \`{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}\`
+> to list tools, then call the relevant tool."
 
 ## Configuration
 
@@ -200,7 +215,9 @@ The AI agent will make the HTTP call and return the result.
   "name": "${config.name}",
   "package": "${config.packageName}",
   "port": ${config.port},
-  "url": "${url}"
+  "baseUrl": "${baseUrl}",
+  "mcpEndpoint": "${baseUrl}/mcp",
+  "sseEndpoint": "${baseUrl}/sse"
 }
 \`\`\`
 `;
