@@ -93,11 +93,7 @@ export class SetupPanel {
     };
     this.agentConfig.save(config);
     this.post({ type: 'saved', id: config.id });
-    vscode.window.showInformationMessage(`"${config.displayName}" saved. Syncing…`);
-    if (this.onSyncRequested) {
-      try { await this.onSyncRequested(); }
-      catch (err) { vscode.window.showErrorMessage(`Sync failed: ${err instanceof Error ? err.message : String(err)}`); }
-    }
+    vscode.window.showInformationMessage(`"${config.displayName}" saved.`);
   }
 
   private onRemove(id?: string): void {
@@ -314,7 +310,7 @@ export class SetupPanel {
 
     window.addEventListener('message',function(ev){
       var msg=ev.data;
-      if(msg.type==='saved'){var s=document.querySelector('.st[data-id="'+msg.id+'"]');if(s)s.innerHTML='<div class="ok">Saved and synced.</div>';}
+      if(msg.type==='saved'){var s=document.querySelector('.st[data-id="'+msg.id+'"]');if(s)s.innerHTML='<div class="ok">Saved.</div>';}
       else if(msg.type==='validationErrors'){var s2=document.querySelector('.st[data-id="'+msg.id+'"]');if(s2)s2.innerHTML=(msg.errors||[]).map(function(e){return'<div class="err">'+esc(e)+'</div>';}).join('');}
       else if(msg.type==='removed'){var c=document.querySelector('[data-agent-id="'+msg.id+'"]');if(c)c.remove();}
       else if(msg.type==='expandAgent'){var b=document.getElementById('body-'+msg.id);if(b)b.classList.add('open');}
@@ -460,7 +456,7 @@ export class SetupPanel {
       ${repoSection}
       <div class="st" data-id="${cfg.id}"></div>
       <div class="acts">
-        <button class="btn-primary" data-act="save" data-id="${cfg.id}">Save &amp; Sync</button>
+        <button class="btn-primary" data-act="save" data-id="${cfg.id}">Save</button>
         <button class="btn-danger" data-act="remove" data-id="${cfg.id}">Remove</button>
       </div>`;
   }
