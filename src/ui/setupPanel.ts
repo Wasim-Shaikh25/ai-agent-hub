@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { randomUUID } from 'crypto';
 import { AgentConfigStore } from '../core/agentConfig';
+import { RepoSyncStore } from '../core/repoSyncStore';
 import {
   DetectedAgentCandidate, AgentTargetConfig,
   ItemType, TargetLocationConfig, FileLayout, FileExtensionFormat,
@@ -27,6 +28,7 @@ export class SetupPanel {
     private readonly extensionUri: vscode.Uri,
     private readonly agentConfig: AgentConfigStore,
     private readonly pathUtils: PathUtils,
+    private readonly repoSyncStore?: RepoSyncStore,
   ) {}
 
   setSyncCallback(cb: () => Promise<void>): void { this.onSyncRequested = cb; }
@@ -62,6 +64,7 @@ export class SetupPanel {
       case 'saveAgentConfig': this.onSave(msg.config); break;
       case 'removeAgent': this.onRemove(msg.id); break;
       case 'addManualAgent': this.onAdd(msg.displayName, msg.extensionId); break;
+      case 'addRepoToAgent': this.onAddRepo(msg.agentId, msg.repoName, msg.repoPath); break;
     }
   }
 
@@ -115,6 +118,23 @@ export class SetupPanel {
       this.panel.webview.html = this.buildHtml(this.lastCandidates);
       setTimeout(() => this.panel?.webview.postMessage({ type: 'expandAgent', id: config.id }), 100);
     }
+  }
+
+  private async onAddRepo(agentId?: string, repoName?: string, repoPath?: string): Promise<void> {
+    if (!agentId || !repoName || !repoPath) {
+      this.post({ type: 'validationErrors', id: agentId ?? '', errors: ['Repo name and path are required.'] });
+      return;
+    }
+    if (this.pathUtils.isUnsafePath(repoPath)) {
+      this.post({ type: 'validationErrors', id: agentId, errors: ['Unsafe repo path.'] });
+      return;
+    }
+    if (!this.repoSyncStore) { return; }
+
+    const allTypes: ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'agent'];
+    this.repoSyncStore.addTarget(repoName, repoPath, agentId, allTypes);
+    this.post({ type: 'repoAdded', agentId, repoName, repoPath });
+    vscode.window.showInformationMessage(`Repo "${repoName}" added for sync.`);
   }
 
   private post(msg: Record<string, unknown>): void { this.panel?.webview.postMessage(msg); }
@@ -192,6 +212,7 @@ export class SetupPanel {
       if(a==='save')saveAgent(btn.getAttribute('data-id'));
       else if(a==='remove')postMsg('removeAgent',{id:btn.getAttribute('data-id')});
       else if(a==='init')postMsg('addManualAgent',{displayName:btn.getAttribute('data-dn'),extensionId:btn.getAttribute('data-ext')});
+      else if(a==='addRepo')addRepo(btn.getAttribute('data-id'));
     });
 
     document.getElementById('btn-add').addEventListener('click',function(){
@@ -205,17 +226,34 @@ export class SetupPanel {
       document.querySelectorAll('.st[data-id="'+id+'"]').forEach(function(el){el.innerHTML='';});
       var m=meta[id]||{};
       var targets={};
-      ['skill','rule','hook'].forEach(function(ct){
+      ['skill','rule','hook','workflow','agent'].forEach(function(ct){
         var en=document.querySelector('.en[data-id="'+id+'"][data-ct="'+ct+'"]');
         var pa=document.querySelector('.pa[data-id="'+id+'"][data-ct="'+ct+'"]');
         var flat=document.querySelector('.layout-flat[data-id="'+id+'"][data-ct="'+ct+'"]');
+        var extSel=document.querySelector('.ext-sel[data-id="'+id+'"][data-ct="'+ct+'"]');
         targets[ct]={
           enabled:en?en.checked:false,
           path:pa?pa.value.trim():'',
-          fileLayout:flat&&flat.checked?'flat':'subfolder'
+          fileLayout:flat&&flat.checked?'flat':'subfolder',
+          fileExtension:extSel?extSel.value:'md'
         };
       });
       postMsg('saveAgentConfig',{config:{id:id,displayName:m.dn||'',extensionId:m.ext||'',enabled:true,targets:targets,autoSync:false}});
+    }
+
+    function addRepo(agentId){
+      var nameEl=document.querySelector('.repo-name[data-id="'+agentId+'"]');
+      var pathEl=document.querySelector('.repo-path[data-id="'+agentId+'"]');
+      var name=nameEl?nameEl.value.trim():'';
+      var path=pathEl?pathEl.value.trim():'';
+      if(!name||!path){
+        var st=document.querySelector('.st[data-id="'+agentId+'"]');
+        if(st)st.innerHTML='<div class="err">Repo name and path are required.</div>';
+        return;
+      }
+      postMsg('addRepoToAgent',{agentId:agentId,repoName:name,repoPath:path});
+      if(nameEl)nameEl.value='';
+      if(pathEl)pathEl.value='';
     }
 
     window.addEventListener('message',function(ev){
@@ -224,6 +262,7 @@ export class SetupPanel {
       else if(msg.type==='validationErrors'){var s2=document.querySelector('.st[data-id="'+msg.id+'"]');if(s2)s2.innerHTML=(msg.errors||[]).map(function(e){return'<div class="err">'+esc(e)+'</div>';}).join('');}
       else if(msg.type==='removed'){var c=document.querySelector('[data-agent-id="'+msg.id+'"]');if(c)c.remove();}
       else if(msg.type==='expandAgent'){var b=document.getElementById('body-'+msg.id);if(b)b.classList.add('open');}
+      else if(msg.type==='repoAdded'){var rl=document.querySelector('.repo-list[data-id="'+msg.agentId+'"]');if(rl)rl.innerHTML+='<div class="ok" style="margin-top:4px;">✓ '+esc(msg.repoName)+' → '+esc(msg.repoPath)+'</div>';}
     });
     function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
   </script>
@@ -247,25 +286,59 @@ export class SetupPanel {
   }
 
   private configRows(cfg: AgentTargetConfig): string {
+    const extOptions = (selected: FileExtensionFormat) => {
+      const opts: { value: FileExtensionFormat; label: string }[] = [
+        { value: 'md', label: '.md' },
+        { value: 'mdc', label: '.mdc' },
+        { value: 'instructions-md', label: '-instructions.md' },
+        { value: 'prompt-md', label: '.prompt.md' },
+      ];
+      return opts.map((o) =>
+        `<option value="${o.value}" ${o.value === selected ? 'selected' : ''}>${o.label}</option>`
+      ).join('');
+    };
+
     const rows = CONTENT_TYPES.map((ct) => {
       const t = cfg.targets[ct] ?? defaultTarget();
       const isFlat = t.fileLayout === 'flat';
+      const ext = t.fileExtension ?? 'md';
       return `<div class="ct-row">
         <div><input type="checkbox" class="en" data-id="${cfg.id}" data-ct="${ct}" ${t.enabled?'checked':''}/> <span class="ct-label">${ct}s</span></div>
         <div>
           <input type="text" class="pa" data-id="${cfg.id}" data-ct="${ct}" value="${h(t.path)}" placeholder="${PATH_HINTS[ct]}" />
           <div class="hint">${isFlat ? `→ folder/${slugExample(ct)}.md` : `→ folder/${slugExample(ct)}/SKILL.md`}</div>
         </div>
-        <div class="layout-toggle">
-          <input type="radio" name="layout-${cfg.id}-${ct}" id="flat-${cfg.id}-${ct}" class="layout-flat" data-id="${cfg.id}" data-ct="${ct}" ${isFlat?'checked':''}/>
-          <label for="flat-${cfg.id}-${ct}">Flat file</label>
-          <input type="radio" name="layout-${cfg.id}-${ct}" id="sub-${cfg.id}-${ct}" class="layout-sub" data-id="${cfg.id}" data-ct="${ct}" ${!isFlat?'checked':''}/>
-          <label for="sub-${cfg.id}-${ct}">Subfolder</label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <select class="ext-sel" data-id="${cfg.id}" data-ct="${ct}" title="Output file extension">
+            ${extOptions(ext)}
+          </select>
+          <div class="layout-toggle">
+            <input type="radio" name="layout-${cfg.id}-${ct}" id="flat-${cfg.id}-${ct}" class="layout-flat" data-id="${cfg.id}" data-ct="${ct}" ${isFlat?'checked':''}/>
+            <label for="flat-${cfg.id}-${ct}">Flat</label>
+            <input type="radio" name="layout-${cfg.id}-${ct}" id="sub-${cfg.id}-${ct}" class="layout-sub" data-id="${cfg.id}" data-ct="${ct}" ${!isFlat?'checked':''}/>
+            <label for="sub-${cfg.id}-${ct}">Subfolder</label>
+          </div>
         </div>
       </div>`;
     }).join('');
 
+    // Repo association section
+    const repoSection = `
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--vscode-panel-border);">
+        <strong style="font-size:0.9em;">Repo-Level Sync</strong>
+        <p class="hint" style="margin:4px 0 8px;">Add repos where this agent's content should be synced.</p>
+        <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
+          <div><label class="dim" style="font-size:0.8em;">Repo Name</label>
+            <input type="text" class="repo-name" data-id="${cfg.id}" placeholder="e.g. my-frontend-app" style="width:160px" /></div>
+          <div><label class="dim" style="font-size:0.8em;">Repo Path</label>
+            <input type="text" class="repo-path" data-id="${cfg.id}" placeholder="C:\\projects\\my-app" style="width:240px" /></div>
+          <button class="btn-secondary" data-act="addRepo" data-id="${cfg.id}">Add to Repo</button>
+        </div>
+        <div class="repo-list" data-id="${cfg.id}" style="margin-top:6px;"></div>
+      </div>`;
+
     return `${rows}
+      ${repoSection}
       <div class="st" data-id="${cfg.id}"></div>
       <div class="acts">
         <button class="btn-primary" data-act="save" data-id="${cfg.id}">Save &amp; Sync</button>
@@ -274,7 +347,7 @@ export class SetupPanel {
   }
 }
 
-interface Msg { type:string; config?:Partial<AgentTargetConfig>; id?:string; displayName?:string; extensionId?:string; }
+interface Msg { type:string; config?:Partial<AgentTargetConfig>; id?:string; displayName?:string; extensionId?:string; agentId?:string; repoName?:string; repoPath?:string; }
 
 function h(t: string): string {
   return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');

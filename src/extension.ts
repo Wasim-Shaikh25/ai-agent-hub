@@ -54,7 +54,7 @@ export function activate(context: vscode.ExtensionContext): void {
     registry.initialize(context.extensionPath);
 
     // Create UI panels
-    const setupPanel = new SetupPanel(context.extensionUri, agentConfig, pathUtils);
+    const setupPanel = new SetupPanel(context.extensionUri, agentConfig, pathUtils, repoSyncStore);
     setupPanel.setSyncCallback(async () => {
       await syncEngine.sync();
     });
