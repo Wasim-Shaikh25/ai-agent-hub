@@ -64,7 +64,8 @@ export class SetupPanel {
       case 'saveAgentConfig': this.onSave(msg.config); break;
       case 'removeAgent': this.onRemove(msg.id); break;
       case 'addManualAgent': this.onAdd(msg.displayName, msg.extensionId); break;
-      case 'addRepoToAgent': this.onAddRepo(msg.agentId, msg.repoName, msg.repoPath); break;
+      case 'addRepoToAgent': this.onAddRepo(msg.agentId, msg.repoName, msg.repoPath, msg.repoTargets); break;
+      case 'removeRepo': this.onRemoveRepo(msg.repoId); break;
     }
   }
 
@@ -120,7 +121,12 @@ export class SetupPanel {
     }
   }
 
-  private async onAddRepo(agentId?: string, repoName?: string, repoPath?: string): Promise<void> {
+  private async onAddRepo(
+    agentId?: string,
+    repoName?: string,
+    repoPath?: string,
+    repoTargets?: Partial<Record<ItemType, Partial<TargetLocationConfig>>>,
+  ): Promise<void> {
     if (!agentId || !repoName || !repoPath) {
       this.post({ type: 'validationErrors', id: agentId ?? '', errors: ['Repo name and path are required.'] });
       return;
@@ -131,10 +137,29 @@ export class SetupPanel {
     }
     if (!this.repoSyncStore) { return; }
 
-    const allTypes: ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'agent'];
-    this.repoSyncStore.addTarget(repoName, repoPath, agentId, allTypes);
-    this.post({ type: 'repoAdded', agentId, repoName, repoPath });
+    // Determine which content types are enabled for this repo
+    const enabledTypes: ItemType[] = (['skill', 'rule', 'hook', 'workflow', 'agent'] as ItemType[])
+      .filter((ct) => repoTargets?.[ct]?.enabled);
+
+    const target = this.repoSyncStore.addTarget(
+      repoName,
+      repoPath,
+      agentId,
+      enabledTypes.length > 0 ? enabledTypes : ['skill', 'rule', 'hook', 'workflow', 'agent'],
+    );
+
+    this.post({ type: 'repoAdded', agentId, repoId: target.id, repoName, repoPath, enabledTypes });
     vscode.window.showInformationMessage(`Repo "${repoName}" added for sync.`);
+  }
+
+  private onRemoveRepo(repoId?: string): void {
+    if (!repoId || !this.repoSyncStore) { return; }
+    try {
+      this.repoSyncStore.removeTarget(repoId);
+      this.post({ type: 'repoRemoved', repoId });
+    } catch {
+      // already removed
+    }
   }
 
   private post(msg: Record<string, unknown>): void { this.panel?.webview.postMessage(msg); }
@@ -209,10 +234,24 @@ export class SetupPanel {
       var btn=ev.target.closest('[data-act]');
       if(!btn)return;
       var a=btn.getAttribute('data-act');
-      if(a==='save')saveAgent(btn.getAttribute('data-id'));
-      else if(a==='remove')postMsg('removeAgent',{id:btn.getAttribute('data-id')});
+      var id=btn.getAttribute('data-id');
+      if(a==='save')saveAgent(id);
+      else if(a==='remove')postMsg('removeAgent',{id:id});
       else if(a==='init')postMsg('addManualAgent',{displayName:btn.getAttribute('data-dn'),extensionId:btn.getAttribute('data-ext')});
-      else if(a==='addRepo')addRepo(btn.getAttribute('data-id'));
+      else if(a==='showRepoForm'){
+        var f=document.getElementById('repo-form-'+id);
+        var b=document.getElementById('btn-add-repo-'+id);
+        if(f){f.style.display='block';}
+        if(b){b.style.display='none';}
+      }
+      else if(a==='cancelRepo'){
+        var f2=document.getElementById('repo-form-'+id);
+        var b2=document.getElementById('btn-add-repo-'+id);
+        if(f2){f2.style.display='none';}
+        if(b2){b2.style.display='inline-block';}
+      }
+      else if(a==='saveRepo')saveRepo(id);
+      else if(a==='removeRepo')postMsg('removeRepo',{repoId:btn.getAttribute('data-repo-id')});
     });
 
     document.getElementById('btn-add').addEventListener('click',function(){
@@ -241,7 +280,7 @@ export class SetupPanel {
       postMsg('saveAgentConfig',{config:{id:id,displayName:m.dn||'',extensionId:m.ext||'',enabled:true,targets:targets,autoSync:false}});
     }
 
-    function addRepo(agentId){
+    function saveRepo(agentId){
       var nameEl=document.querySelector('.repo-name[data-id="'+agentId+'"]');
       var pathEl=document.querySelector('.repo-path[data-id="'+agentId+'"]');
       var name=nameEl?nameEl.value.trim():'';
@@ -251,9 +290,26 @@ export class SetupPanel {
         if(st)st.innerHTML='<div class="err">Repo name and path are required.</div>';
         return;
       }
-      postMsg('addRepoToAgent',{agentId:agentId,repoName:name,repoPath:path});
+      var repoTargets={};
+      ['skill','rule','hook','workflow','agent'].forEach(function(ct){
+        var en=document.querySelector('.repo-en[data-id="'+agentId+'"][data-ct="'+ct+'"]');
+        var pa=document.querySelector('.repo-pa[data-id="'+agentId+'"][data-ct="'+ct+'"]');
+        var flat=document.querySelector('.repo-layout-flat[data-id="'+agentId+'"][data-ct="'+ct+'"]');
+        var ext=document.querySelector('.repo-ext[data-id="'+agentId+'"][data-ct="'+ct+'"]');
+        repoTargets[ct]={
+          enabled:en?en.checked:false,
+          path:pa?pa.value.trim():'',
+          fileLayout:flat&&flat.checked?'flat':'subfolder',
+          fileExtension:ext?ext.value:'md'
+        };
+      });
+      postMsg('addRepoToAgent',{agentId:agentId,repoName:name,repoPath:path,repoTargets:repoTargets});
       if(nameEl)nameEl.value='';
       if(pathEl)pathEl.value='';
+      var f=document.getElementById('repo-form-'+agentId);
+      var b=document.getElementById('btn-add-repo-'+agentId);
+      if(f)f.style.display='none';
+      if(b)b.style.display='inline-block';
     }
 
     window.addEventListener('message',function(ev){
@@ -262,7 +318,20 @@ export class SetupPanel {
       else if(msg.type==='validationErrors'){var s2=document.querySelector('.st[data-id="'+msg.id+'"]');if(s2)s2.innerHTML=(msg.errors||[]).map(function(e){return'<div class="err">'+esc(e)+'</div>';}).join('');}
       else if(msg.type==='removed'){var c=document.querySelector('[data-agent-id="'+msg.id+'"]');if(c)c.remove();}
       else if(msg.type==='expandAgent'){var b=document.getElementById('body-'+msg.id);if(b)b.classList.add('open');}
-      else if(msg.type==='repoAdded'){var rl=document.querySelector('.repo-list[data-id="'+msg.agentId+'"]');if(rl)rl.innerHTML+='<div class="ok" style="margin-top:4px;">✓ '+esc(msg.repoName)+' → '+esc(msg.repoPath)+'</div>';}
+      else if(msg.type==='repoAdded'){
+        var rl=document.querySelector('.repo-list[data-id="'+msg.agentId+'"]');
+        if(rl){
+          var types=(msg.enabledTypes||[]).join(', ')||'all types';
+          rl.innerHTML+='<div class="ok" style="margin-top:4px;display:flex;justify-content:space-between;align-items:center;">'
+            +'<span>✓ <strong>'+esc(msg.repoName)+'</strong> → '+esc(msg.repoPath)+'<span class="hint" style="margin-left:8px;">'+esc(types)+'</span></span>'
+            +'<button class="btn-danger" style="padding:2px 8px;font-size:0.8em;" data-act="removeRepo" data-repo-id="'+esc(msg.repoId)+'">Remove</button>'
+            +'</div>';
+        }
+      }
+      else if(msg.type==='repoRemoved'){
+        var el=document.querySelector('[data-repo-id="'+msg.repoId+'"]');
+        if(el)el.closest('.ok').remove();
+      }
     });
     function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
   </script>
@@ -322,19 +391,69 @@ export class SetupPanel {
       </div>`;
     }).join('');
 
-    // Repo association section
-    const repoSection = `
-      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--vscode-panel-border);">
-        <strong style="font-size:0.9em;">Repo-Level Sync</strong>
-        <p class="hint" style="margin:4px 0 8px;">Add repos where this agent's content should be synced.</p>
-        <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap;">
-          <div><label class="dim" style="font-size:0.8em;">Repo Name</label>
-            <input type="text" class="repo-name" data-id="${cfg.id}" placeholder="e.g. my-frontend-app" style="width:160px" /></div>
-          <div><label class="dim" style="font-size:0.8em;">Repo Path</label>
-            <input type="text" class="repo-path" data-id="${cfg.id}" placeholder="C:\\projects\\my-app" style="width:240px" /></div>
-          <button class="btn-secondary" data-act="addRepo" data-id="${cfg.id}">Add to Repo</button>
+    // Repo association section — full form with per-content-type config
+    const repoRows = CONTENT_TYPES.map((ct) => `
+      <div class="ct-row">
+        <div>
+          <input type="checkbox" class="repo-en" data-id="${cfg.id}" data-ct="${ct}" checked/>
+          <span class="ct-label">${ct}s</span>
         </div>
-        <div class="repo-list" data-id="${cfg.id}" style="margin-top:6px;"></div>
+        <div>
+          <input type="text" class="repo-pa" data-id="${cfg.id}" data-ct="${ct}"
+            placeholder="${PATH_HINTS[ct]}" />
+          <div class="hint">Path inside the repo (e.g. ${PATH_HINTS[ct].split('  or  ')[0]})</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <select class="repo-ext" data-id="${cfg.id}" data-ct="${ct}" title="File extension">
+            <option value="md">.md</option>
+            <option value="mdc">.mdc</option>
+            <option value="instructions-md">-instructions.md</option>
+            <option value="prompt-md">.prompt.md</option>
+          </select>
+          <div class="layout-toggle">
+            <input type="radio" name="rlayout-${cfg.id}-${ct}" id="rflat-${cfg.id}-${ct}"
+              class="repo-layout-flat" data-id="${cfg.id}" data-ct="${ct}" checked/>
+            <label for="rflat-${cfg.id}-${ct}">Flat</label>
+            <input type="radio" name="rlayout-${cfg.id}-${ct}" id="rsub-${cfg.id}-${ct}"
+              class="repo-layout-sub" data-id="${cfg.id}" data-ct="${ct}"/>
+            <label for="rsub-${cfg.id}-${ct}">Subfolder</label>
+          </div>
+        </div>
+      </div>`).join('');
+
+    const repoSection = `
+      <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--vscode-panel-border);">
+        <strong style="font-size:0.9em;">Repo-Level Sync</strong>
+        <p class="hint" style="margin:4px 0 8px;">
+          Add specific repos where this agent's content should be synced independently.
+          Each repo can have its own paths and file extensions.
+        </p>
+
+        <div id="repo-form-${cfg.id}" style="display:none;border:1px solid var(--vscode-panel-border);border-radius:4px;padding:10px;margin-bottom:8px;">
+          <div style="margin-bottom:10px;">
+            <label class="dim" style="font-size:0.8em;display:block;margin-bottom:4px;">Repo Name</label>
+            <input type="text" class="repo-name" data-id="${cfg.id}"
+              placeholder="e.g. my-frontend-app" style="width:100%" />
+          </div>
+          <div style="margin-bottom:10px;">
+            <label class="dim" style="font-size:0.8em;display:block;margin-bottom:4px;">Repo Path</label>
+            <input type="text" class="repo-path" data-id="${cfg.id}"
+              placeholder="C:\\projects\\my-app  or  /home/user/projects/my-app" style="width:100%" />
+          </div>
+          <p class="dim" style="font-size:0.8em;margin-bottom:6px;">
+            Configure which content types to sync and their target paths within this repo:
+          </p>
+          ${repoRows}
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="btn-primary" data-act="saveRepo" data-id="${cfg.id}">Save Repo</button>
+            <button class="btn-secondary" data-act="cancelRepo" data-id="${cfg.id}">Cancel</button>
+          </div>
+        </div>
+
+        <button class="btn-secondary" data-act="showRepoForm" data-id="${cfg.id}"
+          id="btn-add-repo-${cfg.id}">+ Add to Repo</button>
+
+        <div class="repo-list" data-id="${cfg.id}" style="margin-top:8px;"></div>
       </div>`;
 
     return `${rows}
@@ -347,7 +466,7 @@ export class SetupPanel {
   }
 }
 
-interface Msg { type:string; config?:Partial<AgentTargetConfig>; id?:string; displayName?:string; extensionId?:string; agentId?:string; repoName?:string; repoPath?:string; }
+interface Msg { type:string; config?:Partial<AgentTargetConfig>; id?:string; displayName?:string; extensionId?:string; agentId?:string; repoName?:string; repoPath?:string; repoId?:string; repoTargets?:Partial<Record<ItemType,Partial<TargetLocationConfig>>>; }
 
 function h(t: string): string {
   return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
