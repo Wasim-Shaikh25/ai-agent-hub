@@ -11,7 +11,7 @@ import {
 } from './types';
 
 const VALID_HOOK_TRIGGERS: readonly HookTrigger[] = ['before', 'after', 'always'];
-const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'agent'];
+const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'persona'];
 
 /**
  * In-memory item store for all Hub content.
@@ -26,7 +26,7 @@ export class Registry {
     rule: [],
     hook: [],
     workflow: [],
-    agent: [],
+    persona: [],
   };
 
   constructor(private readonly storage: Storage) {}

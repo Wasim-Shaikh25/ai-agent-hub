@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------------------
 
 /** The five content categories managed by the Hub. */
-export type ItemType = 'skill' | 'rule' | 'hook' | 'workflow' | 'agent';
+export type ItemType = 'skill' | 'rule' | 'hook' | 'workflow' | 'persona';
 
 /** Where a Hub item originated. */
 export type ItemSource = 'builtin' | 'user';
@@ -44,8 +44,8 @@ export type TabType =
   | 'rules'
   | 'hooks'
   | 'workflows'
+  | 'personas'
   | 'agents'
-  | 'repos'
   | 'sync';
 
 // ---------------------------------------------------------------------------
@@ -87,13 +87,13 @@ export interface WorkflowItem extends HubItem {
   type: 'workflow';
 }
 
-/** An agent configuration item managed by the Hub. */
-export interface AgentItem extends HubItem {
-  type: 'agent';
+/** An agent persona item managed by the Hub. */
+export interface PersonaItem extends HubItem {
+  type: 'persona';
 }
 
 /** Discriminated union of all concrete Hub item types. */
-export type AnyHubItem = SkillItem | RuleItem | HookItem | WorkflowItem | AgentItem;
+export type AnyHubItem = SkillItem | RuleItem | HookItem | WorkflowItem | PersonaItem;
 
 // ---------------------------------------------------------------------------
 // Agent configuration
@@ -135,7 +135,7 @@ export const SUBFOLDER_FILENAMES: Record<ItemType, string> = {
   rule: 'RULE.md',
   hook: 'HOOK.md',
   workflow: 'WORKFLOW.md',
-  agent: 'AGENT.md',
+  persona: 'PERSONA.md',
 };
 
 // ---------------------------------------------------------------------------

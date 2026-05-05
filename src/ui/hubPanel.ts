@@ -19,13 +19,17 @@ const TAB_TO_ITEM_TYPE: Partial<Record<TabType, ItemType>> = {
   skills: 'skill',
   rules: 'rule',
   hooks: 'hook',
+  workflows: 'workflow',
+  personas: 'persona',
 };
 
-/** All five tabs rendered in the Hub panel. */
+/** All tabs rendered in the Hub panel. */
 const ALL_TABS: readonly TabType[] = [
   'skills',
   'rules',
   'hooks',
+  'workflows',
+  'personas',
   'agents',
   'sync',
 ];
@@ -383,7 +387,7 @@ export class HubPanel {
 
     return configs
       .map((cfg) => {
-        const targetPaths = (['skill', 'rule', 'hook', 'tool'] as ItemType[])
+        const targetPaths = (['skill', 'rule', 'hook', 'workflow', 'persona'] as ItemType[])
           .filter((t) => cfg.targets[t]?.enabled)
           .map((t) => `${t}: ${escapeHtml(cfg.targets[t].path)}`)
           .join(', ');
@@ -485,6 +489,22 @@ export class HubPanel {
       <button class="btn-primary" data-action="add-item" data-tab="hooks">+ Add Hook</button>
     </div>
     <div id="list-hooks"><p class="info-msg">Loading…</p></div>
+  </div>
+
+  <div id="content-workflows" class="tab-content ${this.activeTab === 'workflows' ? 'active' : ''}">
+    <div class="toolbar">
+      <span></span>
+      <button class="btn-primary" data-action="add-item" data-tab="workflows">+ Add Workflow</button>
+    </div>
+    <div id="list-workflows"><p class="info-msg">Loading…</p></div>
+  </div>
+
+  <div id="content-personas" class="tab-content ${this.activeTab === 'personas' ? 'active' : ''}">
+    <div class="toolbar">
+      <span></span>
+      <button class="btn-primary" data-action="add-item" data-tab="personas">+ Add Persona</button>
+    </div>
+    <div id="list-personas"><p class="info-msg">Loading…</p></div>
   </div>
 
   <div id="content-agents" class="tab-content ${this.activeTab === 'agents' ? 'active' : ''}">

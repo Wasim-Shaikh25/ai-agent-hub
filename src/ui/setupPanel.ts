@@ -9,14 +9,14 @@ import {
 import { PathUtils } from '../utils/pathUtils';
 import { getNonce, getBaseStyles, getBaseScriptSetup } from './webviewHtml';
 
-const CONTENT_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'agent'];
+const CONTENT_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'persona'];
 
 const PATH_HINTS: Record<ItemType, string> = {
   skill: '.kiro/steering  or  .cursor/rules',
   rule: '.kiro/steering  or  .github/instructions',
   hook: '.kiro/hooks',
   workflow: '.kiro/steering  or  .cursor/rules',
-  agent: '.kiro/steering  or  .github/prompts',
+  persona: '.kiro/steering  or  .github/prompts',
 };
 
 export class SetupPanel {
@@ -137,14 +137,14 @@ export class SetupPanel {
     if (!this.repoSyncStore) { return; }
 
     // Determine which content types are enabled for this repo
-    const enabledTypes: ItemType[] = (['skill', 'rule', 'hook', 'workflow', 'agent'] as ItemType[])
+    const enabledTypes: ItemType[] = (['skill', 'rule', 'hook', 'workflow', 'persona'] as ItemType[])
       .filter((ct) => repoTargets?.[ct]?.enabled);
 
     const target = this.repoSyncStore.addTarget(
       repoName,
       repoPath,
       agentId,
-      enabledTypes.length > 0 ? enabledTypes : ['skill', 'rule', 'hook', 'workflow', 'agent'],
+      enabledTypes.length > 0 ? enabledTypes : ['skill', 'rule', 'hook', 'workflow', 'persona'],
     );
 
     this.post({ type: 'repoAdded', agentId, repoId: target.id, repoName, repoPath, enabledTypes });
@@ -264,7 +264,7 @@ export class SetupPanel {
       document.querySelectorAll('.st[data-id="'+id+'"]').forEach(function(el){el.innerHTML='';});
       var m=meta[id]||{};
       var targets={};
-      ['skill','rule','hook','workflow','agent'].forEach(function(ct){
+      ['skill','rule','hook','workflow','persona'].forEach(function(ct){
         var en=document.querySelector('.en[data-id="'+id+'"][data-ct="'+ct+'"]');
         var pa=document.querySelector('.pa[data-id="'+id+'"][data-ct="'+ct+'"]');
         var flat=document.querySelector('.layout-flat[data-id="'+id+'"][data-ct="'+ct+'"]');
@@ -290,7 +290,7 @@ export class SetupPanel {
         return;
       }
       var repoTargets={};
-      ['skill','rule','hook','workflow','agent'].forEach(function(ct){
+      ['skill','rule','hook','workflow','persona'].forEach(function(ct){
         var en=document.querySelector('.repo-en[data-id="'+agentId+'"][data-ct="'+ct+'"]');
         var pa=document.querySelector('.repo-pa[data-id="'+agentId+'"][data-ct="'+ct+'"]');
         var flat=document.querySelector('.repo-layout-flat[data-id="'+agentId+'"][data-ct="'+ct+'"]');
@@ -480,14 +480,14 @@ function defaultTargets(): Record<ItemType, TargetLocationConfig> {
     rule: defaultTarget(),
     hook: defaultTarget(),
     workflow: defaultTarget(),
-    agent: defaultTarget(),
+    persona: defaultTarget(),
   };
 }
 
 function buildTargets(raw?: Partial<Record<ItemType, Partial<TargetLocationConfig>>>): Record<ItemType, TargetLocationConfig> {
   const r = defaultTargets();
   if (!raw) return r;
-  for (const ct of ['skill', 'rule', 'hook', 'workflow', 'agent'] as ItemType[]) {
+  for (const ct of ['skill', 'rule', 'hook', 'workflow', 'persona'] as ItemType[]) {
     const s = raw[ct];
     if (s) r[ct] = {
       enabled: s.enabled ?? false,

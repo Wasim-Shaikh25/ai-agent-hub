@@ -8,7 +8,7 @@ import { HubUpdater } from './hubUpdater';
 import { ItemType, SyncResult, AgentSyncResult, RepoSyncResult } from './types';
 
 /** The three content categories processed during a sync. */
-const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'agent'];
+const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'persona'];
 
 /**
  * Orchestrates syncing enabled Hub items to all enabled
