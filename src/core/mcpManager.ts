@@ -30,22 +30,27 @@ export class McpManager {
     const url = `http://localhost:${config.port}`;
 
     // Wrap the stdio MCP server with mcp-proxy so it exposes HTTP/SSE endpoints.
-    // Command: npx --yes mcp-proxy --port <port> -- npx --yes <package> [...args]
+    // Command: npx mcp-proxy --port <port> -- npx <package> [...args]
+    // NPM_CONFIG_YES=true suppresses the "Ok to proceed?" prompt from npx.
     const proxyArgs = [
-      '--yes',
       'mcp-proxy',
       '--port', String(config.port),
+      '--shell',          // spawn inner command via shell for cross-platform compat
       '--',
-      'npx', '--yes', config.packageName,
+      'npx', config.packageName,
       ...config.args,
     ];
-    const env = { ...process.env, ...config.env };
+    const env = {
+      ...process.env,
+      ...config.env,
+      NPM_CONFIG_YES: 'true',   // suppress npx install prompts
+    };
 
     try {
       const child = spawn('npx', proxyArgs, {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: process.platform === 'win32',
+        shell: true,   // required on Windows for npx to resolve correctly
       });
 
       this.processes.set(config.id, child);
