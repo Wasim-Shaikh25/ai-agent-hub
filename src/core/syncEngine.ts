@@ -1,10 +1,14 @@
 import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 import { Registry } from './registry';
 import { AgentConfigStore } from './agentConfig';
 import { RepoSyncStore } from './repoSyncStore';
 import { FileWriter } from './fileWriter';
 import { Storage } from './storage';
 import { HubUpdater } from './hubUpdater';
+import { McpStore } from './mcpStore';
+import { McpManager } from './mcpManager';
 import { ItemType, SyncResult, AgentSyncResult, RepoSyncResult } from './types';
 
 /** The three content categories processed during a sync. */
@@ -33,6 +37,8 @@ export class SyncEngine {
     private readonly hubUpdater?: HubUpdater,
     private readonly extensionPath?: string,
     private readonly repoSyncStore?: RepoSyncStore,
+    private readonly mcpStore?: McpStore,
+    private readonly mcpManager?: McpManager,
   ) {}
 
   /**
@@ -98,6 +104,44 @@ export class SyncEngine {
             filesWritten: result.filesWritten,
             errors: result.errors,
           });
+        }
+      }
+
+      // Sync MCP-generated rules to each enabled agent target
+      if (this.mcpStore && this.mcpManager) {
+        const mcpServers = this.mcpStore.getAll();
+        for (const config of enabledConfigs) {
+          const ruleTarget = config.targets['rule'];
+          if (!ruleTarget?.enabled || !ruleTarget.path) { continue; }
+
+          for (const mcp of mcpServers) {
+            const state = this.mcpManager.getState(mcp.id);
+            if (state.status !== 'running') { continue; }
+
+            const ruleContent = this.mcpManager.generateRuleMarkdown(mcp);
+            const slug = mcp.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+            const fileName = `mcp-${slug}.md`;
+            const targetPath = path.join(ruleTarget.path, fileName);
+
+            try {
+              const dir = path.dirname(targetPath);
+              if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
+              fs.writeFileSync(targetPath, ruleContent, 'utf-8');
+              agentResults.push({
+                agentName: config.displayName,
+                contentType: 'rule',
+                filesWritten: [targetPath],
+                errors: [],
+              });
+            } catch (err) {
+              agentResults.push({
+                agentName: config.displayName,
+                contentType: 'rule',
+                filesWritten: [],
+                errors: [`MCP rule write failed: ${err instanceof Error ? err.message : String(err)}`],
+              });
+            }
+          }
         }
       }
 

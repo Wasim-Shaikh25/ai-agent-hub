@@ -10,6 +10,8 @@ import { FileWriter } from './core/fileWriter';
 import { SyncEngine } from './core/syncEngine';
 import { HubUpdater } from './core/hubUpdater';
 import { RepoSyncStore } from './core/repoSyncStore';
+import { McpStore } from './core/mcpStore';
+import { McpManager } from './core/mcpManager';
 import { HubPanel } from './ui/hubPanel';
 import { SetupPanel } from './ui/setupPanel';
 import { openHub } from './commands/openHub';
@@ -40,6 +42,8 @@ export function activate(context: vscode.ExtensionContext): void {
     const fileWriter = new FileWriter(pathUtils);
     const hubUpdater = new HubUpdater(context.globalStorageUri.fsPath);
     const repoSyncStore = new RepoSyncStore(storage);
+    const mcpStore = new McpStore(storage);
+    const mcpManager = new McpManager();
     const syncEngine = new SyncEngine(
       registry,
       agentConfig,
@@ -48,10 +52,19 @@ export function activate(context: vscode.ExtensionContext): void {
       hubUpdater,
       context.extensionPath,
       repoSyncStore,
+      mcpStore,
+      mcpManager,
     );
 
     // Load builtin content from hub-content/
     registry.initialize(context.extensionPath);
+
+    // Auto-start MCP servers configured for auto-start
+    for (const mcpConfig of mcpStore.getAll().filter((s) => s.autoStart)) {
+      mcpManager.start(mcpConfig).catch((err) =>
+        logger.error(`Failed to auto-start MCP "${mcpConfig.name}": ${err instanceof Error ? err.message : String(err)}`),
+      );
+    }
 
     // Create UI panels
     const setupPanel = new SetupPanel(context.extensionUri, agentConfig, pathUtils, repoSyncStore);
@@ -64,6 +77,8 @@ export function activate(context: vscode.ExtensionContext): void {
       agentConfig,
       syncEngine,
       storage,
+      mcpStore,
+      mcpManager,
       () => setupAgents(agentDetector, setupPanel),
     );
 
@@ -89,6 +104,7 @@ export function activate(context: vscode.ExtensionContext): void {
       dispose: () => {
         hubPanel.dispose();
         setupPanel.dispose();
+        mcpManager.stopAll();
         logger.dispose();
       },
     });

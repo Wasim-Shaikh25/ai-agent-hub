@@ -46,6 +46,7 @@ export type TabType =
   | 'workflows'
   | 'personas'
   | 'agents'
+  | 'mcps'
   | 'sync';
 
 // ---------------------------------------------------------------------------
@@ -217,4 +218,52 @@ export interface FileWriteResult {
 export interface ValidationError {
   readonly path: string;
   readonly message: string;
+}
+
+// ---------------------------------------------------------------------------
+// MCP (Model Context Protocol) server configuration
+// ---------------------------------------------------------------------------
+
+/** Status of a managed MCP server process. */
+export type McpServerStatus = 'stopped' | 'starting' | 'running' | 'error';
+
+/**
+ * Configuration for a single MCP server managed by the Hub.
+ *
+ * The Hub starts the server as a child process and exposes it
+ * over a local HTTP/SSE endpoint so any IDE can connect to it.
+ */
+export interface McpServerConfig {
+  readonly id: string;
+  /** Human-readable name, e.g. "GitHub MCP" */
+  name: string;
+  /**
+   * The npx package to run, e.g.
+   * "@modelcontextprotocol/server-github"
+   */
+  packageName: string;
+  /** Additional CLI args passed after the package name. */
+  args: string[];
+  /** Environment variables injected into the server process. */
+  env: Record<string, string>;
+  /** Local port the Hub will bind the HTTP/SSE proxy to. */
+  port: number;
+  /** Whether this server should auto-start when the Hub activates. */
+  autoStart: boolean;
+  /** Developer-only flag — only devs can add/edit MCP servers. */
+  readonly developerOnly: true;
+  readonly createdAt: string; // ISO 8601
+  updatedAt: string;         // ISO 8601
+}
+
+/** Runtime state of a running MCP server (not persisted). */
+export interface McpServerState {
+  readonly configId: string;
+  status: McpServerStatus;
+  /** The local URL the server is reachable at. */
+  url?: string;
+  /** Last error message if status is 'error'. */
+  error?: string;
+  /** PID of the child process, if running. */
+  pid?: number;
 }

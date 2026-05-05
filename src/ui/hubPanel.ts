@@ -3,6 +3,8 @@ import { Registry } from '../core/registry';
 import { AgentConfigStore } from '../core/agentConfig';
 import { SyncEngine } from '../core/syncEngine';
 import { Storage } from '../core/storage';
+import { McpStore } from '../core/mcpStore';
+import { McpManager } from '../core/mcpManager';
 import {
   ItemType,
   TabType,
@@ -11,6 +13,7 @@ import {
   AgentTargetConfig,
   SyncResult,
   AgentSyncResult,
+  McpServerConfig,
 } from '../core/types';
 import { getNonce, getBaseStyles, getBaseScriptSetup } from './webviewHtml';
 
@@ -31,6 +34,7 @@ const ALL_TABS: readonly TabType[] = [
   'workflows',
   'personas',
   'agents',
+  'mcps',
   'sync',
 ];
 
@@ -52,6 +56,8 @@ export class HubPanel {
     private readonly agentConfig: AgentConfigStore,
     private readonly syncEngine: SyncEngine,
     private readonly storage: Storage,
+    private readonly mcpStore: McpStore,
+    private readonly mcpManager: McpManager,
     private readonly onOpenSetup: () => void,
   ) {}
 
@@ -141,6 +147,22 @@ export class HubPanel {
 
       case 'removeAgent':
         this.handleRemoveAgent(msg);
+        break;
+
+      case 'addMcp':
+        this.handleAddMcp(msg);
+        break;
+
+      case 'removeMcp':
+        this.handleRemoveMcp(msg);
+        break;
+
+      case 'startMcp':
+        this.handleStartMcp(msg);
+        break;
+
+      case 'stopMcp':
+        this.handleStopMcp(msg);
         break;
 
       default:
@@ -251,6 +273,60 @@ export class HubPanel {
     this.sendAgentsContent();
   }
 
+  private handleAddMcp(msg: HubMessage): void {
+    const f = msg.fields ?? {};
+    try {
+      this.mcpStore.add({
+        name: String(f.name ?? ''),
+        packageName: String(f.packageName ?? ''),
+        args: String(f.args ?? '').split(' ').filter(Boolean),
+        env: this.parseEnvString(String(f.env ?? '')),
+        port: parseInt(String(f.port ?? '3100'), 10),
+        autoStart: f.autoStart === 'true',
+      });
+      this.sendMcpContent();
+    } catch (err) {
+      this.sendError(err);
+    }
+  }
+
+  private handleRemoveMcp(msg: HubMessage): void {
+    if (!msg.id) { return; }
+    this.mcpManager.stop(msg.id);
+    this.mcpStore.remove(msg.id);
+    this.sendMcpContent();
+  }
+
+  private async handleStartMcp(msg: HubMessage): Promise<void> {
+    if (!msg.id) { return; }
+    const config = this.mcpStore.get(msg.id);
+    if (!config) { return; }
+    try {
+      await this.mcpManager.start(config);
+      this.sendMcpContent();
+    } catch (err) {
+      this.sendError(err);
+    }
+  }
+
+  private handleStopMcp(msg: HubMessage): void {
+    if (!msg.id) { return; }
+    this.mcpManager.stop(msg.id);
+    this.sendMcpContent();
+  }
+
+  /** Parses "KEY=VALUE KEY2=VALUE2" into a Record. */
+  private parseEnvString(raw: string): Record<string, string> {
+    const result: Record<string, string> = {};
+    for (const pair of raw.split(/\s+/).filter(Boolean)) {
+      const eq = pair.indexOf('=');
+      if (eq > 0) {
+        result[pair.slice(0, eq)] = pair.slice(eq + 1);
+      }
+    }
+    return result;
+  }
+
   // -----------------------------------------------------------------
   // Content rendering
   // -----------------------------------------------------------------
@@ -258,6 +334,10 @@ export class HubPanel {
   private sendTabContent(tab: TabType): void {
     if (tab === 'agents') {
       this.sendAgentsContent();
+      return;
+    }
+    if (tab === 'mcps') {
+      this.sendMcpContent();
       return;
     }
     if (tab === 'sync') {
@@ -280,6 +360,12 @@ export class HubPanel {
     const configs = this.agentConfig.getAll();
     const html = this.renderAgentList(configs);
     this.postMessage({ type: 'updateAgents', html });
+  }
+
+  private sendMcpContent(): void {
+    const servers = this.mcpStore.getAll();
+    const html = this.renderMcpList(servers);
+    this.postMessage({ type: 'updateMcps', html });
   }
 
   private sendSyncContent(result?: SyncResult): void {
@@ -415,6 +501,82 @@ export class HubPanel {
       .join('');
   }
 
+  private renderMcpList(servers: McpServerConfig[]): string {
+    const addForm = /* html */ `
+      <div class="mcp-add-form" style="margin-bottom:16px;padding:12px;border:1px solid var(--vscode-panel-border);border-radius:6px;">
+        <strong style="display:block;margin-bottom:8px;">Register MCP Server</strong>
+        <p style="font-size:0.85em;opacity:0.6;margin-bottom:10px;">
+          Developer only — MCP servers run inside the Hub and are exposed to AI agents via generated rules.
+        </p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <label style="font-size:0.8em;opacity:0.6;display:block;margin-bottom:2px;">Name</label>
+            <input type="text" id="mcp-name" placeholder="e.g. GitHub MCP" style="width:100%" />
+          </div>
+          <div>
+            <label style="font-size:0.8em;opacity:0.6;display:block;margin-bottom:2px;">npx Package</label>
+            <input type="text" id="mcp-pkg" placeholder="@modelcontextprotocol/server-github" style="width:100%" />
+          </div>
+          <div>
+            <label style="font-size:0.8em;opacity:0.6;display:block;margin-bottom:2px;">Port</label>
+            <input type="number" id="mcp-port" value="3100" min="1024" max="65535" style="width:100%" />
+          </div>
+          <div>
+            <label style="font-size:0.8em;opacity:0.6;display:block;margin-bottom:2px;">Extra Args (space-separated)</label>
+            <input type="text" id="mcp-args" placeholder="--verbose" style="width:100%" />
+          </div>
+          <div style="grid-column:1/-1;">
+            <label style="font-size:0.8em;opacity:0.6;display:block;margin-bottom:2px;">Env Vars (KEY=VALUE space-separated)</label>
+            <input type="text" id="mcp-env" placeholder="GITHUB_TOKEN=ghp_xxx API_KEY=abc" style="width:100%" />
+          </div>
+          <div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" id="mcp-autostart" />
+            <label for="mcp-autostart" style="font-size:0.85em;">Auto-start when Hub activates</label>
+          </div>
+        </div>
+        <button class="btn-primary" data-action="add-mcp">Add MCP Server</button>
+        <div id="mcp-err" style="margin-top:6px;"></div>
+      </div>`;
+
+    if (servers.length === 0) {
+      return addForm + '<p class="empty-state">No MCP servers registered yet.</p>';
+    }
+
+    const list = servers.map((s) => {
+      const state = this.mcpManager.getState(s.id);
+      const statusColor = state.status === 'running'
+        ? 'var(--vscode-testing-iconPassed,#73c991)'
+        : state.status === 'error'
+          ? 'var(--vscode-errorForeground,#f48771)'
+          : 'var(--vscode-descriptionForeground)';
+
+      return /* html */ `
+        <div class="agent-card" style="margin-bottom:8px;">
+          <div class="agent-card-header">
+            <div>
+              <strong>${escapeHtml(s.name)}</strong>
+              <span style="opacity:0.6;margin-left:8px;font-size:0.85em;">${escapeHtml(s.packageName)}</span>
+              <span style="margin-left:8px;font-size:0.8em;color:${statusColor};">● ${state.status}</span>
+              ${state.url ? `<span style="opacity:0.5;font-size:0.8em;margin-left:6px;">${escapeHtml(state.url)}</span>` : ''}
+            </div>
+            <div class="item-actions">
+              <span style="font-size:0.8em;opacity:0.5;">port ${s.port}</span>
+              ${state.status === 'running'
+                ? `<button class="btn-secondary" data-action="stop-mcp" data-id="${s.id}">Stop</button>`
+                : `<button class="btn-primary" data-action="start-mcp" data-id="${s.id}">Start</button>`}
+              <button class="btn-icon" title="Remove" data-action="remove-mcp" data-id="${s.id}">&#128465;</button>
+            </div>
+          </div>
+          <div class="agent-card-details" style="font-size:0.8em;opacity:0.6;">
+            ${state.error ? `<span style="color:var(--vscode-errorForeground);">${escapeHtml(state.error)}</span>` : ''}
+            ${state.status === 'running' ? `Rule auto-generated and synced to agent targets on next sync.` : 'Start the server to generate its rule.'}
+          </div>
+        </div>`;
+    }).join('');
+
+    return addForm + list;
+  }
+
   private renderSyncResult(result: SyncResult): string {
     const agentHtml = result.agentResults
       .map((ar: AgentSyncResult) => {
@@ -515,6 +677,10 @@ export class HubPanel {
     <div id="list-agents"><p class="info-msg">Loading…</p></div>
   </div>
 
+  <div id="content-mcps" class="tab-content ${this.activeTab === 'mcps' ? 'active' : ''}">
+    <div id="list-mcps"><p class="info-msg">Loading…</p></div>
+  </div>
+
   <div id="content-sync" class="tab-content ${this.activeTab === 'sync' ? 'active' : ''}">
     <div class="toolbar">
       <span></span>
@@ -561,6 +727,10 @@ export class HubPanel {
         }
         case 'updateAgents': {
           document.getElementById('list-agents').innerHTML = msg.html;
+          break;
+        }
+        case 'updateMcps': {
+          document.getElementById('list-mcps').innerHTML = msg.html;
           break;
         }
         case 'updateSync': {
@@ -623,6 +793,25 @@ export class HubPanel {
         postMsg('syncAll');
       } else if (action === 'remove-agent') {
         postMsg('removeAgent', { id: btn.getAttribute('data-id') });
+      } else if (action === 'add-mcp') {
+        var name = document.getElementById('mcp-name')?.value?.trim();
+        var pkg = document.getElementById('mcp-pkg')?.value?.trim();
+        var port = document.getElementById('mcp-port')?.value?.trim();
+        var args = document.getElementById('mcp-args')?.value?.trim();
+        var env = document.getElementById('mcp-env')?.value?.trim();
+        var autoStart = document.getElementById('mcp-autostart')?.checked;
+        if (!name || !pkg) {
+          document.getElementById('mcp-err').innerHTML = '<p class="error-msg">Name and package are required.</p>';
+          return;
+        }
+        document.getElementById('mcp-err').innerHTML = '';
+        postMsg('addMcp', { fields: { name, packageName: pkg, port: port || '3100', args: args || '', env: env || '', autoStart: String(autoStart) } });
+      } else if (action === 'start-mcp') {
+        postMsg('startMcp', { id: btn.getAttribute('data-id') });
+      } else if (action === 'stop-mcp') {
+        postMsg('stopMcp', { id: btn.getAttribute('data-id') });
+      } else if (action === 'remove-mcp') {
+        postMsg('removeMcp', { id: btn.getAttribute('data-id') });
       } else if (action === 'submit-form') {
         submitForm(btn.getAttribute('data-tab'), btn.getAttribute('data-mode'), btn.getAttribute('data-id'));
       } else if (action === 'cancel-form') {
