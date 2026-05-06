@@ -37,7 +37,7 @@ from a `.vsix` file built from this repository.
 ### Option 1 — Install from GitHub Releases (recommended)
 
 1. Go to the
-   [Releases](https://github.disney.com/WDPR-Lodging/ai-agent-hub/releases)
+   [Releases](https://github.com/Wasim-Shaikh25/ai-agent-hub/releases)
    page.
 2. Download the latest `ai-agent-hub.vsix` file.
 3. Open VS Code and run:
@@ -52,7 +52,7 @@ select the downloaded file.
 ### Option 2 — Build from source
 
 ```bash
-git clone https://github.disney.com/WDPR-Lodging/ai-agent-hub.git
+git clone https://github.com/Wasim-Shaikh25/ai-agent-hub.git
 cd ai-agent-hub
 npm install
 npm run build
@@ -68,10 +68,10 @@ code --install-extension ai-agent-hub-*.vsix
 
 ### Option 3 — Install directly from GitHub URL
 
-If you have the GitHub CLI (`gh`) configured for `github.disney.com`:
+If you have the GitHub CLI (`gh`) configured:
 
 ```bash
-gh release download --repo WDPR-Lodging/ai-agent-hub \
+gh release download --repo Wasim-Shaikh25/ai-agent-hub \
   --pattern "*.vsix" --dir .
 code --install-extension ai-agent-hub.vsix
 ```
@@ -85,7 +85,7 @@ To install a particular version:
 
 ```bash
 gh release download v1.2.0 \
-  --repo WDPR-Lodging/ai-agent-hub \
+  --repo Wasim-Shaikh25/ai-agent-hub \
   --pattern "*.vsix" --dir .
 code --install-extension ai-agent-hub.vsix
 ```
@@ -93,7 +93,7 @@ code --install-extension ai-agent-hub.vsix
 **From the Releases page:**
 
 1. Go to
-   [Releases](https://github.disney.com/WDPR-Lodging/ai-agent-hub/releases).
+   [Releases](https://github.com/Wasim-Shaikh25/ai-agent-hub/releases).
 2. Find the version you need (e.g., `v1.2.0`).
 3. Download the `ai-agent-hub.vsix` from that release's assets.
 4. Install it:
@@ -105,7 +105,7 @@ code --install-extension ai-agent-hub.vsix
 **Building a specific version from source:**
 
 ```bash
-git clone https://github.disney.com/WDPR-Lodging/ai-agent-hub.git
+git clone https://github.com/Wasim-Shaikh25/ai-agent-hub.git
 cd ai-agent-hub
 git checkout v1.2.0
 npm install
@@ -334,4 +334,4 @@ style for PR titles to control version bumps:
 
 ## License
 
-Internal use only — The Walt Disney Company.
+MIT License

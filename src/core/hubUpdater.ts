@@ -13,7 +13,7 @@ import { execFile } from 'child_process';
  */
 export class HubUpdater {
   private static readonly REPO_URL =
-    'https://github.disney.com/WDPR-Lodging/ai-agent-hub.git';
+    'https://github.com/Wasim-Shaikh25/ai-agent-hub.git';
 
   private static readonly HUB_CONTENT_DIR = 'hub-content';
 
