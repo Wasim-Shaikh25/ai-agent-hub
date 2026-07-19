@@ -22,16 +22,18 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
 
   app.post('/api/content', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
     const body = req.body as { type: ContentType; name: string; description?: string; body?: string; trigger?: string; enabled?: boolean };
-    const item = await content.create(req.auth!.orgId, body);
-    await audit.log(req.auth!.orgId, req.auth!.userId, 'content.create', item.id, { type: item.type, name: item.name });
+    const actor = { userId: req.auth!.userId, role: req.auth!.role };
+    const item = await content.create(req.auth!.orgId, body, actor);
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'content.create', item.id, { type: item.type, name: item.name, status: item.status });
     return item;
   });
 
   app.put('/api/content/:id', { preHandler: [requireAuth, requireRole('member')] }, async (req, reply) => {
     const { id } = req.params as { id: string };
-    const updated = await content.update(req.auth!.orgId, id, req.body as Record<string, never>);
+    const actor = { userId: req.auth!.userId, role: req.auth!.role };
+    const updated = await content.update(req.auth!.orgId, id, req.body as Record<string, never>, actor);
     if (!updated) return reply.code(404).send({ error: { code: 'not_found', message: 'content item not found' } });
-    await audit.log(req.auth!.orgId, req.auth!.userId, 'content.update', id);
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'content.update', id, { staged: (updated as { staged?: boolean }).staged ?? false });
     return updated;
   });
 
@@ -40,6 +42,31 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
     await content.remove(req.auth!.orgId, id);
     await audit.log(req.auth!.orgId, req.auth!.userId, 'content.delete', id);
     return { ok: true };
+  });
+
+  // -- version history + approvals ------------------------------------------
+  app.get('/api/content/:id/versions', { preHandler: requireAuth }, async (req) => {
+    const { id } = req.params as { id: string };
+    return content.listVersions(req.auth!.orgId, id);
+  });
+
+  app.post('/api/content/:id/approve', { preHandler: [requireAuth, requireRole('admin')] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const actor = { userId: req.auth!.userId, role: req.auth!.role };
+    const item = await content.approve(req.auth!.orgId, id, actor);
+    if (!item) return reply.code(404).send({ error: { code: 'not_found', message: 'content item not found' } });
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'content.approve', id, { version: item.version });
+    return item;
+  });
+
+  app.post('/api/content/:id/rollback', { preHandler: [requireAuth, requireRole('admin')] }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const version = Number((req.body as { version?: number }).version);
+    const actor = { userId: req.auth!.userId, role: req.auth!.role };
+    const item = await content.rollback(req.auth!.orgId, id, version, actor);
+    if (!item) return reply.code(404).send({ error: { code: 'not_found', message: 'item or version not found' } });
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'content.rollback', id, { toVersion: version });
+    return item;
   });
 
   // -- sessions -------------------------------------------------------------

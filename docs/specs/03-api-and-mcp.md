@@ -37,9 +37,12 @@ Base: `/api`.
 | GET | `/health` | liveness (no auth) |
 | GET | `/api/me` | resolve current org/user |
 | GET | `/api/content?type=skill` | list content items |
-| POST | `/api/content` | create content item |
-| PUT | `/api/content/:id` | update content item |
-| DELETE | `/api/content/:id` | delete content item |
+| POST | `/api/content` | create content item (member) |
+| PUT | `/api/content/:id` | update content item (member; staged if approval required) |
+| DELETE | `/api/content/:id` | delete content item (member) |
+| GET | `/api/content/:id/versions` | version history |
+| POST | `/api/content/:id/approve` | promote latest pending version (admin) |
+| POST | `/api/content/:id/rollback` | restore a prior version (admin) |
 | GET | `/api/sessions/:project/:key` | fetch session + recent turns |
 | POST | `/api/sessions/:project/:key/turns` | append a turn |
 | GET | `/api/memory?q=...` | semantic memory search |

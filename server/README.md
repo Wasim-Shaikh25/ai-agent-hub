@@ -61,3 +61,9 @@ Against Postgres + pgvector, all green:
 - **Governance:** role-based access (viewer/member/admin/owner) enforced on REST
   routes and MCP tools (viewers get read-only tools), append-only audit log,
   API-key management with per-key role override, and a per-model cost breakdown.
+- **MCP aggregation:** register downstream MCP servers and the Hub re-exposes
+  their tools namespaced `<server>__<tool>` through its single endpoint
+  (verified: a demo server's tools listed + called through the Hub).
+- **Content registry:** version history + optional approval workflow — non-admin
+  edits stage as `pending` and stay invisible to agents until an admin approves
+  (verified end-to-end).
