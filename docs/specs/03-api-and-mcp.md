@@ -43,6 +43,20 @@ mint a read-only key without creating a user. Enforcement:
 | Write content/memory/sessions, run inference, MCP write tools | member |
 | Manage policies, API keys, view audit log | admin |
 
+### Billing endpoints (admin) — Stripe
+
+Gated by `STRIPE_SECRET_KEY`; all endpoints no-op cleanly when unset.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/billing/status` | `{enabled, customerId?, subscription?}` |
+| POST | `/api/billing/customer` | create + link a Stripe customer |
+| POST | `/api/billing/checkout` | start a subscription Checkout (`{priceId}`) |
+| POST | `/webhooks/stripe` | Stripe webhook (HMAC signature verified) |
+
+Token usage is reported to a Stripe Billing Meter (`hub_tokens`) as a
+best-effort side-effect of gateway metering.
+
 ### Governance endpoints (admin)
 
 | Method | Path | Purpose |

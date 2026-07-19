@@ -41,7 +41,7 @@
 | 3.3 | Cost dashboard (`/api/usage/breakdown`) + token/USD budgets | ✅ done |
 | 3.4 | API-key management (`/api/keys`, per-key role override) | ✅ done |
 | 3.5 | SSO (dev + WorkOS) + JWT sessions + RLS isolation | ✅ done (WorkOS provider drop-in; verified with dev provider) |
-| 3.6 | Stripe metered billing (usage metering foundation in place) | ⬜ todo |
+| 3.6 | Stripe metered billing (meter events, checkout, signed webhook) | ✅ done (wired + gated; add STRIPE_SECRET_KEY to activate) |
 
 ## Phase 4 — Clients & registry
 | # | Item | Status |

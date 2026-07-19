@@ -2,6 +2,7 @@ import { query, queryOne } from '../db/pool.js';
 import { config } from '../config.js';
 import { PolicyService } from '../services/policyService.js';
 import { costUsd } from './pricing.js';
+import { billing } from '../billing/billingService.js';
 
 /** HTTP status codes worth retrying against the next model in the chain. */
 const RETRYABLE = new Set([408, 409, 425, 429, 500, 502, 503, 504]);
@@ -140,6 +141,8 @@ export class GatewayService {
       `INSERT INTO usage_event (org_id, user_id, kind, qty, meta) VALUES ($1,$2,'tokens',$3,$4)`,
       [orgId, userId, total, JSON.stringify({ model, input: usage.inputTokens, output: usage.outputTokens, usd, ...meta })],
     );
+    // Best-effort meter report to Stripe (no-op unless billing is configured).
+    void billing.reportUsage(orgId, total);
   }
 
   // -- usage extraction -----------------------------------------------------
