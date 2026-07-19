@@ -5,6 +5,12 @@ import { z } from 'zod';
 import { type AuthContext, hasRole } from '../auth.js';
 import { ContextService } from '../services/contextService.js';
 import { ContentService, type ContentType } from '../services/contentService.js';
+import { aggregator } from './aggregator.js';
+import { jsonSchemaToZodShape } from './jsonSchema.js';
+
+function slug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
 
 const context = new ContextService();
 const content = new ContentService();
@@ -20,7 +26,7 @@ function text(s: string) {
  * native MCP tools so any agent (Cursor, Kiro, Claude Code, …) uses them with
  * zero custom integration — replacing the old "curl a rule file" approach.
  */
-function buildServer(auth: AuthContext): McpServer {
+async function buildServer(auth: AuthContext): Promise<McpServer> {
   const server = new McpServer({ name: 'ai-agent-hub', version: '0.1.0' });
   const org = auth.orgId;
   const canWrite = hasRole(auth.role, 'member'); // viewers get read-only tools
@@ -133,6 +139,28 @@ function buildServer(auth: AuthContext): McpServer {
     },
   );
 
+  // Aggregate downstream MCP servers: expose their tools namespaced
+  // <server>__<tool>. Gated behind member+ since downstream tools may mutate.
+  if (canWrite) {
+    try {
+      const downstream = await aggregator.listFor(org);
+      for (const d of downstream) {
+        const proxyName = `${slug(d.serverName)}__${d.name}`;
+        server.registerTool(
+          proxyName,
+          {
+            title: d.name,
+            description: `[via ${d.serverName}] ${d.description}`,
+            inputSchema: jsonSchemaToZodShape(d.inputSchema),
+          },
+          async (args) => (await aggregator.call(org, d.serverId, d.name, args as Record<string, unknown>)) as never,
+        );
+      }
+    } catch (err) {
+      console.error('[mcp] downstream aggregation skipped:', err instanceof Error ? err.message : err);
+    }
+  }
+
   return server;
 }
 
@@ -146,7 +174,7 @@ export async function handleMcpRequest(
   body: unknown,
   auth: AuthContext,
 ): Promise<void> {
-  const server = buildServer(auth);
+  const server = await buildServer(auth);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => {
     void transport.close();

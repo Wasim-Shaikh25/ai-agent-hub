@@ -75,9 +75,21 @@ Input: `{ project, query, k?: number }` → `{ chunks: [{uri, content, score}] }
 ### `skills_list`
 Input: `{ type?: "skill"|"rule"|... }` → enabled content items for the org.
 
-Downstream MCP servers registered in the org are **proxied**: their
-`tools/list` and `tools/call` are merged into this endpoint (namespaced
-`<server>__<tool>`).
+### Downstream MCP aggregation
+
+Register other MCP servers (admin) and the Hub connects to them and merges their
+tools into its own endpoint, namespaced `<server>__<tool>` — so an agent
+connects to **one** endpoint and gets Hub tools + every downstream tool.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/mcp-servers` | list registered downstream servers |
+| POST | `/api/mcp-servers` | register (`{name, transport:"http"\|"stdio", url \| command,args,env}`) |
+| DELETE | `/api/mcp-servers/:id` | remove |
+
+Connections are pooled and reused; tool lists cached ~30s. A broken downstream
+server is skipped without affecting the Hub's own tools. Downstream tools are
+exposed to member+ roles (they may mutate).
 
 ## 4. Gateway (inference path)
 
