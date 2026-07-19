@@ -92,6 +92,15 @@ Task-based routing: send `-H 'x-hub-task: refactor'` and add a routing policy
 (`{"kind":"routing","spec":{"task":"refactor","model":"claude-sonnet"}}`) to send
 that task class to a specific model.
 
+**Point real agents at the Hub:**
+- OpenAI-format tools (Cursor, Cline, Codex): set the OpenAI base URL to
+  `http://localhost:8080/v1` and the API key to your `DEV_API_KEY`.
+- **Claude Code:** `export ANTHROPIC_BASE_URL=http://localhost:8080` and
+  `ANTHROPIC_API_KEY=$DEV_API_KEY` — traffic then flows through the Hub's
+  `/v1/messages` endpoint with fallback, routing, and metering.
+
+`GET /api/usage` returns `{ tokens, usd, budget }` for the current month.
+
 ## 6. Run the server outside Docker (fast iteration)
 
 ```bash

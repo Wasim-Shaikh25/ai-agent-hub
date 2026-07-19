@@ -52,7 +52,9 @@ Against Postgres + pgvector, all green:
 - **Context Plane:** health, API-key auth (+401), memory write/semantic-search,
   cross-agent shared sessions, RAG index/query, context assembler, and the MCP
   `initialize` / `tools/list` / `tools/call` lifecycle.
-- **Gateway Plane:** OpenAI-compatible `/v1/chat/completions` with policy-based
-  model chains, automatic fallback on retryable upstream errors (verified via a
-  forced 429), task→model routing (`x-hub-task`), streaming passthrough, token
-  metering (non-stream + streaming), and `429 budget_exceeded` enforcement.
+- **Gateway Plane:** OpenAI (`/v1/chat/completions`) **and** Anthropic
+  (`/v1/messages`, for Claude Code) proxies with policy-based model chains,
+  automatic fallback on retryable upstream errors (verified via a forced 429),
+  task→model routing (`x-hub-task`), streaming passthrough, precise token + USD
+  cost metering (non-stream + streaming, both formats), and token/USD
+  `429 budget_exceeded` enforcement.

@@ -72,11 +72,23 @@ LiteLLM to skip the hop; you then lose Hub-level governance.)
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/v1/chat/completions` | OpenAI-compatible proxy (streaming + non-streaming) |
+| POST | `/v1/chat/completions` | OpenAI-compatible proxy (Cursor, Cline, Codex, …) |
+| POST | `/v1/messages` | Anthropic-compatible proxy (Claude Code) |
 | GET | `/api/policies?kind=` | list routing/model/budget policies |
 | POST | `/api/policies` | create a policy |
 | DELETE | `/api/policies/:id` | delete a policy |
-| GET | `/api/usage` | current-month token usage + active budget |
+| GET | `/api/usage` | current-month token usage, USD cost + active budget |
+
+### Inbound formats
+
+The gateway accepts two request shapes so nearly any agent works:
+- **OpenAI** (`/v1/chat/completions`) — point the agent's OpenAI base URL at
+  `http://<hub>/v1`.
+- **Anthropic** (`/v1/messages`) — point Claude Code's `ANTHROPIC_BASE_URL` at
+  `http://<hub>`.
+
+Both share the same routing/fallback/budget engine. Outbound, LiteLLM reaches
+60+ providers regardless of which inbound format was used.
 
 ### Request headers
 
@@ -102,9 +114,11 @@ The chain is walked in order; a retryable upstream status (408, 409, 425, 429,
 - Non-streaming: `usage.total_tokens` is read from the response.
 - Streaming: the Hub injects `stream_options.include_usage` and parses the final
   SSE chunk's `total_tokens`.
-- Each call writes a `usage_event (kind='tokens')`. If an active `budget` policy
-  sets `maxTokens` and the month's usage meets/exceeds it, the request is
-  rejected with `429 budget_exceeded` before any provider is called.
+- Each call writes a `usage_event (kind='tokens')` with `{model, input, output,
+  usd}` in `meta`. USD cost is computed from `server/src/gateway/pricing.ts`.
+- If an active `budget` policy sets `maxTokens` or `maxUsd` and the month's usage
+  meets/exceeds it, the request is rejected with `429 budget_exceeded` before any
+  provider is called.
 
 ### Policy spec shapes
 

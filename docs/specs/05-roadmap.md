@@ -30,8 +30,8 @@
 | 2.3 | Usage metering on inference (non-stream + streaming) | ✅ done |
 | 2.4 | Budget enforcement (`429 budget_exceeded`) | ✅ done |
 | 2.5 | Embeddings via LiteLLM (flip `EMBEDDINGS_PROVIDER`) | ✅ done |
-| 2.6 | Anthropic `/v1/messages` compatibility (for Claude Code base URL) | ⬜ todo |
-| 2.7 | Cost (USD) metering + per-model pricing table | ⬜ todo |
+| 2.6 | Anthropic `/v1/messages` compatibility (for Claude Code base URL) | ✅ done |
+| 2.7 | Cost (USD) metering + per-model pricing table | ✅ done |
 
 ## Phase 3 — Governance & Enterprise
 | # | Item | Status |
