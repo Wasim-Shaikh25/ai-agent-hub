@@ -40,8 +40,8 @@
 | 3.2 | Audit log (+ `/api/audit`) | ✅ done |
 | 3.3 | Cost dashboard (`/api/usage/breakdown`) + token/USD budgets | ✅ done |
 | 3.4 | API-key management (`/api/keys`, per-key role override) | ✅ done |
-| 3.5 | SSO (WorkOS), RLS multi-tenant isolation | ⬜ blocked — needs an external IdP account + infra decision |
-| 3.6 | Stripe metered billing (usage metering foundation in place) | ⬜ blocked — needs a Stripe account |
+| 3.5 | SSO (dev + WorkOS) + JWT sessions + RLS isolation | ✅ done (WorkOS provider drop-in; verified with dev provider) |
+| 3.6 | Stripe metered billing (usage metering foundation in place) | ⬜ todo |
 
 ## Phase 4 — Clients & registry
 | # | Item | Status |

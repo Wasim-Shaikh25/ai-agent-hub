@@ -10,6 +10,29 @@ actually call at runtime).
 All requests: `Authorization: Bearer <api-key>`. Key → `{org, user, role}`.
 In local dev a seed key is printed on first boot (`DEV_API_KEY`).
 
+Credentials may be an **API key** or a **session JWT** issued by SSO login. Both
+resolve to the same `{org, user, role}` and work on REST and MCP.
+
+### SSO (session login)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/auth/sso/login?org=<slug>` | begin SSO (redirects to the IdP) |
+| GET | `/auth/sso/callback` | IdP redirect; provisions the user (JIT) and returns a JWT |
+| GET | `/auth/sso/info` | active provider |
+
+`SSO_PROVIDER=dev` works fully offline (no IdP) for local testing;
+`SSO_PROVIDER=workos` uses WorkOS (set `WORKOS_API_KEY`/`WORKOS_CLIENT_ID`). New
+SSO users are provisioned into the org as `member`.
+
+### RLS (defense-in-depth isolation)
+
+Migration 005 adds Row-Level Security policies keyed on an `app.current_org`
+session GUC. It is non-breaking by default (unset GUC → app-layer scoping still
+applies); opt a path into DB-enforced isolation with `withOrg()` in
+`db/pool.ts`. Verified: with the GUC set, one org's connection cannot read
+another org's rows.
+
 Roles are ranked `viewer < member < admin < owner`. A key inherits its user's
 membership role, or carries an explicit override (`api_key.role`) — so you can
 mint a read-only key without creating a user. Enforcement:

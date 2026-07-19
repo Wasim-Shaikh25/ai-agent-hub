@@ -11,6 +11,14 @@ export interface Config {
   embeddingDim: number;
   devSeed: boolean;
   devApiKey: string;
+  jwtSecret: string;
+  appBaseUrl: string;
+  ssoProvider: 'dev' | 'workos';
+  workosApiKey: string;
+  workosClientId: string;
+  rlsEnabled: boolean;
+  stripeSecretKey: string;
+  stripeWebhookSecret: string;
 }
 
 function env(key: string, fallback: string): string {
@@ -28,4 +36,12 @@ export const config: Config = {
   embeddingDim: Number(env('EMBEDDING_DIM', '1536')),
   devSeed: env('DEV_SEED', 'true') === 'true',
   devApiKey: env('DEV_API_KEY', 'hub_dev_localkey'),
+  jwtSecret: env('JWT_SECRET', 'dev-secret-change-me'),
+  appBaseUrl: env('APP_BASE_URL', 'http://localhost:8080'),
+  ssoProvider: env('SSO_PROVIDER', 'dev') === 'workos' ? 'workos' : 'dev',
+  workosApiKey: env('WORKOS_API_KEY', ''),
+  workosClientId: env('WORKOS_CLIENT_ID', ''),
+  rlsEnabled: env('RLS_ENABLED', 'false') === 'true',
+  stripeSecretKey: env('STRIPE_SECRET_KEY', ''),
+  stripeWebhookSecret: env('STRIPE_WEBHOOK_SECRET', ''),
 };

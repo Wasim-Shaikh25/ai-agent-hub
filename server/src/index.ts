@@ -2,10 +2,11 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import { config } from './config.js';
 import { migrate, seedDev } from './db/migrate.js';
-import { resolveApiKey, bearer } from './auth.js';
+import { resolveAuth, bearer } from './auth.js';
 import { registerApiRoutes } from './routes/api.js';
 import { registerGatewayRoutes } from './routes/gateway.js';
 import { registerAdminRoutes } from './routes/admin.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import { handleMcpRequest } from './mcp/server.js';
 
 async function main(): Promise<void> {
@@ -18,13 +19,14 @@ async function main(): Promise<void> {
 
   app.get('/health', async () => ({ status: 'ok', service: 'hub-server', ts: new Date().toISOString() }));
 
+  await registerAuthRoutes(app);
   await registerApiRoutes(app);
   await registerGatewayRoutes(app);
   await registerAdminRoutes(app);
 
   // Native MCP endpoint (Streamable HTTP, stateless).
   app.post('/mcp', async (req, reply) => {
-    const auth = await resolveApiKey(bearer(req.headers.authorization));
+    const auth = await resolveAuth(bearer(req.headers.authorization));
     if (!auth) {
       return reply.code(401).send({
         jsonrpc: '2.0',
