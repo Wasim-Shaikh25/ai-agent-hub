@@ -66,6 +66,32 @@ Paste it into the agent's MCP config (`.cursor/mcp.json`, Claude Code
 `.mcp.json`, etc.). The agent then has `session_get_context`, `memory_search`,
 `rag_query`, `skills_list`, … as native tools.
 
+## 5b. Try the gateway (fallback + routing + metering)
+
+The gateway proxies OpenAI-compatible calls to LiteLLM with policy-based model
+routing, automatic fallback, usage metering, and budgets. Point any agent's base
+URL at `http://localhost:8080/v1` (auth with your `DEV_API_KEY`).
+
+```bash
+# configure a fallback chain: primary -> backup
+curl -s localhost:8080/api/policies -H "Authorization: Bearer $DEV_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"kind":"model","spec":{"model":"gpt-4o-mini","fallbacks":["claude-sonnet"]}}'
+
+# a chat completion (needs a provider key in deploy/.env for a real answer)
+curl -s localhost:8080/v1/chat/completions -H "Authorization: Bearer $DEV_API_KEY" \
+  -H 'Content-Type: application/json' -D - \
+  -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"hi"}]}'
+# response headers include x-hub-model (who served it) and x-hub-tried (the chain)
+
+# see metered usage
+curl -s localhost:8080/api/usage -H "Authorization: Bearer $DEV_API_KEY"
+```
+
+Task-based routing: send `-H 'x-hub-task: refactor'` and add a routing policy
+(`{"kind":"routing","spec":{"task":"refactor","model":"claude-sonnet"}}`) to send
+that task class to a specific model.
+
 ## 6. Run the server outside Docker (fast iteration)
 
 ```bash

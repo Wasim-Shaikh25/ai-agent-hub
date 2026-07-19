@@ -25,10 +25,13 @@
 ## Phase 2 — Gateway Plane
 | # | Item | Status |
 |---|---|---|
-| 2.1 | LiteLLM wired in compose with example providers | ⬜ todo |
-| 2.2 | Fallback chains + task→model routing from `policy` | ⬜ todo |
-| 2.3 | Usage metering on inference | ⬜ todo |
-| 2.4 | Embeddings via LiteLLM (flip `EMBEDDINGS_PROVIDER`) | ⬜ todo |
+| 2.1 | LiteLLM wired in compose with example providers | ✅ done |
+| 2.2 | Fallback chains + task→model routing from `policy` | ✅ done |
+| 2.3 | Usage metering on inference (non-stream + streaming) | ✅ done |
+| 2.4 | Budget enforcement (`429 budget_exceeded`) | ✅ done |
+| 2.5 | Embeddings via LiteLLM (flip `EMBEDDINGS_PROVIDER`) | ✅ done |
+| 2.6 | Anthropic `/v1/messages` compatibility (for Claude Code base URL) | ⬜ todo |
+| 2.7 | Cost (USD) metering + per-model pricing table | ⬜ todo |
 
 ## Phase 3 — Governance & Enterprise
 | # | Item | Status |

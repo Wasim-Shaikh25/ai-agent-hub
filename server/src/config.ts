@@ -6,6 +6,7 @@ export interface Config {
   databaseUrl: string;
   redisUrl: string;
   litellmUrl: string;
+  litellmMasterKey: string;
   embeddingsProvider: 'local' | 'litellm';
   embeddingDim: number;
   devSeed: boolean;
@@ -22,6 +23,7 @@ export const config: Config = {
   databaseUrl: env('DATABASE_URL', 'postgres://hub:hub@localhost:5432/hub'),
   redisUrl: env('REDIS_URL', 'redis://localhost:6379'),
   litellmUrl: env('LITELLM_URL', 'http://localhost:4000'),
+  litellmMasterKey: env('LITELLM_MASTER_KEY', 'sk-local-master'),
   embeddingsProvider: env('EMBEDDINGS_PROVIDER', 'local') === 'litellm' ? 'litellm' : 'local',
   embeddingDim: Number(env('EMBEDDING_DIM', '1536')),
   devSeed: env('DEV_SEED', 'true') === 'true',

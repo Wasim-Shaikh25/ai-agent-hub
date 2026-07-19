@@ -63,13 +63,65 @@ Downstream MCP servers registered in the org are **proxied**: their
 
 ## 4. Gateway (inference path)
 
-LiteLLM exposes an OpenAI-compatible endpoint. Agents point their base URL at
-`http://<hub>/v1` (or directly at LiteLLM in self-host). The Hub adds:
-- fallback chains (primary → cheaper → free),
-- per-org/task model routing (from `policy`),
-- usage metering + audit.
+Agents point their base URL at the Hub (`http://<hub>/v1`) and authenticate with
+their Hub API key. The Hub proxies to LiteLLM and layers on policy routing,
+fallback, budgets, and metering. (In self-host you may point agents straight at
+LiteLLM to skip the hop; you then lose Hub-level governance.)
 
-Config example lives in `deploy/litellm.config.yaml`.
+### Endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/v1/chat/completions` | OpenAI-compatible proxy (streaming + non-streaming) |
+| GET | `/api/policies?kind=` | list routing/model/budget policies |
+| POST | `/api/policies` | create a policy |
+| DELETE | `/api/policies/:id` | delete a policy |
+| GET | `/api/usage` | current-month token usage + active budget |
+
+### Request headers
+
+- `Authorization: Bearer <hub-api-key>` (required)
+- `x-hub-task: <task>` (optional) — selects a model via a `routing` policy,
+  e.g. `refactor` → a frontier model, `boilerplate` → a cheap model.
+
+### Response headers
+
+- `x-hub-model` — the model that actually served the request.
+- `x-hub-tried` — the chain that was attempted (shows where fallback kicked in).
+
+### Model chain resolution
+
+`[ routing(task) || requested-model || default_chain[0] , ...fallbacks || default_chain ]`
+
+The chain is walked in order; a retryable upstream status (408, 409, 425, 429,
+5xx) or a network error advances to the next model. Non-retryable errors (e.g.
+400) are returned to the caller as-is.
+
+### Metering & budgets
+
+- Non-streaming: `usage.total_tokens` is read from the response.
+- Streaming: the Hub injects `stream_options.include_usage` and parses the final
+  SSE chunk's `total_tokens`.
+- Each call writes a `usage_event (kind='tokens')`. If an active `budget` policy
+  sets `maxTokens` and the month's usage meets/exceeds it, the request is
+  rejected with `429 budget_exceeded` before any provider is called.
+
+### Policy spec shapes
+
+```jsonc
+// routing — one row per task
+{ "kind": "routing", "spec": { "task": "refactor", "model": "claude-sonnet" } }
+
+// model — fallbacks for a primary, and/or an org-wide default chain
+{ "kind": "model", "spec": { "model": "claude-sonnet", "fallbacks": ["gpt-4o-mini"] } }
+{ "kind": "model", "spec": { "default_chain": ["gpt-4o-mini", "claude-sonnet"] } }
+
+// budget — monthly ceiling
+{ "kind": "budget", "spec": { "period": "month", "maxTokens": 5000000 } }
+```
+
+Provider/model definitions and LiteLLM-native fallbacks live in
+`deploy/litellm.config.yaml`.
 
 ## 5. Error model
 

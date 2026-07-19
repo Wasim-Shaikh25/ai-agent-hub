@@ -47,7 +47,12 @@ must be created by a superuser once).
 
 ## Verified end-to-end
 
-Health, API-key auth (+401), memory write/semantic-search, cross-agent shared
-sessions, RAG index/query, the context assembler, and the MCP
-`initialize` / `tools/list` / `tools/call` lifecycle all run green against
-Postgres + pgvector.
+Against Postgres + pgvector, all green:
+
+- **Context Plane:** health, API-key auth (+401), memory write/semantic-search,
+  cross-agent shared sessions, RAG index/query, context assembler, and the MCP
+  `initialize` / `tools/list` / `tools/call` lifecycle.
+- **Gateway Plane:** OpenAI-compatible `/v1/chat/completions` with policy-based
+  model chains, automatic fallback on retryable upstream errors (verified via a
+  forced 429), task→model routing (`x-hub-task`), streaming passthrough, token
+  metering (non-stream + streaming), and `429 budget_exceeded` enforcement.

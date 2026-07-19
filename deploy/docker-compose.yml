@@ -53,6 +53,7 @@ services:
       DATABASE_URL: postgres://hub:hub@postgres:5432/hub
       REDIS_URL: redis://redis:6379
       LITELLM_URL: http://litellm:4000
+      LITELLM_MASTER_KEY: sk-local-master
       EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-local}
       EMBEDDING_DIM: "1536"
       DEV_SEED: "true"

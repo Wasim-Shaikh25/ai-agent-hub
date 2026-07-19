@@ -4,6 +4,7 @@ import { config } from './config.js';
 import { migrate, seedDev } from './db/migrate.js';
 import { resolveApiKey, bearer } from './auth.js';
 import { registerApiRoutes } from './routes/api.js';
+import { registerGatewayRoutes } from './routes/gateway.js';
 import { handleMcpRequest } from './mcp/server.js';
 
 async function main(): Promise<void> {
@@ -17,6 +18,7 @@ async function main(): Promise<void> {
   app.get('/health', async () => ({ status: 'ok', service: 'hub-server', ts: new Date().toISOString() }));
 
   await registerApiRoutes(app);
+  await registerGatewayRoutes(app);
 
   // Native MCP endpoint (Streamable HTTP, stateless).
   app.post('/mcp', async (req, reply) => {
