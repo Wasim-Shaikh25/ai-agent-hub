@@ -17,6 +17,8 @@ for provider fallback and model routing.
   [`docs/specs/04-local-dev.md`](docs/specs/04-local-dev.md) —
   `cd deploy && cp .env.example .env && docker compose up --build`.
 - **Server code:** [`server/`](server/) (Fastify + Postgres/pgvector + MCP).
+- **CLI connector:** [`cli/`](cli/) — `aihub connect <agent>` points any agent
+  (Cursor, Claude Code, Codex, Cline…) at the Hub in one command.
 
 The extension is the free, local **Content Plane**; the server is the
 collaborative + governed **Context / Gateway / Governance** planes. See

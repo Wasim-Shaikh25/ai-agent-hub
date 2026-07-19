@@ -46,8 +46,8 @@
 ## Phase 4 — Clients & registry
 | # | Item | Status |
 |---|---|---|
-| 4.1 | Extract extension core → shared package | ⬜ todo |
-| 4.2 | Extension: login + write native MCP config to agents | ⬜ todo |
-| 4.3 | CLI daemon for non-VS-Code agents | ⬜ todo |
+| 4.1 | Extract extension core → shared package | ⬜ todo (needs VS Code host) |
+| 4.2 | Extension: login + write native MCP config to agents | ⬜ todo (CLI covers this now) |
+| 4.3 | CLI connector (`aihub`) for any agent incl. non-VS-Code | ✅ done |
 | 4.4 | Downstream MCP server proxying (aggregator) | ✅ done |
 | 4.5 | Org content registry with versioning/approvals | ⬜ todo |

@@ -1,0 +1,13 @@
+{
+  "name": "@ai-agent-hub/cli",
+  "version": "0.1.0",
+  "description": "Connect any AI coding agent (Cursor, Claude Code, Codex, Cline, …) to an AI Agent Hub server",
+  "type": "module",
+  "bin": {
+    "aihub": "index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": ["index.mjs", "README.md"]
+}
