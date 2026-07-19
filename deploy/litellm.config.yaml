@@ -1,0 +1,28 @@
+# LiteLLM gateway config (Phase 1 starter).
+# Add/remove providers here. Models reference env vars so no secrets are
+# committed. The gateway starts fine even without keys — calls only fail if a
+# keyless model is invoked.
+
+model_list:
+  - model_name: gpt-4o-mini
+    litellm_params:
+      model: openai/gpt-4o-mini
+      api_key: os.environ/OPENAI_API_KEY
+
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-5
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: text-embedding-3-small
+    litellm_params:
+      model: openai/text-embedding-3-small
+      api_key: os.environ/OPENAI_API_KEY
+
+litellm_settings:
+  drop_params: true
+  # Example fallback chain (Phase 2 wires routing policy to this):
+  # fallbacks: [{"gpt-4o-mini": ["claude-sonnet"]}]
+
+general_settings:
+  master_key: sk-local-master

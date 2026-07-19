@@ -1,0 +1,52 @@
+import { createHash } from 'node:crypto';
+import type { FastifyReply, FastifyRequest } from 'fastify';
+import { queryOne, query } from './db/pool.js';
+
+/** Resolved caller identity. */
+export interface AuthContext {
+  orgId: string;
+  userId: string;
+  role: string;
+}
+
+/** Resolves a raw bearer key to an {@link AuthContext}, or undefined. */
+export async function resolveApiKey(rawKey: string | undefined): Promise<AuthContext | undefined> {
+  if (!rawKey) return undefined;
+  const hash = createHash('sha256').update(rawKey).digest('hex');
+  const row = await queryOne<{ org_id: string; user_id: string; role: string }>(
+    `SELECT k.org_id, k.user_id, COALESCE(m.role, 'member') AS role
+       FROM api_key k
+       LEFT JOIN membership m ON m.org_id = k.org_id AND m.user_id = k.user_id
+      WHERE k.hash = $1 AND k.revoked = false`,
+    [hash],
+  );
+  if (!row) return undefined;
+  // best-effort last-used stamp; don't block the request on it
+  void query('UPDATE api_key SET last_used_at = now() WHERE hash = $1', [hash]);
+  return { orgId: row.org_id, userId: row.user_id, role: row.role };
+}
+
+function bearer(header: string | undefined): string | undefined {
+  if (!header) return undefined;
+  const m = /^Bearer\s+(.+)$/i.exec(header);
+  return m?.[1]?.trim();
+}
+
+declare module 'fastify' {
+  interface FastifyRequest {
+    auth?: AuthContext;
+  }
+}
+
+/** Fastify preHandler that requires a valid API key. */
+export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  const ctx = await resolveApiKey(bearer(req.headers.authorization));
+  if (!ctx) {
+    await reply.code(401).send({ error: { code: 'unauthorized', message: 'Invalid or missing API key' } });
+    return;
+  }
+  req.auth = ctx;
+}
+
+/** Extracts the bearer key from a raw header (for the MCP transport). */
+export { bearer };

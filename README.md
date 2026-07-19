@@ -4,6 +4,24 @@ A VS Code extension that acts as a centralized control plane for managing
 AI behavior content (skills, rules, hooks) and syncing it to any
 configured AI agent target (Kiro, Cursor, GitHub Copilot, Amazon Q, etc.).
 
+## Platform (server) — new
+
+Beyond the VS Code extension, the repo now contains the **Hub server** — the
+paid, server-side control plane that adds shared **context, memory, and RAG**
+across agents (over native **MCP**) plus an embedded **LLM gateway** (LiteLLM)
+for provider fallback and model routing.
+
+- **Specs:** [`docs/specs/`](docs/specs/) — overview, architecture, data model,
+  API/MCP contract, local-dev, roadmap.
+- **Run the full stack locally:**
+  [`docs/specs/04-local-dev.md`](docs/specs/04-local-dev.md) —
+  `cd deploy && cp .env.example .env && docker compose up --build`.
+- **Server code:** [`server/`](server/) (Fastify + Postgres/pgvector + MCP).
+
+The extension is the free, local **Content Plane**; the server is the
+collaborative + governed **Context / Gateway / Governance** planes. See
+[`docs/specs/00-overview.md`](docs/specs/00-overview.md) for the open-core split.
+
 ## What It Does
 
 AI Agent Hub lets teams define reusable AI behavior content in one place

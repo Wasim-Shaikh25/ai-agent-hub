@@ -1,0 +1,64 @@
+name: ai-agent-hub
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: hub
+      POSTGRES_PASSWORD: hub
+      POSTGRES_DB: hub
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hub -d hub"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    ports:
+      - "4000:4000"
+    environment:
+      # Optional — only needed when EMBEDDINGS_PROVIDER=litellm or you route
+      # real inference through the gateway. Leave blank for offline dev.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ./litellm.config.yaml:/app/config.yaml:ro
+
+  hub-server:
+    build:
+      context: ../server
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      DATABASE_URL: postgres://hub:hub@postgres:5432/hub
+      REDIS_URL: redis://redis:6379
+      LITELLM_URL: http://litellm:4000
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-local}
+      EMBEDDING_DIM: "1536"
+      DEV_SEED: "true"
+      DEV_API_KEY: ${DEV_API_KEY:-hub_dev_localkey}
+    ports:
+      - "8080:8080"
+
+volumes:
+  pgdata:
