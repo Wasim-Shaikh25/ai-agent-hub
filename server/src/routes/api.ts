@@ -1,10 +1,12 @@
 import type { FastifyInstance } from 'fastify';
-import { requireAuth, bearer } from '../auth.js';
+import { requireAuth, requireRole, bearer } from '../auth.js';
 import { ContextService } from '../services/contextService.js';
 import { ContentService, type ContentType } from '../services/contentService.js';
+import { AuditService } from '../services/auditService.js';
 
 const context = new ContextService();
 const content = new ContentService();
+const audit = new AuditService();
 
 /** Registers the management REST API under /api. */
 export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
@@ -18,21 +20,25 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
     return content.list(req.auth!.orgId, type);
   });
 
-  app.post('/api/content', { preHandler: requireAuth }, async (req) => {
+  app.post('/api/content', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
     const body = req.body as { type: ContentType; name: string; description?: string; body?: string; trigger?: string; enabled?: boolean };
-    return content.create(req.auth!.orgId, body);
+    const item = await content.create(req.auth!.orgId, body);
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'content.create', item.id, { type: item.type, name: item.name });
+    return item;
   });
 
-  app.put('/api/content/:id', { preHandler: requireAuth }, async (req, reply) => {
+  app.put('/api/content/:id', { preHandler: [requireAuth, requireRole('member')] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const updated = await content.update(req.auth!.orgId, id, req.body as Record<string, never>);
     if (!updated) return reply.code(404).send({ error: { code: 'not_found', message: 'content item not found' } });
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'content.update', id);
     return updated;
   });
 
-  app.delete('/api/content/:id', { preHandler: requireAuth }, async (req) => {
+  app.delete('/api/content/:id', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
     const { id } = req.params as { id: string };
     await content.remove(req.auth!.orgId, id);
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'content.delete', id);
     return { ok: true };
   });
 
@@ -70,7 +76,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
     return { results: await context.searchMemory(req.auth!.orgId, q.q, { project: q.project, k: q.k ? Number(q.k) : undefined }) };
   });
 
-  app.post('/api/memory', { preHandler: requireAuth }, async (req) => {
+  app.post('/api/memory', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
     const b = req.body as { kind?: string; content: string; project?: string };
     const id = await context.writeMemory(req.auth!.orgId, b);
     return { ok: true, id };

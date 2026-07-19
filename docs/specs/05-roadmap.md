@@ -36,11 +36,12 @@
 ## Phase 3 — Governance & Enterprise
 | # | Item | Status |
 |---|---|---|
-| 3.1 | RBAC enforcement on all routes + MCP tools | ⬜ todo |
-| 3.2 | Audit log | ⬜ todo |
-| 3.3 | Cost dashboards + budgets | ⬜ todo |
-| 3.4 | SSO (WorkOS), RLS multi-tenant isolation | ⬜ todo |
-| 3.5 | Stripe metered billing | ⬜ todo |
+| 3.1 | RBAC enforcement on routes + MCP tools (viewer/member/admin/owner) | ✅ done |
+| 3.2 | Audit log (+ `/api/audit`) | ✅ done |
+| 3.3 | Cost dashboard (`/api/usage/breakdown`) + token/USD budgets | ✅ done |
+| 3.4 | API-key management (`/api/keys`, per-key role override) | ✅ done |
+| 3.5 | SSO (WorkOS), RLS multi-tenant isolation | ⬜ todo (needs external IdP) |
+| 3.6 | Stripe metered billing (usage export foundation in place) | ⬜ todo (needs Stripe acct) |
 
 ## Phase 4 — Clients & registry
 | # | Item | Status |

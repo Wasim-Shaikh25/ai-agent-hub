@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import type { AuthContext } from '../auth.js';
+import { type AuthContext, hasRole } from '../auth.js';
 import { ContextService } from '../services/contextService.js';
 import { ContentService, type ContentType } from '../services/contentService.js';
 
@@ -23,6 +23,7 @@ function text(s: string) {
 function buildServer(auth: AuthContext): McpServer {
   const server = new McpServer({ name: 'ai-agent-hub', version: '0.1.0' });
   const org = auth.orgId;
+  const canWrite = hasRole(auth.role, 'member'); // viewers get read-only tools
 
   server.registerTool(
     'session_get_context',
@@ -40,6 +41,7 @@ function buildServer(auth: AuthContext): McpServer {
     async (args) => text(await context.assembleContext(org, args)),
   );
 
+  if (canWrite) {
   server.registerTool(
     'session_append',
     {
@@ -75,6 +77,7 @@ function buildServer(auth: AuthContext): McpServer {
       return text(`ok:${id}`);
     },
   );
+  } // end canWrite (session_append, memory_write)
 
   server.registerTool(
     'memory_search',
@@ -102,6 +105,7 @@ function buildServer(auth: AuthContext): McpServer {
     },
   );
 
+  if (canWrite) {
   server.registerTool(
     'rag_index',
     {
@@ -114,6 +118,7 @@ function buildServer(auth: AuthContext): McpServer {
       return text(`indexed ${res.chunks} chunk(s) as document ${res.documentId}`);
     },
   );
+  }
 
   server.registerTool(
     'skills_list',

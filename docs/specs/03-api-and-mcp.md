@@ -5,10 +5,28 @@
 Two surfaces: a **REST API** (management/UI) and an **MCP server** (what agents
 actually call at runtime).
 
-## 1. Auth
+## 1. Auth & RBAC
 
-All requests: `Authorization: Bearer <api-key>`. Key → `{org, user, roles}`.
+All requests: `Authorization: Bearer <api-key>`. Key → `{org, user, role}`.
 In local dev a seed key is printed on first boot (`DEV_API_KEY`).
+
+Roles are ranked `viewer < member < admin < owner`. A key inherits its user's
+membership role, or carries an explicit override (`api_key.role`) — so you can
+mint a read-only key without creating a user. Enforcement:
+
+| Capability | Min role |
+|---|---|
+| Read content/sessions/memory/usage, MCP read tools | viewer |
+| Write content/memory/sessions, run inference, MCP write tools | member |
+| Manage policies, API keys, view audit log | admin |
+
+### Governance endpoints (admin)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET/POST | `/api/keys` · `/api/keys/:id` (DELETE) | mint / list / revoke API keys (raw key shown once) |
+| GET | `/api/audit?limit=` | recent audit entries |
+| GET | `/api/usage/breakdown` | current-month cost grouped by model (member+) |
 
 ## 2. REST API (management)
 

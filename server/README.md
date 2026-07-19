@@ -58,3 +58,6 @@ Against Postgres + pgvector, all green:
   task→model routing (`x-hub-task`), streaming passthrough, precise token + USD
   cost metering (non-stream + streaming, both formats), and token/USD
   `429 budget_exceeded` enforcement.
+- **Governance:** role-based access (viewer/member/admin/owner) enforced on REST
+  routes and MCP tools (viewers get read-only tools), append-only audit log,
+  API-key management with per-key role override, and a per-model cost breakdown.

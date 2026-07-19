@@ -1,11 +1,13 @@
 import { Readable, Transform } from 'node:stream';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { requireAuth } from '../auth.js';
+import { requireAuth, requireRole } from '../auth.js';
 import { GatewayService, BudgetExceededError, type ChatBody, type Usage } from '../gateway/gatewayService.js';
 import { PolicyService, type PolicyKind } from '../services/policyService.js';
+import { AuditService } from '../services/auditService.js';
 
 const gateway = new GatewayService();
 const policies = new PolicyService();
+const audit = new AuditService();
 
 type Format = 'openai' | 'anthropic';
 
@@ -19,26 +21,29 @@ const ANTHROPIC: ProxyConfig = { path: '/v1/messages', format: 'anthropic' };
 
 /** Registers the Gateway Plane: OpenAI + Anthropic proxies, policy + usage APIs. */
 export async function registerGatewayRoutes(app: FastifyInstance): Promise<void> {
-  // OpenAI-compatible (Cursor, Cline, Codex, Continue, …)
-  app.post('/v1/chat/completions', { preHandler: requireAuth }, (req, reply) => proxy(req, reply, OPENAI));
+  // OpenAI-compatible (Cursor, Cline, Codex, Continue, …) — inference needs member.
+  app.post('/v1/chat/completions', { preHandler: [requireAuth, requireRole('member')] }, (req, reply) => proxy(req, reply, OPENAI));
 
   // Anthropic-compatible (Claude Code → point ANTHROPIC_BASE_URL at the Hub)
-  app.post('/v1/messages', { preHandler: requireAuth }, (req, reply) => proxy(req, reply, ANTHROPIC));
+  app.post('/v1/messages', { preHandler: [requireAuth, requireRole('member')] }, (req, reply) => proxy(req, reply, ANTHROPIC));
 
-  // -- policy management ----------------------------------------------------
+  // -- policy management (admin) --------------------------------------------
   app.get('/api/policies', { preHandler: requireAuth }, async (req) => {
     const kind = (req.query as { kind?: PolicyKind }).kind;
     return policies.list(req.auth!.orgId, kind);
   });
 
-  app.post('/api/policies', { preHandler: requireAuth }, async (req) => {
+  app.post('/api/policies', { preHandler: [requireAuth, requireRole('admin')] }, async (req) => {
     const b = req.body as { kind: PolicyKind; spec: Record<string, unknown>; enabled?: boolean };
-    return policies.create(req.auth!.orgId, b.kind, b.spec, b.enabled ?? true);
+    const p = await policies.create(req.auth!.orgId, b.kind, b.spec, b.enabled ?? true);
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'policy.create', p.id, { kind: b.kind, spec: b.spec });
+    return p;
   });
 
-  app.delete('/api/policies/:id', { preHandler: requireAuth }, async (req) => {
+  app.delete('/api/policies/:id', { preHandler: [requireAuth, requireRole('admin')] }, async (req) => {
     const { id } = req.params as { id: string };
     await policies.remove(req.auth!.orgId, id);
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'policy.delete', id);
     return { ok: true };
   });
 

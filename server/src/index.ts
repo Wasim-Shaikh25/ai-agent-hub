@@ -5,6 +5,7 @@ import { migrate, seedDev } from './db/migrate.js';
 import { resolveApiKey, bearer } from './auth.js';
 import { registerApiRoutes } from './routes/api.js';
 import { registerGatewayRoutes } from './routes/gateway.js';
+import { registerAdminRoutes } from './routes/admin.js';
 import { handleMcpRequest } from './mcp/server.js';
 
 async function main(): Promise<void> {
@@ -19,6 +20,7 @@ async function main(): Promise<void> {
 
   await registerApiRoutes(app);
   await registerGatewayRoutes(app);
+  await registerAdminRoutes(app);
 
   // Native MCP endpoint (Streamable HTTP, stateless).
   app.post('/mcp', async (req, reply) => {
