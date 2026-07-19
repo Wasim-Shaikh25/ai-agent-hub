@@ -12,6 +12,8 @@ import { HubUpdater } from './core/hubUpdater';
 import { RepoSyncStore } from './core/repoSyncStore';
 import { McpStore } from './core/mcpStore';
 import { McpManager } from './core/mcpManager';
+import { HubClient } from './core/hubClient';
+import { connectServer, connectAgentsToHub, pullFromHub } from './commands/hubServer';
 import { HubPanel } from './ui/hubPanel';
 import { SetupPanel } from './ui/setupPanel';
 import { openHub } from './commands/openHub';
@@ -44,6 +46,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const repoSyncStore = new RepoSyncStore(storage);
     const mcpStore = new McpStore(storage);
     const mcpManager = new McpManager();
+    const hubClient = new HubClient(context);
     const syncEngine = new SyncEngine(
       registry,
       agentConfig,
@@ -96,6 +99,15 @@ export function activate(context: vscode.ExtensionContext): void {
       ),
       vscode.commands.registerCommand('aiAgentHub.showAgents', () =>
         showAgents(agentConfig, setupPanel),
+      ),
+      vscode.commands.registerCommand('aiAgentHub.connectServer', () =>
+        connectServer(hubClient),
+      ),
+      vscode.commands.registerCommand('aiAgentHub.connectAgentsToHub', () =>
+        connectAgentsToHub(hubClient),
+      ),
+      vscode.commands.registerCommand('aiAgentHub.pullFromHub', () =>
+        pullFromHub(hubClient),
       ),
     );
 

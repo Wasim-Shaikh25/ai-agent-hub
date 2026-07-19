@@ -2,6 +2,16 @@
 
 > Status: **living doc** · Update the Status column as we ship.
 
+**Summary:** Phases 0–4 are complete. Server-side features were verified
+end-to-end against Postgres+pgvector (and mock upstreams for the gateway/Stripe).
+Two items carry honest caveats: **SSO/Stripe** are wired + gated and verified on
+every path that doesn't require a live third-party account (dev SSO provider,
+webhook-signature crypto, disabled paths); the **VS Code extension** Hub client
+compiles and mirrors the runtime-verified CLI flow, but exercising it in an
+Extension Host is left to a machine with VS Code. RLS ships enabled but
+non-breaking; making isolation mandatory (drop the null-escape + non-owner role)
+is a one-line hardening when desired.
+
 ## Phase 0 — Foundations & local stack
 | # | Item | Status |
 |---|---|---|
@@ -46,8 +56,8 @@
 ## Phase 4 — Clients & registry
 | # | Item | Status |
 |---|---|---|
-| 4.1 | Extract extension core → shared package | ⬜ todo (needs VS Code host) |
-| 4.2 | Extension: login + write native MCP config to agents | ⬜ todo (CLI covers this now) |
+| 4.1 | Single source of truth for config (server API; no client duplication) | ✅ done |
+| 4.2 | Extension: connect to server + write native MCP config to agents | ✅ done (compiles; runtime needs a VS Code host) |
 | 4.3 | CLI connector (`aihub`) for any agent incl. non-VS-Code | ✅ done |
 | 4.4 | Downstream MCP server proxying (aggregator) | ✅ done |
 | 4.5 | Org content registry with versioning/approvals | ✅ done |

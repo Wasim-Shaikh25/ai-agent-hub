@@ -181,6 +181,9 @@ code --uninstall-extension ai-agent-hub.ai-agent-hub
 | `AI Agent Hub: Add Hook`             | Create a new hook                    |
 | `AI Agent Hub: Sync to Agents`       | Sync all enabled content to agents   |
 | `AI Agent Hub: Show Configured Agents` | View configured agent targets      |
+| `AI Agent Hub: Connect to Server`    | Store + validate Hub server URL & key |
+| `AI Agent Hub: Connect Agents to Hub` | Write native MCP config into agents  |
+| `AI Agent Hub: Pull Content from Hub` | Browse the org content registry      |
 
 ## Settings
 
