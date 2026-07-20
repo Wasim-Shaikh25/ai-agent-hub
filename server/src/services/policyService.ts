@@ -1,6 +1,6 @@
 import { query, queryOne } from '../db/pool.js';
 
-export type PolicyKind = 'routing' | 'model' | 'budget' | 'content';
+export type PolicyKind = 'routing' | 'model' | 'budget' | 'content' | 'quality' | 'redaction';
 
 export interface Policy {
   id: string;
@@ -64,6 +64,16 @@ export class PolicyService {
       }
     }
     return { fallbacks, defaultChain };
+  }
+
+  /** The active quality-routing policy: tier→model map + escalation threshold. */
+  async quality(orgId: string): Promise<{ tiers: Record<string, string>; escalateOnShort?: number } | undefined> {
+    const rows = await this.list(orgId, 'quality');
+    const active = rows.find((p) => p.enabled);
+    if (!active) return undefined;
+    const tiers = (active.spec['tiers'] as Record<string, string>) ?? {};
+    const escalateOnShort = active.spec['escalateOnShort'] != null ? Number(active.spec['escalateOnShort']) : undefined;
+    return { tiers, escalateOnShort };
   }
 
   /** The active budget policy spec, if any. */

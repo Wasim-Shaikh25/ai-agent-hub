@@ -7,6 +7,7 @@ import { AuditService } from '../services/auditService.js';
 import { config } from '../config.js';
 import { redact } from '../privacy/redact.js';
 import { semanticCache, extractPrompt } from '../gateway/cache.js';
+import { classifyTask, nextTier, type Tier } from '../gateway/classifier.js';
 
 const gateway = new GatewayService();
 const policies = new PolicyService();
@@ -67,6 +68,22 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   const userId = req.auth!.userId;
   const body = (req.body ?? {}) as ChatBody;
   const task = typeof req.headers['x-hub-task'] === 'string' ? (req.headers['x-hub-task'] as string) : undefined;
+
+  // Quality-based routing: when no explicit task is given, classify the prompt
+  // and pick a model tier (trivial→cheap, complex→frontier).
+  let quality: { tiers: Record<string, string>; escalateOnShort?: number } | undefined;
+  let tier: Tier | undefined;
+  if (!task) {
+    quality = await policies.quality(orgId);
+    if (quality && Object.keys(quality.tiers).length) {
+      tier = classifyTask(extractPrompt(body));
+      const tierModel = quality.tiers[tier];
+      if (tierModel) {
+        body.model = tierModel;
+        reply.header('x-hub-tier', tier);
+      }
+    }
+  }
 
   // PII/secret guardrail — redact or block before any provider call.
   if (config.redactionEnabled) {
@@ -133,9 +150,28 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
 
   // Non-streaming: read JSON, meter precisely, return.
   if (!body.stream) {
-    const json = await resp.json();
+    let json = await resp.json();
+    let servedModel = model;
+
+    // Quality escalation: if a cheap tier gave a too-short answer, retry once on
+    // the next tier up.
+    if (tier && quality?.escalateOnShort && quality.tiers) {
+      const answer = extractText(json, cfg.format);
+      const up = nextTier(tier);
+      const upModel = up ? quality.tiers[up] : undefined;
+      if (answer.length < quality.escalateOnShort && upModel) {
+        const retry = await gateway.forwardTo(orgId, cfg.path, { ...body, model: upModel }, undefined, { injectStreamUsage: false });
+        if (retry.resp.ok) {
+          json = await retry.resp.json();
+          servedModel = retry.model;
+          reply.header('x-hub-escalated', `${tier}->${up}`);
+        }
+      }
+    }
+
     const usage: Usage = cfg.format === 'anthropic' ? gateway.extractAnthropicUsage(json) : gateway.extractOpenAIUsage(json);
-    await gateway.recordUsage(orgId, userId, model, usage, { latency_ms: Date.now() - t0 });
+    reply.header('x-hub-model', servedModel);
+    await gateway.recordUsage(orgId, userId, servedModel, usage, { latency_ms: Date.now() - t0 });
     if (semanticCache.enabled) {
       void semanticCache.store(orgId, cacheKeyModel, extractPrompt(body), json);
     }
@@ -172,6 +208,15 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   });
 
   Readable.fromWeb(resp.body as never).pipe(meter).pipe(reply.raw);
+}
+
+/** Extracts assistant text from a completion (OpenAI or Anthropic shape). */
+function extractText(json: unknown, format: Format): string {
+  if (format === 'anthropic') {
+    const blocks = (json as { content?: Array<{ type?: string; text?: string }> }).content ?? [];
+    return blocks.filter((b) => b.type === 'text').map((b) => b.text ?? '').join('');
+  }
+  return (json as { choices?: Array<{ message?: { content?: string } }> }).choices?.[0]?.message?.content ?? '';
 }
 
 /**

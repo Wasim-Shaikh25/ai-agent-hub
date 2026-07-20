@@ -13,14 +13,17 @@ and **measurement** (analytics).
 
 ## Specs in this suite
 
-| Spec | Feature | Verifiable here? |
+| Spec | Feature | Status |
 |---|---|---|
-| `07-data-residency-privacy.md` | Storage modes, data classification, retention/delete | ✅ server-side |
-| `08-guardrails-pii.md` | PII/secret redaction before store + forward | ✅ server-side |
-| `09-semantic-cache.md` | Embedding-similarity response cache (token savings) | ✅ server-side |
-| `10-metrics-analytics.md` | Per-dev / per-repo / latency / cache-hit metrics API | ✅ server-side |
-| `11-dashboard.md` | Web dashboard (cost, usage, audit, sessions) | ✅ served + API |
-| `12-quality-routing.md` | Task/quality-based model routing | ✅ server-side |
+| `07-data-residency-privacy.md` | Storage modes, purge/right-to-be-forgotten, retention | ✅ done |
+| `08-guardrails-pii.md` | PII/secret redaction before store + forward | ✅ done |
+| `09-semantic-cache.md` | Embedding-similarity response cache (token savings) | ✅ done |
+| `10-metrics-analytics.md` | latency / cache-hit / by-model / by-user / savings metrics | ✅ done |
+| `11-dashboard.md` | Web dashboard at `/dashboard` (cost, usage, audit) | ✅ done |
+| `12-quality-routing.md` | Prompt classification → tier → model, with escalation | ✅ done |
+
+**All six shipped and verified.** Lighter items (more IdPs, prompt-caching
+passthrough, SOC2 process) remain as noted below.
 
 ## Build order (each ships + verifies + commits independently)
 
