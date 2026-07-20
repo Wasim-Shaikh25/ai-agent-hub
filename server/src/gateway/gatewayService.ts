@@ -147,6 +147,11 @@ export class GatewayService {
 
   // -- usage extraction -----------------------------------------------------
 
+  /** USD cost for a given usage on a model (exposed for savings accounting). */
+  costOf(model: string, usage: Usage): number {
+    return costUsd(model, usage.inputTokens, usage.outputTokens);
+  }
+
   extractOpenAIUsage(json: unknown): Usage {
     const u = (json as { usage?: { prompt_tokens?: number; completion_tokens?: number } }).usage;
     return { inputTokens: u?.prompt_tokens ?? 0, outputTokens: u?.completion_tokens ?? 0 };

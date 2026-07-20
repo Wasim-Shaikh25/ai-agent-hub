@@ -9,6 +9,7 @@ import { registerAdminRoutes } from './routes/admin.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerBillingRoutes } from './routes/billing.js';
 import { registerPrivacyRoutes } from './routes/privacy.js';
+import { registerMetricsRoutes } from './routes/metrics.js';
 import { handleMcpRequest } from './mcp/server.js';
 
 async function main(): Promise<void> {
@@ -37,6 +38,7 @@ async function main(): Promise<void> {
   await registerAdminRoutes(app);
   await registerBillingRoutes(app);
   await registerPrivacyRoutes(app);
+  await registerMetricsRoutes(app);
 
   // Native MCP endpoint (Streamable HTTP, stateless).
   app.post('/mcp', async (req, reply) => {

@@ -84,7 +84,15 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     const cached = await semanticCache.lookup(orgId, cacheKeyModel, prompt);
     if (cached !== undefined) {
       reply.header('x-hub-cache', 'hit');
-      await gateway.recordUsage(orgId, userId, cacheKeyModel, { inputTokens: 0, outputTokens: 0 }, { cached: true });
+      // Track what the cache saved (the cost the upstream call would have incurred).
+      const savedUsage = cfg.format === 'anthropic' ? gateway.extractAnthropicUsage(cached) : gateway.extractOpenAIUsage(cached);
+      const savedUsd = gateway.costOf(cacheKeyModel, savedUsage);
+      await gateway.recordUsage(orgId, userId, cacheKeyModel, { inputTokens: 0, outputTokens: 0 }, {
+        cached: true,
+        saved_tokens: savedUsage.inputTokens + savedUsage.outputTokens,
+        saved_usd: savedUsd,
+        latency_ms: 0,
+      });
       reply.send(cached);
       return;
     }
@@ -102,6 +110,7 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     throw err;
   }
 
+  const t0 = Date.now();
   let result;
   try {
     result = await gateway.forwardTo(orgId, cfg.path, body, task, { injectStreamUsage: cfg.format === 'openai' });
@@ -126,7 +135,7 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   if (!body.stream) {
     const json = await resp.json();
     const usage: Usage = cfg.format === 'anthropic' ? gateway.extractAnthropicUsage(json) : gateway.extractOpenAIUsage(json);
-    await gateway.recordUsage(orgId, userId, model, usage);
+    await gateway.recordUsage(orgId, userId, model, usage, { latency_ms: Date.now() - t0 });
     if (semanticCache.enabled) {
       void semanticCache.store(orgId, cacheKeyModel, extractPrompt(body), json);
     }
