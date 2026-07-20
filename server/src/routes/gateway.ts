@@ -6,6 +6,7 @@ import { PolicyService, type PolicyKind } from '../services/policyService.js';
 import { AuditService } from '../services/auditService.js';
 import { config } from '../config.js';
 import { redact } from '../privacy/redact.js';
+import { semanticCache, extractPrompt } from '../gateway/cache.js';
 
 const gateway = new GatewayService();
 const policies = new PolicyService();
@@ -76,6 +77,20 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     }
   }
 
+  // Semantic cache — return a stored completion for a close prompt (non-stream).
+  const cacheKeyModel = body.model ?? 'default';
+  if (semanticCache.enabled && !body.stream) {
+    const prompt = extractPrompt(body);
+    const cached = await semanticCache.lookup(orgId, cacheKeyModel, prompt);
+    if (cached !== undefined) {
+      reply.header('x-hub-cache', 'hit');
+      await gateway.recordUsage(orgId, userId, cacheKeyModel, { inputTokens: 0, outputTokens: 0 }, { cached: true });
+      reply.send(cached);
+      return;
+    }
+    reply.header('x-hub-cache', 'miss');
+  }
+
   // Budget enforcement (before any provider call).
   try {
     await gateway.assertWithinBudget(orgId);
@@ -112,6 +127,9 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     const json = await resp.json();
     const usage: Usage = cfg.format === 'anthropic' ? gateway.extractAnthropicUsage(json) : gateway.extractOpenAIUsage(json);
     await gateway.recordUsage(orgId, userId, model, usage);
+    if (semanticCache.enabled) {
+      void semanticCache.store(orgId, cacheKeyModel, extractPrompt(body), json);
+    }
     reply.send(json);
     return;
   }
