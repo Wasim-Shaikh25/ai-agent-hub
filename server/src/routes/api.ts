@@ -100,12 +100,12 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/memory', { preHandler: requireAuth }, async (req) => {
     const q = req.query as { q?: string; project?: string; k?: string };
     if (!q.q) return { results: [] };
-    return { results: await context.searchMemory(req.auth!.orgId, q.q, { project: q.project, k: q.k ? Number(q.k) : undefined }) };
+    return { results: await context.searchMemory(req.auth!.orgId, q.q, { project: q.project, k: q.k ? Number(q.k) : undefined, authorId: req.auth!.userId }) };
   });
 
   app.post('/api/memory', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
-    const b = req.body as { kind?: string; content: string; project?: string };
-    const id = await context.writeMemory(req.auth!.orgId, b);
+    const b = req.body as { kind?: string; content: string; project?: string; visibility?: string };
+    const id = await context.writeMemory(req.auth!.orgId, { ...b, authorId: req.auth!.userId });
     return { ok: true, id };
   });
 
@@ -122,16 +122,21 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
 
   // -- native MCP config snippet per agent ----------------------------------
   app.get('/api/mcp-config', { preHandler: requireAuth }, async (req) => {
-    const agent = (req.query as { agent?: string }).agent ?? 'cursor';
+    const q = req.query as { agent?: string; project?: string; session?: string };
     const key = bearer(req.headers.authorization) ?? '<YOUR_API_KEY>';
     const port = process.env.PORT ?? '8080';
     const url = `http://localhost:${port}/mcp`;
-    return buildMcpConfig(agent, url, key);
+    return buildMcpConfig(q.agent ?? 'cursor', url, key, q.project, q.session);
   });
 }
 
-function buildMcpConfig(agent: string, url: string, key: string): { agent: string; file: string; config: unknown; note: string } {
-  const server = { url, headers: { Authorization: `Bearer ${key}` } };
+function buildMcpConfig(agent: string, url: string, key: string, project?: string, session?: string): { agent: string; file: string; config: unknown; note: string } {
+  const headers: Record<string, string> = { Authorization: `Bearer ${key}` };
+  // Auto-binding: bind this workspace to its repo (project) and branch (session)
+  // so every MCP call from here targets the right context automatically.
+  if (project) headers['X-Hub-Project'] = project;
+  if (session) headers['X-Hub-Session'] = session;
+  const server = { url, headers };
   switch (agent) {
     case 'claude':
     case 'claude-code':

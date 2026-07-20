@@ -9,8 +9,23 @@
  * No dependencies — Node built-ins only.
  */
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join, dirname, isAbsolute } from 'node:path';
+import { join, dirname, isAbsolute, basename } from 'node:path';
 import { homedir } from 'node:os';
+import { execSync } from 'node:child_process';
+
+/** Detects the repo name (project) and branch (session key) for a directory. */
+function detectWorkspace(dir) {
+  const run = (cmd) => {
+    try { return execSync(cmd, { cwd: dir, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); }
+    catch { return ''; }
+  };
+  const remote = run('git config --get remote.origin.url');
+  const project = remote
+    ? basename(remote.replace(/\.git$/, ''))
+    : basename(isAbsolute(dir) ? dir : join(process.cwd(), dir));
+  const branch = run('git rev-parse --abbrev-ref HEAD') || 'main';
+  return { project, branch };
+}
 
 const CONFIG_PATH = join(homedir(), '.ai-agent-hub', 'config.json');
 
@@ -101,7 +116,10 @@ async function cmdConnect(positional, flags) {
   if (!AGENTS.includes(agent)) throw new Error(`Usage: aihub connect <${AGENTS.join('|')}> [--dir .]`);
   const cfg = loadConfig();
   const dir = flags.dir ?? '.';
-  const snippet = await api(`/api/mcp-config?agent=${agent}`, cfg);
+  const { project, branch } = detectWorkspace(dir);
+  const proj = flags.project || project;
+  const session = flags.session || branch;
+  const snippet = await api(`/api/mcp-config?agent=${agent}&project=${encodeURIComponent(proj)}&session=${encodeURIComponent(session)}`, cfg);
 
   const target = isAbsolute(snippet.file) || snippet.file.startsWith('~') ? expandHome(snippet.file) : join(dir, snippet.file);
   let existing = {};
@@ -113,6 +131,7 @@ async function cmdConnect(positional, flags) {
   writeFileSync(target, JSON.stringify(merged, null, 2));
 
   console.log(`✓ Wrote MCP config for ${agent}: ${target}`);
+  console.log(`  bound project="${proj}"  session="${session}"  (auto-detected from git)`);
   console.log(`  ${snippet.note}`);
   console.log('');
   console.log(gatewayHint(agent, cfg.url, cfg.key));

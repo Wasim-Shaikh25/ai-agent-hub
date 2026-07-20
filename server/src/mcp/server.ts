@@ -26,10 +26,19 @@ function text(s: string) {
  * native MCP tools so any agent (Cursor, Kiro, Claude Code, …) uses them with
  * zero custom integration — replacing the old "curl a rule file" approach.
  */
-async function buildServer(auth: AuthContext): Promise<McpServer> {
+interface McpDefaults {
+  project?: string;
+  key?: string;
+}
+
+async function buildServer(auth: AuthContext, defaults: McpDefaults = {}): Promise<McpServer> {
   const server = new McpServer({ name: 'ai-agent-hub', version: '0.1.0' });
   const org = auth.orgId;
   const canWrite = hasRole(auth.role, 'member'); // viewers get read-only tools
+  // Auto-binding: project defaults to the workspace's repo, key to its branch
+  // (stamped into the MCP config by `aihub connect`), so agents don't guess.
+  const P = (p?: string): string => p ?? defaults.project ?? 'default';
+  const K = (k?: string): string => k ?? defaults.key ?? 'default';
 
   server.registerTool(
     'session_get_context',
@@ -38,13 +47,15 @@ async function buildServer(auth: AuthContext): Promise<McpServer> {
       description:
         'Returns token-budgeted context for the current work: active rules/skills, session summary, recent turns, relevant memory, and RAG hits.',
       inputSchema: {
-        project: z.string(),
-        key: z.string(),
+        project: z.string().optional(),
+        key: z.string().optional(),
         query: z.string().optional(),
         maxTokens: z.number().optional(),
       },
     },
-    async (args) => text(await context.assembleContext(org, args)),
+    async (args) => text(await context.assembleContext(org, {
+      project: P(args.project), key: K(args.key), query: args.query, maxTokens: args.maxTokens, authorId: auth.userId,
+    })),
   );
 
   if (canWrite) {
@@ -54,15 +65,15 @@ async function buildServer(auth: AuthContext): Promise<McpServer> {
       title: 'Append a session turn',
       description: 'Records a turn in a shared session so other agents see the same history.',
       inputSchema: {
-        project: z.string(),
-        key: z.string(),
+        project: z.string().optional(),
+        key: z.string().optional(),
         role: z.enum(['user', 'assistant', 'tool', 'system']),
         content: z.string(),
         agent: z.string().optional(),
       },
     },
     async (args) => {
-      const id = await context.appendTurn(org, args);
+      const id = await context.appendTurn(org, { ...args, project: P(args.project), key: K(args.key) });
       return text(`ok:${id}`);
     },
   );
@@ -76,10 +87,11 @@ async function buildServer(auth: AuthContext): Promise<McpServer> {
         kind: z.enum(['fact', 'decision', 'preference']).optional(),
         content: z.string(),
         project: z.string().optional(),
+        visibility: z.enum(['org', 'project', 'private']).optional(),
       },
     },
     async (args) => {
-      const id = await context.writeMemory(org, args);
+      const id = await context.writeMemory(org, { ...args, project: P(args.project), authorId: auth.userId });
       return text(`ok:${id}`);
     },
   );
@@ -93,7 +105,7 @@ async function buildServer(auth: AuthContext): Promise<McpServer> {
       inputSchema: { query: z.string(), project: z.string().optional(), k: z.number().optional() },
     },
     async (args) => {
-      const hits = await context.searchMemory(org, args.query, { project: args.project, k: args.k });
+      const hits = await context.searchMemory(org, args.query, { project: P(args.project), k: args.k, authorId: auth.userId });
       return text(hits.map((h) => `(${h.kind}, ${h.score.toFixed(2)}) ${h.content}`).join('\n') || '(no matches)');
     },
   );
@@ -103,10 +115,10 @@ async function buildServer(auth: AuthContext): Promise<McpServer> {
     {
       title: 'RAG query',
       description: 'Retrieves the most relevant indexed document chunks for a project.',
-      inputSchema: { project: z.string(), query: z.string(), k: z.number().optional() },
+      inputSchema: { project: z.string().optional(), query: z.string(), k: z.number().optional() },
     },
     async (args) => {
-      const hits = await context.ragQuery(org, args.project, args.query, args.k ?? 5);
+      const hits = await context.ragQuery(org, P(args.project), args.query, args.k ?? 5);
       return text(hits.map((h) => `[${h.score.toFixed(2)}] ${h.uri}\n${h.content}`).join('\n\n') || '(no matches)');
     },
   );
@@ -117,10 +129,10 @@ async function buildServer(auth: AuthContext): Promise<McpServer> {
     {
       title: 'Index a document',
       description: 'Chunks and embeds a document into the project knowledge base for RAG.',
-      inputSchema: { project: z.string(), uri: z.string(), title: z.string().optional(), content: z.string() },
+      inputSchema: { project: z.string().optional(), uri: z.string(), title: z.string().optional(), content: z.string() },
     },
     async (args) => {
-      const res = await context.indexDocument(org, args);
+      const res = await context.indexDocument(org, { ...args, project: P(args.project) });
       return text(`indexed ${res.chunks} chunk(s) as document ${res.documentId}`);
     },
   );
@@ -174,7 +186,14 @@ export async function handleMcpRequest(
   body: unknown,
   auth: AuthContext,
 ): Promise<void> {
-  const server = await buildServer(auth);
+  // Auto-binding defaults stamped by `aihub connect` into the MCP config headers.
+  const hdr = (name: string): string | undefined => {
+    const v = req.headers[name];
+    return Array.isArray(v) ? v[0] : v;
+  };
+  const defaults: McpDefaults = { project: hdr('x-hub-project'), key: hdr('x-hub-session') };
+
+  const server = await buildServer(auth, defaults);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => {
     void transport.close();

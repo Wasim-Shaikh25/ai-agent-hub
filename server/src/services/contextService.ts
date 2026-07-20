@@ -55,19 +55,25 @@ export class ContextService {
 
   // -- memory ---------------------------------------------------------------
 
-  async writeMemory(orgId: string, input: { kind?: string; content: string; project?: string; source?: string }): Promise<string> {
+  async writeMemory(orgId: string, input: { kind?: string; content: string; project?: string; source?: string; visibility?: string; authorId?: string }): Promise<string> {
     const projectId = input.project ? await this.ensureProject(orgId, input.project) : null;
-    input = { ...input, content: clean(input.content) };
-    const vec = toVectorLiteral(await embed(input.content));
+    const content = clean(input.content);
+    const vec = toVectorLiteral(await embed(content));
+    const visibility = input.visibility ?? config.defaultVisibility;
     const row = await queryOne<{ id: string }>(
-      `INSERT INTO memory (org_id, project_id, kind, content, embedding, source)
-       VALUES ($1,$2,$3,$4,$5::vector,$6) RETURNING id`,
-      [orgId, projectId, input.kind ?? 'fact', input.content, vec, input.source ?? ''],
+      `INSERT INTO memory (org_id, project_id, kind, content, embedding, source, visibility, author_id)
+       VALUES ($1,$2,$3,$4,$5::vector,$6,$7,$8) RETURNING id`,
+      [orgId, projectId, input.kind ?? 'fact', content, vec, input.source ?? '', visibility, input.authorId ?? null],
     );
     return row!.id;
   }
 
-  async searchMemory(orgId: string, queryText: string, opts: { project?: string; k?: number } = {}): Promise<MemoryHit[]> {
+  /**
+   * Semantic memory search, honouring visibility: `org` memory is always
+   * visible; `project` memory only within its project; `private` memory only to
+   * its author.
+   */
+  async searchMemory(orgId: string, queryText: string, opts: { project?: string; k?: number; authorId?: string } = {}): Promise<MemoryHit[]> {
     const k = Math.min(Math.max(opts.k ?? 5, 1), 50);
     const vec = toVectorLiteral(await embed(queryText));
     const projectId = opts.project ? await this.ensureProject(orgId, opts.project) : null;
@@ -76,10 +82,14 @@ export class ContextService {
          FROM memory
         WHERE org_id = $1
           AND embedding IS NOT NULL
-          AND ($3::uuid IS NULL OR project_id = $3::uuid OR project_id IS NULL)
+          AND (
+            visibility = 'org'
+            OR (visibility = 'project' AND ($3::uuid IS NULL OR project_id = $3::uuid OR project_id IS NULL))
+            OR (visibility = 'private' AND author_id = $5::uuid)
+          )
         ORDER BY embedding <=> $2::vector
         LIMIT $4`,
-      [orgId, vec, projectId, k],
+      [orgId, vec, projectId, k, opts.authorId ?? null],
     );
     return rows.map((r) => ({ id: r.id, kind: r.kind, content: r.content, score: 1 - Number(r.distance) }));
   }
@@ -170,7 +180,7 @@ export class ContextService {
    * rolling session summary + recent turns + top-k RAG + relevant memory,
    * trimmed to a rough token budget (~4 chars/token).
    */
-  async assembleContext(orgId: string, input: { project: string; key: string; query?: string; maxTokens?: number }): Promise<string> {
+  async assembleContext(orgId: string, input: { project: string; key: string; query?: string; maxTokens?: number; authorId?: string }): Promise<string> {
     const budgetChars = (input.maxTokens ?? 2000) * 4;
     const q = input.query ?? '';
     const parts: string[] = [];
@@ -197,7 +207,7 @@ export class ContextService {
 
     // 3. Relevant memory
     if (q) {
-      const mem = await this.searchMemory(orgId, q, { project: input.project, k: 5 });
+      const mem = await this.searchMemory(orgId, q, { project: input.project, k: 5, authorId: input.authorId });
       if (mem.length) parts.push('## Relevant Memory\n' + mem.map((m) => `- (${m.kind}) ${m.content}`).join('\n'));
 
       // 4. RAG over the project

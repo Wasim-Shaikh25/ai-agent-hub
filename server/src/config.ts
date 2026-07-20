@@ -26,6 +26,7 @@ export interface Config {
   cacheEnabled: boolean;
   cacheThreshold: number;
   cacheTtlDays: number;
+  defaultVisibility: string;
 }
 
 function env(key: string, fallback: string): string {
@@ -58,4 +59,5 @@ export const config: Config = {
   cacheEnabled: env('CACHE_ENABLED', 'false') === 'true',
   cacheThreshold: Number(env('CACHE_THRESHOLD', '0.05')),
   cacheTtlDays: Number(env('CACHE_TTL_DAYS', '7')),
+  defaultVisibility: env('DEFAULT_VISIBILITY', 'project'),
 };
