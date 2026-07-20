@@ -19,6 +19,13 @@ export interface Config {
   rlsEnabled: boolean;
   stripeSecretKey: string;
   stripeWebhookSecret: string;
+  redactionEnabled: boolean;
+  redactionMode: 'redact' | 'block';
+  storageMode: 'central' | 'local';
+  logPrompts: boolean;
+  cacheEnabled: boolean;
+  cacheThreshold: number;
+  cacheTtlDays: number;
 }
 
 function env(key: string, fallback: string): string {
@@ -44,4 +51,11 @@ export const config: Config = {
   rlsEnabled: env('RLS_ENABLED', 'false') === 'true',
   stripeSecretKey: env('STRIPE_SECRET_KEY', ''),
   stripeWebhookSecret: env('STRIPE_WEBHOOK_SECRET', ''),
+  redactionEnabled: env('REDACTION_ENABLED', 'true') === 'true',
+  redactionMode: env('REDACTION_MODE', 'redact') === 'block' ? 'block' : 'redact',
+  storageMode: env('STORAGE_MODE', 'central') === 'local' ? 'local' : 'central',
+  logPrompts: env('LOG_PROMPTS', 'false') === 'true',
+  cacheEnabled: env('CACHE_ENABLED', 'false') === 'true',
+  cacheThreshold: Number(env('CACHE_THRESHOLD', '0.05')),
+  cacheTtlDays: Number(env('CACHE_TTL_DAYS', '7')),
 };

@@ -1,6 +1,13 @@
 import { query, queryOne } from '../db/pool.js';
 import { embed, toVectorLiteral } from '../util/embeddings.js';
 import { ContentService } from './contentService.js';
+import { config } from '../config.js';
+import { redact } from '../privacy/redact.js';
+
+/** Applies PII/secret redaction when enabled, else returns text unchanged. */
+function clean(text: string): string {
+  return config.redactionEnabled ? redact(text).text : text;
+}
 
 export interface MemoryHit {
   id: string;
@@ -50,6 +57,7 @@ export class ContextService {
 
   async writeMemory(orgId: string, input: { kind?: string; content: string; project?: string; source?: string }): Promise<string> {
     const projectId = input.project ? await this.ensureProject(orgId, input.project) : null;
+    input = { ...input, content: clean(input.content) };
     const vec = toVectorLiteral(await embed(input.content));
     const row = await queryOne<{ id: string }>(
       `INSERT INTO memory (org_id, project_id, kind, content, embedding, source)
@@ -98,7 +106,7 @@ export class ContextService {
     const sessionId = await this.ensureSession(orgId, projectId, input.key);
     const row = await queryOne<{ id: string }>(
       `INSERT INTO turn (session_id, role, agent, content) VALUES ($1,$2,$3,$4) RETURNING id`,
-      [sessionId, input.role, input.agent ?? '', input.content],
+      [sessionId, input.role, input.agent ?? '', clean(input.content)],
     );
     await query('UPDATE session SET updated_at = now() WHERE id = $1', [sessionId]);
     return row!.id;
@@ -127,7 +135,7 @@ export class ContextService {
       `INSERT INTO document (org_id, project_id, uri, title) VALUES ($1,$2,$3,$4) RETURNING id`,
       [orgId, projectId, input.uri, input.title ?? input.uri],
     );
-    const chunks = chunkText(input.content);
+    const chunks = chunkText(clean(input.content));
     let ord = 0;
     for (const c of chunks) {
       const vec = toVectorLiteral(await embed(c));

@@ -4,6 +4,8 @@ import { requireAuth, requireRole } from '../auth.js';
 import { GatewayService, BudgetExceededError, type ChatBody, type Usage } from '../gateway/gatewayService.js';
 import { PolicyService, type PolicyKind } from '../services/policyService.js';
 import { AuditService } from '../services/auditService.js';
+import { config } from '../config.js';
+import { redact } from '../privacy/redact.js';
 
 const gateway = new GatewayService();
 const policies = new PolicyService();
@@ -64,6 +66,15 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   const userId = req.auth!.userId;
   const body = (req.body ?? {}) as ChatBody;
   const task = typeof req.headers['x-hub-task'] === 'string' ? (req.headers['x-hub-task'] as string) : undefined;
+
+  // PII/secret guardrail — redact or block before any provider call.
+  if (config.redactionEnabled) {
+    const found = scrubBody(body, config.redactionMode === 'redact');
+    if (found > 0 && config.redactionMode === 'block') {
+      reply.code(422).send({ error: { code: 'sensitive_content', message: `Blocked: ${found} secret/PII item(s) detected` } });
+      return;
+    }
+  }
 
   // Budget enforcement (before any provider call).
   try {
@@ -134,4 +145,34 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   });
 
   Readable.fromWeb(resp.body as never).pipe(meter).pipe(reply.raw);
+}
+
+/**
+ * Scans a chat/messages body for secrets/PII. When `apply` is true it rewrites
+ * the offending strings in place with redaction placeholders. Returns the total
+ * number of sensitive items found.
+ */
+function scrubBody(body: ChatBody, apply: boolean): number {
+  let found = 0;
+  const handle = (s: string): string => {
+    const r = redact(s);
+    found += r.total;
+    return apply ? r.text : s;
+  };
+
+  if (typeof body['system'] === 'string') body['system'] = handle(body['system'] as string);
+
+  const messages = body['messages'];
+  if (Array.isArray(messages)) {
+    for (const m of messages as Array<{ content?: unknown }>) {
+      if (typeof m.content === 'string') {
+        m.content = handle(m.content);
+      } else if (Array.isArray(m.content)) {
+        for (const block of m.content as Array<{ type?: string; text?: string }>) {
+          if (block && block.type === 'text' && typeof block.text === 'string') block.text = handle(block.text);
+        }
+      }
+    }
+  }
+  return found;
 }
