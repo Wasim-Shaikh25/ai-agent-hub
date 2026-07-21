@@ -49,6 +49,39 @@ Optional: `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`, `WORKOS_*`, `STRIPE_*`,
   Postgres + Redis are the shared state. LiteLLM scales independently.
 - **Graceful shutdown**: SIGTERM drains in-flight requests and closes the pool.
 
+## 4b. Test it locally before you ship (walkthrough)
+
+This is the fastest way for **you (the operator)** to confirm a build works.
+
+```bash
+cd deploy && cp .env.example .env
+docker compose up --build          # Postgres+pgvector, Redis, LiteLLM, hub-server
+```
+
+Then, in a browser and a terminal:
+
+1. **Web app** — open `http://localhost:8080/login`, click **Sign up**, create an
+   account. You land on `/account` with your plan (Free), usage, and an API key.
+2. **Dashboard** — open `http://localhost:8080/dashboard`, paste the key → live
+   cost/usage/audit.
+3. **Health** — `curl localhost:8080/health` and `curl localhost:8080/ready`.
+4. **Connect an agent** —
+   ```bash
+   npm i -g @ai-agent-hub/cli   # or: node cli/index.mjs <cmd>
+   aihub login --url http://localhost:8080 --key <your-key>
+   aihub connect cursor && aihub index
+   ```
+5. **Smoke test the API** — the calls in `docs/specs/04-local-dev.md §4`.
+
+Everything above runs offline (local embeddings, dev SSO). Add provider/Stripe/
+WorkOS keys only when you want real inference / billing / enterprise SSO.
+
+## 4c. Customer vs operator (important)
+
+You run **one** deployment; customers **use** it — they never run the server.
+Their flow is: sign up at your URL → get an API key → `aihub connect` their
+agents. Your flow is this document.
+
 ## 5. Data residency
 
 - `STORAGE_MODE=central` keeps all context on your Postgres. Self-host in the

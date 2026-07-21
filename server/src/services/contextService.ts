@@ -83,8 +83,10 @@ export class ContextService {
     const k = Math.min(Math.max(opts.k ?? 5, 1), 50);
     const vec = toVectorLiteral(await embed(queryText));
     const projectId = opts.project ? await this.ensureProject(orgId, opts.project) : null;
-    const rows = await query<{ id: string; kind: string; content: string; distance: number }>(
-      `SELECT id, kind, content, (embedding <=> $2::vector) AS distance
+    // Over-fetch so recency decay can re-rank the top set.
+    const rows = await query<{ id: string; kind: string; content: string; distance: number; ts: string }>(
+      `SELECT id, kind, content, (embedding <=> $2::vector) AS distance,
+              extract(epoch from created_at) AS ts
          FROM memory
         WHERE org_id = $1
           AND embedding IS NOT NULL
@@ -95,9 +97,26 @@ export class ContextService {
           )
         ORDER BY embedding <=> $2::vector
         LIMIT $4`,
-      [orgId, vec, projectId, k, opts.authorId ?? null],
+      [orgId, vec, projectId, k * 4, opts.authorId ?? null],
     );
-    return rows.map((r) => ({ id: r.id, kind: r.kind, content: r.content, score: 1 - Number(r.distance) }));
+
+    // Memory decay: blend semantic relevance with recency so stale memories fade
+    // unless they're the clear best match. Relevance dominates (70%); recency
+    // breaks ties (30%). Disabled when MEMORY_HALFLIFE_DAYS <= 0.
+    const half = config.memoryHalflifeDays;
+    const now = Date.now() / 1000;
+    const scored = rows.map((r) => {
+      const sim = 1 - Number(r.distance);
+      let score = sim;
+      if (half > 0) {
+        const ageDays = Math.max(0, (now - Number(r.ts)) / 86400);
+        const recency = Math.exp(-ageDays / half);
+        score = sim * (0.7 + 0.3 * recency);
+      }
+      return { id: r.id, kind: r.kind, content: r.content, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, k).map((s) => ({ ...s, score: Number(s.score.toFixed(4)) }));
   }
 
   // -- sessions -------------------------------------------------------------

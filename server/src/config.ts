@@ -30,6 +30,7 @@ export interface Config {
   summaryModel: string;
   corsOrigin: string;
   rateLimitPerMin: number;
+  memoryHalflifeDays: number;
 }
 
 function env(key: string, fallback: string): string {
@@ -69,4 +70,5 @@ export const config: Config = {
   summaryModel: env('SUMMARY_MODEL', 'gpt-4o-mini'),
   corsOrigin: env('CORS_ORIGIN', '*'),
   rateLimitPerMin: Number(env('RATE_LIMIT_PER_MIN', '600')),
+  memoryHalflifeDays: Number(env('MEMORY_HALFLIFE_DAYS', '30')),
 };
