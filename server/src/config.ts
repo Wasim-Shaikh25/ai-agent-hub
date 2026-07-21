@@ -28,6 +28,8 @@ export interface Config {
   cacheTtlDays: number;
   defaultVisibility: string;
   summaryModel: string;
+  corsOrigin: string;
+  rateLimitPerMin: number;
 }
 
 function env(key: string, fallback: string): string {
@@ -65,4 +67,6 @@ export const config: Config = {
   cacheTtlDays: Number(env('CACHE_TTL_DAYS', '7')),
   defaultVisibility: env('DEFAULT_VISIBILITY', 'project'),
   summaryModel: env('SUMMARY_MODEL', 'gpt-4o-mini'),
+  corsOrigin: env('CORS_ORIGIN', '*'),
+  rateLimitPerMin: Number(env('RATE_LIMIT_PER_MIN', '600')),
 };
