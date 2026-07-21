@@ -7,7 +7,7 @@ export interface Config {
   redisUrl: string;
   litellmUrl: string;
   litellmMasterKey: string;
-  embeddingsProvider: 'local' | 'litellm';
+  embeddingsProvider: 'local' | 'litellm' | 'minilm';
   embeddingDim: number;
   devSeed: boolean;
   devApiKey: string;
@@ -41,7 +41,10 @@ export const config: Config = {
   redisUrl: env('REDIS_URL', 'redis://localhost:6379'),
   litellmUrl: env('LITELLM_URL', 'http://localhost:4000'),
   litellmMasterKey: env('LITELLM_MASTER_KEY', 'sk-local-master'),
-  embeddingsProvider: env('EMBEDDINGS_PROVIDER', 'local') === 'litellm' ? 'litellm' : 'local',
+  embeddingsProvider: ((): 'local' | 'litellm' | 'minilm' => {
+    const p = env('EMBEDDINGS_PROVIDER', 'local');
+    return p === 'litellm' ? 'litellm' : p === 'minilm' ? 'minilm' : 'local';
+  })(),
   embeddingDim: Number(env('EMBEDDING_DIM', '1536')),
   devSeed: env('DEV_SEED', 'true') === 'true',
   devApiKey: env('DEV_API_KEY', 'hub_dev_localkey'),
