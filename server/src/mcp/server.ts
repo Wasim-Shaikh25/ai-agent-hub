@@ -120,10 +120,11 @@ async function buildServer(auth: AuthContext, defaults: McpDefaults = {}): Promi
         query: z.string(),
         k: z.number().optional(),
         mode: z.enum(['hybrid', 'dense', 'sparse']).optional(),
+        uri: z.string().optional(),
       },
     },
     async (args) => {
-      const hits = await context.ragQuery(org, P(args.project), args.query, args.k ?? 5, args.mode ?? 'hybrid');
+      const hits = await context.ragQuery(org, P(args.project), args.query, args.k ?? 5, args.mode ?? 'hybrid', args.uri);
       return text(
         hits
           .map((h) => {
@@ -131,6 +132,30 @@ async function buildServer(auth: AuthContext, defaults: McpDefaults = {}): Promi
             return `[${h.score.toFixed(3)}] ${loc}\n${h.content}`;
           })
           .join('\n\n') || '(no matches)',
+      );
+    },
+  );
+
+  server.registerTool(
+    'knowledge_map',
+    {
+      title: 'Knowledge map',
+      description:
+        'A compact index of the project\'s indexed specs/docs/code (title, summary, sections, keywords). Call this FIRST to find WHICH document holds the knowledge you need, then rag_query with that uri to drill in.',
+      inputSchema: { project: z.string().optional() },
+    },
+    async (args) => {
+      const map = await context.knowledgeMap(org, P(args.project));
+      if (!map.length) return text('(knowledge map is empty — index some specs/docs first)');
+      return text(
+        map
+          .map((d) => {
+            const parts = [`- ${d.uri}  [${d.kind}]${d.summary ? ' — ' + d.summary : ''}`];
+            if (d.sections.length) parts.push(`    sections: ${d.sections.join(' · ')}`);
+            if (d.keywords.length) parts.push(`    keywords: ${d.keywords.join(', ')}`);
+            return parts.join('\n');
+          })
+          .join('\n'),
       );
     },
   );

@@ -144,15 +144,18 @@ export class ContextService {
 
   // -- RAG ------------------------------------------------------------------
 
-  async indexDocument(orgId: string, input: { project: string; uri: string; title?: string; content: string; path?: string; language?: string }): Promise<{ documentId: string; chunks: number }> {
+  async indexDocument(orgId: string, input: { project: string; uri: string; title?: string; content: string; path?: string; language?: string; kind?: string }): Promise<{ documentId: string; chunks: number }> {
     const projectId = await this.ensureProject(orgId, input.project);
-    const doc = await queryOne<{ id: string }>(
-      `INSERT INTO document (org_id, project_id, uri, title) VALUES ($1,$2,$3,$4) RETURNING id`,
-      [orgId, projectId, input.uri, input.title ?? input.uri],
-    );
     const path = input.path ?? input.uri;
     const language = input.language ?? languageFromPath(path);
-    const pieces = chunkCode(clean(input.content), language);
+    const kind = input.kind ?? detectKind(path, language);
+    const cleaned = clean(input.content);
+    const summary = summarize(cleaned);
+    const doc = await queryOne<{ id: string }>(
+      `INSERT INTO document (org_id, project_id, uri, title, summary, kind) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id`,
+      [orgId, projectId, input.uri, input.title ?? input.uri, summary, kind],
+    );
+    const pieces = chunkCode(cleaned, language);
     let ord = 0;
     for (const p of pieces) {
       const vec = toVectorLiteral(await embed(p.content));
@@ -170,8 +173,9 @@ export class ContextService {
    * matches (function/API names) surface — the accuracy win pure vector search
    * misses on code.
    */
-  async ragQuery(orgId: string, project: string, queryText: string, k = 5, mode: RagMode = 'hybrid'): Promise<RagHit[]> {
+  async ragQuery(orgId: string, project: string, queryText: string, k = 5, mode: RagMode = 'hybrid', uri?: string): Promise<RagHit[]> {
     const projectId = await this.ensureProject(orgId, project);
+    const uriFilter = uri ?? null; // when set, scope retrieval to one doc (drill-in)
     const CAND = 30;
     const RRF_K = 60;
 
@@ -200,8 +204,9 @@ export class ContextService {
         `SELECT c.id, d.uri, c.content, c.path, c.symbol
            FROM chunk c JOIN document d ON d.id = c.document_id
           WHERE d.org_id=$1 AND d.project_id=$2 AND c.embedding IS NOT NULL
+            AND ($4::text IS NULL OR d.uri = $4)
           ORDER BY c.embedding <=> $3::vector LIMIT ${CAND}`,
-        [orgId, projectId, vec],
+        [orgId, projectId, vec, uriFilter],
       );
       add(dense, 'denseRank');
     }
@@ -211,8 +216,9 @@ export class ContextService {
            FROM chunk c JOIN document d ON d.id = c.document_id,
                 websearch_to_tsquery('simple', $3) q
           WHERE d.org_id=$1 AND d.project_id=$2 AND c.ts @@ q
+            AND ($4::text IS NULL OR d.uri = $4)
           ORDER BY r DESC LIMIT ${CAND}`,
-        [orgId, projectId, queryText],
+        [orgId, projectId, queryText, uriFilter],
       );
       add(sparse, 'sparseRank');
     }
@@ -228,6 +234,35 @@ export class ContextService {
     });
     results.sort((a, b) => b.score - a.score);
     return results.slice(0, Math.min(Math.max(k, 1), 50)).map(({ rrf, ...h }) => ({ ...h, score: Number(h.score.toFixed(4)) }));
+  }
+
+  /**
+   * The knowledge map: a compact index of indexed docs/specs (title, summary,
+   * sections, keywords) an agent reads FIRST to navigate to the right knowledge
+   * before drilling in with `ragQuery`. Two-stage retrieval.
+   */
+  async knowledgeMap(orgId: string, project?: string): Promise<Array<{ uri: string; title: string; kind: string; summary: string; sections: string[]; keywords: string[] }>> {
+    const projectId = project ? await this.ensureProject(orgId, project) : null;
+    const docs = await query<{ id: string; uri: string; title: string; kind: string; summary: string }>(
+      `SELECT id, uri, title, kind, summary FROM document
+        WHERE org_id = $1 AND ($2::uuid IS NULL OR project_id = $2::uuid)
+        ORDER BY kind, uri`,
+      [orgId, projectId],
+    );
+    const out = [];
+    for (const d of docs) {
+      const chunks = await query<{ symbol: string; content: string }>(
+        `SELECT symbol, content FROM chunk WHERE document_id = $1 ORDER BY ord`,
+        [d.id],
+      );
+      const sections = chunks.map((c) => c.symbol).filter((s) => s && s !== '(module)' && s !== '(intro)');
+      out.push({
+        uri: d.uri, title: d.title, kind: d.kind, summary: d.summary,
+        sections: [...new Set(sections)].slice(0, 25),
+        keywords: topKeywords(chunks.map((c) => c.content).join('\n'), 10),
+      });
+    }
+    return out;
   }
 
   // -- context assembler ----------------------------------------------------
@@ -280,6 +315,56 @@ export class ContextService {
 
 interface CodePiece { content: string; symbol: string; }
 
+/** Classifies a document as spec / code / doc for the knowledge map. */
+function detectKind(path: string, language: string): string {
+  if (language !== 'markdown' && language !== 'text') return 'code';
+  return /spec|specs|rfc|design|adr/i.test(path) ? 'spec' : 'doc';
+}
+
+/** A short summary: first meaningful paragraph, stripped of markup. */
+function summarize(content: string, maxChars = 240): string {
+  const lines = content.split('\n');
+  const buf: string[] = [];
+  for (const raw of lines) {
+    const line = raw.replace(/^#+\s*/, '').replace(/^>\s*/, '').replace(/^\s*[-*]\s+/, '').trim();
+    if (!line || line.startsWith('```') || /^[|+-]{3,}/.test(line)) continue;
+    buf.push(line);
+    if (buf.join(' ').length >= maxChars) break;
+  }
+  const s = buf.join(' ');
+  return s.length > maxChars ? s.slice(0, maxChars).trimEnd() + '…' : s;
+}
+
+/** Most frequent identifier tokens in a document, for map keywords. */
+function topKeywords(content: string, n: number): string[] {
+  const stop = new Set(['the', 'and', 'for', 'with', 'that', 'this', 'from', 'are', 'not', 'you', 'use', 'can', 'via', 'per', 'into', 'each', 'when', 'org', 'set']);
+  const counts = new Map<string, number>();
+  for (const tok of identifierTokens(content)) {
+    if (tok.length < 4 || stop.has(tok) || /^\d+$/.test(tok)) continue;
+    counts.set(tok, (counts.get(tok) ?? 0) + 1);
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([t]) => t);
+}
+
+/** Splits markdown by headings so each section becomes a citeable chunk. */
+function chunkMarkdown(content: string): CodePiece[] {
+  const lines = content.split('\n');
+  const pieces: CodePiece[] = [];
+  let heading = '(intro)';
+  let buf: string[] = [];
+  const flush = () => {
+    const body = buf.join('\n').trim();
+    if (body) pieces.push({ content: heading !== '(intro)' ? `## ${heading}\n${body}` : body, symbol: heading });
+    buf = [];
+  };
+  for (const line of lines) {
+    const m = /^#{1,6}\s+(.*)$/.exec(line);
+    if (m) { flush(); heading = m[1]!.trim(); } else buf.push(line);
+  }
+  flush();
+  return pieces.length ? pieces : [{ content, symbol: '' }];
+}
+
 /** Maps a file path to a coarse language name. */
 function languageFromPath(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase() ?? '';
@@ -312,6 +397,7 @@ function defRegexFor(language: string): RegExp | null {
  * Prose or unsupported languages fall back to paragraph chunking.
  */
 function chunkCode(content: string, language: string): CodePiece[] {
+  if (language === 'markdown') return chunkMarkdown(content);
   const re = defRegexFor(language);
   if (!re) return chunkText(content).map((c) => ({ content: c, symbol: '' }));
 

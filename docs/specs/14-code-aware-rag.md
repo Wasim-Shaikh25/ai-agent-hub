@@ -50,6 +50,23 @@ budget (keep highest-ranked whole; trim the tail), and cite `path:symbol`.
 `rag_query` (MCP) and `GET /api/rag/query` gain a `mode` (`hybrid` default,
 `dense`, `sparse`) and return `{ path, symbol, content, score, signals }`.
 
+## 3b. Knowledge map (two-stage retrieval)
+
+Specs/docs are authored *structure* — exploit it. Markdown is chunked by heading
+(each section is a citeable chunk `path:Heading`), and every document gets a
+`summary` + `kind` (spec/code/doc). The **knowledge map** is a compact index:
+
+```
+GET /api/rag/map            ·  MCP tool: knowledge_map
+→ per document: { uri, kind, summary, sections[], keywords[] }
+```
+
+An agent calls `knowledge_map` **first** to see *which* spec holds the knowledge,
+then `rag_query` with that `uri` to drill into the right section — deliberate
+navigation instead of hoping flat vector search surfaces the chunk, and far
+cheaper on tokens. This is the guide's OpenKB "concept pages" idea (§5.4) applied
+to specs.
+
 ## 4. Evaluation (Tier 2)
 
 `GET /api/rag/eval` runs a small labeled set and reports recall@k, MRR, and

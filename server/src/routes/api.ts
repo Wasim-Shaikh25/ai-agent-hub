@@ -116,8 +116,14 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/api/rag/query', { preHandler: requireAuth }, async (req) => {
-    const q = req.query as { project: string; q: string; k?: string; mode?: 'hybrid' | 'dense' | 'sparse' };
-    return { chunks: await context.ragQuery(req.auth!.orgId, q.project, q.q, q.k ? Number(q.k) : 5, q.mode ?? 'hybrid') };
+    const q = req.query as { project: string; q: string; k?: string; mode?: 'hybrid' | 'dense' | 'sparse'; uri?: string };
+    return { chunks: await context.ragQuery(req.auth!.orgId, q.project, q.q, q.k ? Number(q.k) : 5, q.mode ?? 'hybrid', q.uri) };
+  });
+
+  // Knowledge map: navigate specs/docs before drilling into chunks.
+  app.get('/api/rag/map', { preHandler: requireAuth }, async (req) => {
+    const q = req.query as { project?: string };
+    return { map: await context.knowledgeMap(req.auth!.orgId, q.project) };
   });
 
   // -- native MCP config snippet per agent ----------------------------------
