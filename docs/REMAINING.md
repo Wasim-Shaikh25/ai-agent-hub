@@ -5,16 +5,14 @@ that are **not** built, split into (A) features I can build + verify next, and
 (B) items that need external accounts or heavy work (with step-by-step notes so
 you can follow along).
 
-## A. Buildable & verifiable next (server-side)
+## A. Buildable & verifiable — ✅ now DONE
 
-| Item | What it does | Effort |
+| Item | What it does | Status |
 |---|---|---|
-| **Eval harness** | Index a labeled set; report recall@k / MRR / context-efficiency so retrieval changes are measurable. Endpoint `GET /api/rag/eval`. | ~0.5 day |
-| **Diagnostics-aware retrieval** | Feed compiler/lint errors; pull the referenced files/symbols into context (`session_get_context` accepts `diagnostics[]`). | ~0.5–1 day |
-| **LLM reranker** | Optional cross-encoder-style rerank of the RRF top-N via the gateway for high-value queries (behind a `rerank=llm` flag). | ~0.5 day |
-| **Memory decay** | Recency/usage weighting in memory scoring so stale memories fade unless reinforced. | ~0.25 day |
-
-(Say the word and I'll build these — each is verifiable here.)
+| **Eval harness** | `POST /api/rag/eval` reports recall@k / MRR / precision on a labeled set. | ✅ done |
+| **Diagnostics-aware retrieval** | Feed compiler/lint errors → referenced files pulled into context (`session_get_context` `diagnostics[]`, `diagnostics_context` tool, `POST /api/rag/diagnostics`). | ✅ done |
+| **LLM reranker** | Optional cross-encoder-style rerank of the top-N via the gateway (`rerank=llm`). | ✅ done |
+| **Memory decay** | Recency weighting in memory scoring (`MEMORY_HALFLIFE_DAYS`). | ✅ done |
 
 ## B. Needs your accounts / decisions
 

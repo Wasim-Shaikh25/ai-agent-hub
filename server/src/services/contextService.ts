@@ -3,7 +3,7 @@ import { embed, toVectorLiteral } from '../util/embeddings.js';
 import { ContentService } from './contentService.js';
 import { config } from '../config.js';
 import { redact } from '../privacy/redact.js';
-import { summarizeSession, extractMemories } from './summarizer.js';
+import { summarizeSession, extractMemories, rerankByLLM } from './summarizer.js';
 
 /** Applies PII/secret redaction when enabled, else returns text unchanged. */
 function clean(text: string): string {
@@ -228,7 +228,7 @@ export class ContextService {
    * matches (function/API names) surface — the accuracy win pure vector search
    * misses on code.
    */
-  async ragQuery(orgId: string, project: string, queryText: string, k = 5, mode: RagMode = 'hybrid', uri?: string): Promise<RagHit[]> {
+  async ragQuery(orgId: string, project: string, queryText: string, k = 5, mode: RagMode = 'hybrid', uri?: string, rerank: 'none' | 'llm' = 'none'): Promise<RagHit[]> {
     const projectId = await this.ensureProject(orgId, project);
     const uriFilter = uri ?? null; // when set, scope retrieval to one doc (drill-in)
     const CAND = 30;
@@ -288,7 +288,22 @@ export class ContextService {
       return h;
     });
     results.sort((a, b) => b.score - a.score);
-    return results.slice(0, Math.min(Math.max(k, 1), 50)).map(({ rrf, ...h }) => ({ ...h, score: Number(h.score.toFixed(4)) }));
+    const limit = Math.min(Math.max(k, 1), 50);
+
+    // Optional LLM rerank over the top candidates for high-value queries.
+    if (rerank === 'llm' && results.length > 1) {
+      const top = results.slice(0, Math.min(12, results.length));
+      const order = await rerankByLLM(queryText, top.map((h) => `${h.path || h.uri}:${h.symbol || ''} ${h.content}`));
+      if (order.length) {
+        const seen = new Set<number>();
+        const reordered = [];
+        for (const i of order) if (i >= 0 && i < top.length && !seen.has(i)) { seen.add(i); reordered.push(top[i]!); }
+        for (let i = 0; i < top.length; i++) if (!seen.has(i)) reordered.push(top[i]!);
+        return reordered.slice(0, limit).map(({ rrf, ...h }) => ({ ...h, score: Number(h.score.toFixed(4)) }));
+      }
+    }
+
+    return results.slice(0, limit).map(({ rrf, ...h }) => ({ ...h, score: Number(h.score.toFixed(4)) }));
   }
 
   /**

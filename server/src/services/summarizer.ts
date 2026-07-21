@@ -45,6 +45,30 @@ export async function summarizeSession(turns: Turn[]): Promise<string> {
   return recent.join(' ');
 }
 
+/**
+ * LLM reranker (the guide's cross-encoder, without a Python/torch dep): scores
+ * query↔snippet relevance and returns the snippet indices most-relevant first.
+ * Returns [] when no LLM is reachable so the caller keeps its hybrid order.
+ */
+export async function rerankByLLM(query: string, snippets: string[]): Promise<number[]> {
+  if (snippets.length < 2) return [];
+  const list = snippets.map((s, i) => `[${i}] ${s.replace(/\s+/g, ' ').slice(0, 300)}`).join('\n');
+  const out = await llmComplete(
+    'You are a code-search reranker. Given a query and numbered snippets, return ONLY a JSON array of the snippet indices ordered most-relevant first.',
+    `Query: ${query}\n\nSnippets:\n${list}`,
+    120,
+  );
+  if (!out) return [];
+  const m = out.match(/\[[\d,\s]*\]/);
+  if (!m) return [];
+  try {
+    const arr = JSON.parse(m[0]) as unknown[];
+    return Array.isArray(arr) ? arr.filter((n): n is number => Number.isInteger(n)) : [];
+  } catch {
+    return [];
+  }
+}
+
 export interface ExtractedMemory { kind: string; content: string }
 
 /** Extract durable memories from a session — LLM JSON if available, else heuristic. */

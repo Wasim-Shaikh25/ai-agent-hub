@@ -159,10 +159,11 @@ async function buildServer(auth: AuthContext, defaults: McpDefaults = {}, canAgg
         k: z.number().optional(),
         mode: z.enum(['hybrid', 'dense', 'sparse']).optional(),
         uri: z.string().optional(),
+        rerank: z.enum(['none', 'llm']).optional(),
       },
     },
     async (args) => {
-      const hits = await context.ragQuery(org, P(args.project), args.query, args.k ?? 5, args.mode ?? 'hybrid', args.uri);
+      const hits = await context.ragQuery(org, P(args.project), args.query, args.k ?? 5, args.mode ?? 'hybrid', args.uri, args.rerank ?? 'none');
       return text(
         hits
           .map((h) => {

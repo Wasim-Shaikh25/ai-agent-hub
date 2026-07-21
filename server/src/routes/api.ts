@@ -147,8 +147,8 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get('/api/rag/query', { preHandler: requireAuth }, async (req) => {
-    const q = req.query as { project: string; q: string; k?: string; mode?: 'hybrid' | 'dense' | 'sparse'; uri?: string };
-    return { chunks: await context.ragQuery(req.auth!.orgId, q.project, q.q, q.k ? Number(q.k) : 5, q.mode ?? 'hybrid', q.uri) };
+    const q = req.query as { project: string; q: string; k?: string; mode?: 'hybrid' | 'dense' | 'sparse'; uri?: string; rerank?: 'none' | 'llm' };
+    return { chunks: await context.ragQuery(req.auth!.orgId, q.project, q.q, q.k ? Number(q.k) : 5, q.mode ?? 'hybrid', q.uri, q.rerank ?? 'none') };
   });
 
   // Retrieval eval harness: measure recall@k / MRR / precision on a labeled set.
