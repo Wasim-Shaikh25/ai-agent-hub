@@ -3,6 +3,7 @@ import { embed, toVectorLiteral } from '../util/embeddings.js';
 import { ContentService } from './contentService.js';
 import { config } from '../config.js';
 import { redact } from '../privacy/redact.js';
+import { summarizeSession, extractMemories } from './summarizer.js';
 
 /** Applies PII/secret redaction when enabled, else returns text unchanged. */
 function clean(text: string): string {
@@ -124,7 +125,40 @@ export class ContextService {
       [sessionId, input.role, input.agent ?? '', clean(input.content)],
     );
     await query('UPDATE session SET updated_at = now() WHERE id = $1', [sessionId]);
+    // Auto-summarize as the session grows so context stays compact + cheap.
+    const cnt = await queryOne<{ n: string }>('SELECT COUNT(*) AS n FROM turn WHERE session_id = $1', [sessionId]);
+    if (Number(cnt?.n ?? 0) % 10 === 0) void this.summarizeSession(orgId, input.project, input.key).catch(() => undefined);
     return row!.id;
+  }
+
+  /** Regenerates and stores the rolling summary for a session. */
+  async summarizeSession(orgId: string, project: string, key: string): Promise<string> {
+    const projectId = await this.ensureProject(orgId, project);
+    const session = await queryOne<{ id: string }>('SELECT id FROM session WHERE org_id = $1 AND project_id = $2 AND key = $3', [orgId, projectId, key]);
+    if (!session) return '';
+    const turns = await query<{ role: string; content: string }>(
+      'SELECT role, content FROM turn WHERE session_id = $1 ORDER BY created_at DESC LIMIT 40',
+      [session.id],
+    );
+    const summary = await summarizeSession(turns.reverse());
+    await query('UPDATE session SET summary = $2, updated_at = now() WHERE id = $1', [session.id, summary]);
+    return summary;
+  }
+
+  /** Extracts durable memories from a session and stores them. */
+  async extractSessionMemory(orgId: string, project: string, key: string, authorId?: string): Promise<{ written: number }> {
+    const projectId = await this.ensureProject(orgId, project);
+    const session = await queryOne<{ id: string }>('SELECT id FROM session WHERE org_id = $1 AND project_id = $2 AND key = $3', [orgId, projectId, key]);
+    if (!session) return { written: 0 };
+    const turns = await query<{ role: string; content: string }>(
+      'SELECT role, content FROM turn WHERE session_id = $1 ORDER BY created_at DESC LIMIT 40',
+      [session.id],
+    );
+    const memories = await extractMemories(turns.reverse());
+    for (const m of memories) {
+      await this.writeMemory(orgId, { kind: m.kind, content: m.content, project, source: 'session:' + key, authorId });
+    }
+    return { written: memories.length };
   }
 
   async getSession(orgId: string, project: string, key: string, limit = 20): Promise<{ summary: string; turns: TurnRecord[] } | undefined> {

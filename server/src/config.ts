@@ -27,6 +27,7 @@ export interface Config {
   cacheThreshold: number;
   cacheTtlDays: number;
   defaultVisibility: string;
+  summaryModel: string;
 }
 
 function env(key: string, fallback: string): string {
@@ -60,4 +61,5 @@ export const config: Config = {
   cacheThreshold: Number(env('CACHE_THRESHOLD', '0.05')),
   cacheTtlDays: Number(env('CACHE_TTL_DAYS', '7')),
   defaultVisibility: env('DEFAULT_VISIBILITY', 'project'),
+  summaryModel: env('SUMMARY_MODEL', 'gpt-4o-mini'),
 };

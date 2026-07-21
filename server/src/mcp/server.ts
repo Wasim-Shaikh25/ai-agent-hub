@@ -61,6 +61,29 @@ async function buildServer(auth: AuthContext, defaults: McpDefaults = {}, canAgg
 
   if (canWrite) {
   server.registerTool(
+    'session_extract_memory',
+    {
+      title: 'Extract durable memory from a session',
+      description: 'Reads the session and writes durable facts/decisions/preferences to memory so future sessions (and other agents) recall them.',
+      inputSchema: { project: z.string().optional(), key: z.string().optional() },
+    },
+    async (args) => {
+      const res = await context.extractSessionMemory(org, P(args.project), K(args.key), auth.userId);
+      return text(`extracted ${res.written} memory item(s)`);
+    },
+  );
+
+  server.registerTool(
+    'session_summarize',
+    {
+      title: 'Summarize the session',
+      description: 'Regenerates the rolling session summary to keep shared context compact and cheap.',
+      inputSchema: { project: z.string().optional(), key: z.string().optional() },
+    },
+    async (args) => text(await context.summarizeSession(org, P(args.project), K(args.key))),
+  );
+
+  server.registerTool(
     'session_append',
     {
       title: 'Append a session turn',

@@ -91,6 +91,16 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true, turnId: id };
   });
 
+  app.post('/api/sessions/:project/:key/summarize', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
+    const { project, key } = req.params as { project: string; key: string };
+    return { summary: await context.summarizeSession(req.auth!.orgId, project, key) };
+  });
+
+  app.post('/api/sessions/:project/:key/extract-memory', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
+    const { project, key } = req.params as { project: string; key: string };
+    return context.extractSessionMemory(req.auth!.orgId, project, key, req.auth!.userId);
+  });
+
   app.get('/api/context/:project/:key', { preHandler: requireAuth }, async (req) => {
     const { project, key } = req.params as { project: string; key: string };
     const q = req.query as { query?: string; maxTokens?: string };
