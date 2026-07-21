@@ -7,6 +7,7 @@ import { ContextService } from '../services/contextService.js';
 import { ContentService, type ContentType } from '../services/contentService.js';
 import { aggregator } from './aggregator.js';
 import { jsonSchemaToZodShape } from './jsonSchema.js';
+import { getPlan, entitled } from '../billing/entitlements.js';
 
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -31,7 +32,7 @@ interface McpDefaults {
   key?: string;
 }
 
-async function buildServer(auth: AuthContext, defaults: McpDefaults = {}): Promise<McpServer> {
+async function buildServer(auth: AuthContext, defaults: McpDefaults = {}, canAggregate = false): Promise<McpServer> {
   const server = new McpServer({ name: 'ai-agent-hub', version: '0.1.0' });
   const org = auth.orgId;
   const canWrite = hasRole(auth.role, 'member'); // viewers get read-only tools
@@ -189,8 +190,8 @@ async function buildServer(auth: AuthContext, defaults: McpDefaults = {}): Promi
   );
 
   // Aggregate downstream MCP servers: expose their tools namespaced
-  // <server>__<tool>. Gated behind member+ since downstream tools may mutate.
-  if (canWrite) {
+  // <server>__<tool>. Gated behind member+ (may mutate) and a paid plan.
+  if (canWrite && canAggregate) {
     try {
       const downstream = await aggregator.listFor(org);
       for (const d of downstream) {
@@ -230,7 +231,8 @@ export async function handleMcpRequest(
   };
   const defaults: McpDefaults = { project: hdr('x-hub-project'), key: hdr('x-hub-session') };
 
-  const server = await buildServer(auth, defaults);
+  const canAggregate = entitled(await getPlan(auth.orgId), 'mcp_aggregation');
+  const server = await buildServer(auth, defaults, canAggregate);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on('close', () => {
     void transport.close();

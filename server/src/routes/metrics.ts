@@ -1,12 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth.js';
+import { requireFeature } from '../billing/entitlements.js';
 import { query, queryOne } from '../db/pool.js';
 
 const MONTH = `created_at >= date_trunc('month', now())`;
 
 /** Analytics over the usage_event stream (feeds the dashboard). */
 export async function registerMetricsRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/metrics/summary', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
+  app.get('/api/metrics/summary', { preHandler: [requireAuth, requireRole('member'), requireFeature('cost_dashboard')] }, async (req) => {
     const row = await queryOne<Record<string, string>>(
       `SELECT
          COUNT(*)                                             AS requests,
@@ -31,7 +32,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
     };
   });
 
-  app.get('/api/metrics/by-model', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
+  app.get('/api/metrics/by-model', { preHandler: [requireAuth, requireRole('member'), requireFeature('cost_dashboard')] }, async (req) => {
     return query(
       `SELECT meta->>'model' AS model, COUNT(*) AS calls, COALESCE(SUM(qty),0) AS tokens,
               COALESCE(SUM((meta->>'usd')::numeric),0) AS usd
@@ -41,7 +42,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
     );
   });
 
-  app.get('/api/metrics/by-user', { preHandler: [requireAuth, requireRole('admin')] }, async (req) => {
+  app.get('/api/metrics/by-user', { preHandler: [requireAuth, requireRole('admin'), requireFeature('cost_dashboard')] }, async (req) => {
     return query(
       `SELECT COALESCE(u.email,'(unknown)') AS user, COUNT(*) AS calls,
               COALESCE(SUM(e.qty),0) AS tokens, COALESCE(SUM((e.meta->>'usd')::numeric),0) AS usd
@@ -52,7 +53,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
     );
   });
 
-  app.get('/api/metrics/timeseries', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
+  app.get('/api/metrics/timeseries', { preHandler: [requireAuth, requireRole('member'), requireFeature('cost_dashboard')] }, async (req) => {
     const days = Math.min(Math.max(Number((req.query as { days?: string }).days ?? '30'), 1), 365);
     return query(
       `SELECT to_char(date_trunc('day', created_at),'YYYY-MM-DD') AS day,
@@ -64,7 +65,7 @@ export async function registerMetricsRoutes(app: FastifyInstance): Promise<void>
     );
   });
 
-  app.get('/api/metrics/savings', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
+  app.get('/api/metrics/savings', { preHandler: [requireAuth, requireRole('member'), requireFeature('cost_dashboard')] }, async (req) => {
     const row = await queryOne<Record<string, string>>(
       `SELECT COUNT(*) FILTER (WHERE meta->>'cached'='true') AS cache_hits,
               COALESCE(SUM((meta->>'saved_tokens')::numeric),0) AS saved_tokens,

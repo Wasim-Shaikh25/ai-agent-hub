@@ -64,6 +64,16 @@ export class GatewayService {
     return Number(row?.total ?? 0);
   }
 
+  /** Count of gateway requests this month (for plan limits). */
+  async monthRequests(orgId: string): Promise<number> {
+    const row = await queryOne<{ n: string }>(
+      `SELECT COUNT(*) AS n FROM usage_event
+        WHERE org_id = $1 AND kind = 'tokens' AND created_at >= date_trunc('month', now())`,
+      [orgId],
+    );
+    return Number(row?.n ?? 0);
+  }
+
   async monthUsd(orgId: string): Promise<number> {
     const row = await queryOne<{ total: string }>(
       `SELECT COALESCE(SUM((meta->>'usd')::numeric),0) AS total FROM usage_event

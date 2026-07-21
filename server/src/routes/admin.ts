@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole } from '../auth.js';
+import { requireFeature } from '../billing/entitlements.js';
 import { query } from '../db/pool.js';
 import { KeyService } from '../services/keyService.js';
 import { AuditService } from '../services/auditService.js';
@@ -32,24 +33,24 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // -- Audit log ------------------------------------------------------------
-  app.get('/api/audit', { preHandler: [requireAuth, requireRole('admin')] }, async (req) => {
+  app.get('/api/audit', { preHandler: [requireAuth, requireRole('admin'), requireFeature('audit')] }, async (req) => {
     const limit = Number((req.query as { limit?: string }).limit ?? '50');
     return audit.list(req.auth!.orgId, limit);
   });
 
   // -- Downstream MCP servers (aggregation) ---------------------------------
-  app.get('/api/mcp-servers', { preHandler: [requireAuth, requireRole('admin')] }, async (req) => {
+  app.get('/api/mcp-servers', { preHandler: [requireAuth, requireRole('admin'), requireFeature('mcp_aggregation')] }, async (req) => {
     return mcpServers.list(req.auth!.orgId);
   });
 
-  app.post('/api/mcp-servers', { preHandler: [requireAuth, requireRole('admin')] }, async (req) => {
+  app.post('/api/mcp-servers', { preHandler: [requireAuth, requireRole('admin'), requireFeature('mcp_aggregation')] }, async (req) => {
     const b = req.body as { name: string; transport?: 'http' | 'stdio'; url?: string; command?: string; args?: string[]; env?: Record<string, string>; enabled?: boolean };
     const row = await mcpServers.create(req.auth!.orgId, b);
     await audit.log(req.auth!.orgId, req.auth!.userId, 'mcp_server.create', row.id, { name: row.name, transport: row.transport });
     return row;
   });
 
-  app.delete('/api/mcp-servers/:id', { preHandler: [requireAuth, requireRole('admin')] }, async (req) => {
+  app.delete('/api/mcp-servers/:id', { preHandler: [requireAuth, requireRole('admin'), requireFeature('mcp_aggregation')] }, async (req) => {
     const { id } = req.params as { id: string };
     await mcpServers.remove(req.auth!.orgId, id);
     await audit.log(req.auth!.orgId, req.auth!.userId, 'mcp_server.delete', id);
@@ -57,7 +58,7 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   // -- Cost dashboard: usage grouped by model -------------------------------
-  app.get('/api/usage/breakdown', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
+  app.get('/api/usage/breakdown', { preHandler: [requireAuth, requireRole('member'), requireFeature('cost_dashboard')] }, async (req) => {
     const rows = await query<{ model: string; calls: string; tokens: string; usd: string }>(
       `SELECT meta->>'model' AS model,
               COUNT(*)                         AS calls,

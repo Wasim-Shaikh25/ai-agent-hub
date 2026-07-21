@@ -1,5 +1,6 @@
 import { query, queryOne } from '../db/pool.js';
 import { billingEnabled, createCustomer, reportMeterEvent, createCheckoutSession, listSubscriptions } from './stripe.js';
+import { invalidatePlan } from './entitlements.js';
 
 const METER_EVENT = 'hub_tokens';
 
@@ -59,9 +60,19 @@ export class BillingService {
     return { enabled: true, customerId: cid, subscription };
   }
 
-  /** Applies a subscription-status change from a webhook. */
+  /** Applies a subscription-status change from a webhook, syncing the plan. */
   async applySubscriptionStatus(customerId: string, status: string): Promise<void> {
-    await query('UPDATE org SET subscription_status = $2 WHERE stripe_customer_id = $1', [customerId, status]);
+    // active/trialing → at least Team (keep Enterprise if already set); otherwise Free.
+    const active = status === 'active' || status === 'trialing';
+    const planExpr = active
+      ? `CASE WHEN plan = 'enterprise' THEN 'enterprise' ELSE 'team' END`
+      : `'free'`;
+    await query(
+      `UPDATE org SET subscription_status = $2, plan = ${planExpr} WHERE stripe_customer_id = $1`,
+      [customerId, status],
+    );
+    const org = await queryOne<{ id: string }>('SELECT id FROM org WHERE stripe_customer_id = $1', [customerId]);
+    if (org) invalidatePlan(org.id);
   }
 }
 

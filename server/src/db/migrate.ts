@@ -40,7 +40,7 @@ export async function seedDev(): Promise<void> {
 
   const org = await queryOne<{ id: string }>(
     `INSERT INTO org (name, slug, plan) VALUES ($1,$2,$3) RETURNING id`,
-    ['Dev Org', 'dev', 'team'],
+    ['Dev Org', 'dev', 'enterprise'],
   );
   const user = await queryOne<{ id: string }>(
     `INSERT INTO app_user (email, name) VALUES ($1,$2) RETURNING id`,

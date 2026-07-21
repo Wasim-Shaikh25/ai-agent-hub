@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { requireAuth, requireRole, bearer } from '../auth.js';
+import { requireFeature, getPlan, planFeatures, PLANS } from '../billing/entitlements.js';
 import { ContextService } from '../services/contextService.js';
 import { ContentService, type ContentType } from '../services/contentService.js';
 import { AuditService } from '../services/auditService.js';
@@ -12,6 +13,12 @@ const audit = new AuditService();
 export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/me', { preHandler: requireAuth }, async (req) => {
     return { org: req.auth!.orgId, user: req.auth!.userId, role: req.auth!.role };
+  });
+
+  // What this org's plan includes + limits (drives upgrade prompts in clients).
+  app.get('/api/plan', { preHandler: requireAuth }, async (req) => {
+    const plan = await getPlan(req.auth!.orgId);
+    return { plan, features: planFeatures(plan), limits: PLANS[plan].limits };
   });
 
   // -- content registry -----------------------------------------------------
@@ -50,7 +57,7 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
     return content.listVersions(req.auth!.orgId, id);
   });
 
-  app.post('/api/content/:id/approve', { preHandler: [requireAuth, requireRole('admin')] }, async (req, reply) => {
+  app.post('/api/content/:id/approve', { preHandler: [requireAuth, requireRole('admin'), requireFeature('content_approvals')] }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const actor = { userId: req.auth!.userId, role: req.auth!.role };
     const item = await content.approve(req.auth!.orgId, id, actor);

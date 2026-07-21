@@ -8,6 +8,7 @@ import { config } from '../config.js';
 import { redact } from '../privacy/redact.js';
 import { semanticCache, extractPrompt } from '../gateway/cache.js';
 import { classifyTask, nextTier, type Tier } from '../gateway/classifier.js';
+import { getPlan, entitled, limitOf } from '../billing/entitlements.js';
 
 const gateway = new GatewayService();
 const policies = new PolicyService();
@@ -68,12 +69,22 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   const userId = req.auth!.userId;
   const body = (req.body ?? {}) as ChatBody;
   const task = typeof req.headers['x-hub-task'] === 'string' ? (req.headers['x-hub-task'] as string) : undefined;
+  const plan = await getPlan(orgId);
 
-  // Quality-based routing: when no explicit task is given, classify the prompt
-  // and pick a model tier (trivial→cheap, complex→frontier).
+  // Plan limit: monthly gateway requests (free tier is capped).
+  const reqLimit = limitOf(plan, 'monthlyRequests');
+  if (Number.isFinite(reqLimit)) {
+    const used = await gateway.monthRequests(orgId);
+    if (used >= reqLimit) {
+      reply.code(402).send({ error: { code: 'limit_reached', message: `Monthly request limit reached (${used}/${reqLimit}). Upgrade for more.`, plan } });
+      return;
+    }
+  }
+
+  // Quality-based routing (paid): classify the prompt and pick a model tier.
   let quality: { tiers: Record<string, string>; escalateOnShort?: number } | undefined;
   let tier: Tier | undefined;
-  if (!task) {
+  if (!task && entitled(plan, 'quality_routing')) {
     quality = await policies.quality(orgId);
     if (quality && Object.keys(quality.tiers).length) {
       tier = classifyTask(extractPrompt(body));
@@ -94,9 +105,9 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     }
   }
 
-  // Semantic cache — return a stored completion for a close prompt (non-stream).
+  // Semantic cache (paid) — return a stored completion for a close prompt.
   const cacheKeyModel = body.model ?? 'default';
-  if (semanticCache.enabled && !body.stream) {
+  if (semanticCache.enabled && entitled(plan, 'semantic_cache') && !body.stream) {
     const prompt = extractPrompt(body);
     const cached = await semanticCache.lookup(orgId, cacheKeyModel, prompt);
     if (cached !== undefined) {
@@ -172,7 +183,7 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     const usage: Usage = cfg.format === 'anthropic' ? gateway.extractAnthropicUsage(json) : gateway.extractOpenAIUsage(json);
     reply.header('x-hub-model', servedModel);
     await gateway.recordUsage(orgId, userId, servedModel, usage, { latency_ms: Date.now() - t0 });
-    if (semanticCache.enabled) {
+    if (semanticCache.enabled && entitled(plan, 'semantic_cache')) {
       void semanticCache.store(orgId, cacheKeyModel, extractPrompt(body), json);
     }
     reply.send(json);

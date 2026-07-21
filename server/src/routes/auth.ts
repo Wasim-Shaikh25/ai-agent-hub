@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { queryOne, query } from '../db/pool.js';
 import { getSsoProvider } from '../auth/sso.js';
 import { signSession } from '../auth/jwt.js';
+import { getPlan, entitled } from '../billing/entitlements.js';
 import { AuditService } from '../services/auditService.js';
 
 const audit = new AuditService();
@@ -36,6 +37,11 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const { org: orgSlug } = decodeState(q.state ?? '');
     const org = await queryOne<{ id: string }>('SELECT id FROM org WHERE slug = $1', [orgSlug]);
     if (!org) return reply.code(404).send({ error: { code: 'not_found', message: `org "${orgSlug}" not found` } });
+
+    // SSO is an Enterprise feature.
+    if (!entitled(await getPlan(org.id), 'sso')) {
+      return reply.code(402).send({ error: { code: 'upgrade_required', message: 'SSO requires the Enterprise plan', feature: 'sso' } });
+    }
 
     let profile;
     try {
