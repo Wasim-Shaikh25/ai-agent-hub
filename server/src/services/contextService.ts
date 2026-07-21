@@ -268,48 +268,74 @@ export class ContextService {
   // -- context assembler ----------------------------------------------------
 
   /**
-   * Builds the minimal-correct context for a request: active rules/skills +
-   * rolling session summary + recent turns + top-k RAG + relevant memory,
-   * trimmed to a rough token budget (~4 chars/token).
+   * Context engine: assembles the minimal-correct context within a token budget.
+   *
+   * Blocks are collected with a priority (governance > session > memory >
+   * evidence > history), deduplicated, then packed greedily by priority — so
+   * critical items are never dropped and only the low-priority evidence tail is
+   * trimmed/compressed. This is the "accurate AND fewer tokens" component.
    */
   async assembleContext(orgId: string, input: { project: string; key: string; query?: string; maxTokens?: number; authorId?: string }): Promise<string> {
     const budgetChars = (input.maxTokens ?? 2000) * 4;
     const q = input.query ?? '';
-    const parts: string[] = [];
+    const blocks: Array<{ section: string; priority: number; score: number; text: string }> = [];
 
-    // 1. Governance: enabled rules + skills
+    // 1. Governance (highest priority — never dropped)
     const rules = await this.content.listEnabled(orgId, 'rule');
+    for (const r of rules) blocks.push({ section: 'Active Rules', priority: 1, score: 1, text: `- **${r.name}**: ${r.description || r.body.slice(0, 160)}` });
     const skills = await this.content.listEnabled(orgId, 'skill');
-    if (rules.length) {
-      parts.push('## Active Rules\n' + rules.map((r) => `- **${r.name}**: ${r.description || r.body.slice(0, 160)}`).join('\n'));
-    }
-    if (skills.length) {
-      parts.push('## Active Skills\n' + skills.map((s) => `- **${s.name}**: ${s.description || s.body.slice(0, 160)}`).join('\n'));
-    }
+    for (const s of skills) blocks.push({ section: 'Active Skills', priority: 2, score: 1, text: `- **${s.name}**: ${s.description || s.body.slice(0, 160)}` });
 
     // 2. Session continuity
     const session = await this.getSession(orgId, input.project, input.key, 8);
-    if (session?.summary) parts.push('## Session Summary\n' + session.summary);
-    if (session?.turns.length) {
-      parts.push(
-        '## Recent Turns\n' +
-          session.turns.map((t) => `- [${t.role}${t.agent ? '/' + t.agent : ''}] ${t.content.slice(0, 200)}`).join('\n'),
-      );
-    }
+    if (session?.summary) blocks.push({ section: 'Session Summary', priority: 1, score: 1, text: session.summary });
 
-    // 3. Relevant memory
+    // 3. Relevant memory + 4. RAG evidence (query-aware, scored)
     if (q) {
-      const mem = await this.searchMemory(orgId, q, { project: input.project, k: 5, authorId: input.authorId });
-      if (mem.length) parts.push('## Relevant Memory\n' + mem.map((m) => `- (${m.kind}) ${m.content}`).join('\n'));
-
-      // 4. RAG over the project
-      const rag = await this.ragQuery(orgId, input.project, q, 5);
-      if (rag.length) parts.push('## Retrieved Context\n' + rag.map((r) => `- ${r.uri}: ${r.content.slice(0, 240)}`).join('\n'));
+      const mem = await this.searchMemory(orgId, q, { project: input.project, k: 6, authorId: input.authorId });
+      for (const m of mem) blocks.push({ section: 'Relevant Memory', priority: 3, score: m.score, text: `- (${m.kind}) ${m.content}` });
+      const rag = await this.ragQuery(orgId, input.project, q, 6);
+      for (const r of rag) {
+        const loc = r.symbol ? `${r.path || r.uri}:${r.symbol}` : r.path || r.uri;
+        blocks.push({ section: 'Retrieved Context', priority: 4, score: r.score, text: `- ${loc}\n${compress(r.content, q, 320)}` });
+      }
     }
 
-    let out = parts.join('\n\n');
-    if (out.length > budgetChars) out = out.slice(0, budgetChars) + '\n\n…(trimmed to token budget)';
-    return out || '(no context available yet — add memory, index docs, or record session turns)';
+    // 5. Recent turns (lowest priority — trimmed first)
+    for (const t of session?.turns ?? []) {
+      blocks.push({ section: 'Recent Turns', priority: 5, score: 0, text: `- [${t.role}${t.agent ? '/' + t.agent : ''}] ${t.content.slice(0, 200)}` });
+    }
+
+    // Dedup (near-identical blocks) then pack by priority.
+    const seen = new Set<string>();
+    const deduped = blocks.filter((b) => {
+      const norm = b.text.toLowerCase().replace(/\s+/g, ' ').slice(0, 120);
+      if (seen.has(norm)) return false;
+      seen.add(norm);
+      return true;
+    });
+    deduped.sort((a, b) => a.priority - b.priority || b.score - a.score);
+
+    const order: string[] = [];
+    const bySection = new Map<string, string[]>();
+    let used = 0;
+    let trimmed = false;
+    for (const b of deduped) {
+      const isNewSection = !bySection.has(b.section);
+      const headerCost = isNewSection ? b.section.length + 8 : 0; // "## <section>\n\n"
+      const cost = b.text.length + 1 + headerCost;
+      if (used + cost <= budgetChars) {
+        if (isNewSection) { bySection.set(b.section, []); order.push(b.section); }
+        bySection.get(b.section)!.push(b.text);
+        used += cost;
+      } else {
+        trimmed = true; // ran out of budget for lower-priority blocks
+      }
+    }
+
+    const out = order.map((s) => `## ${s}\n${bySection.get(s)!.join('\n')}`).join('\n\n');
+    const footer = trimmed ? '\n\n…(lower-priority context trimmed to fit the token budget)' : '';
+    return (out + footer) || '(no context available yet — add memory, index docs, or record session turns)';
   }
 }
 
@@ -426,6 +452,29 @@ function chunkCode(content: string, language: string): CodePiece[] {
 
 function splitCamel(s: string): string[] {
   return s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(/\s+/).filter(Boolean);
+}
+
+/**
+ * Query-aware extractive compression: keep the sentences/lines most relevant to
+ * the query (by identifier-token overlap), in original order, up to maxChars —
+ * better than blind truncation for keeping the useful evidence.
+ */
+function compress(text: string, query: string, maxChars: number): string {
+  if (text.length <= maxChars) return text;
+  const q = new Set(identifierTokens(query));
+  const units = text.split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean);
+  if (units.length <= 1) return text.slice(0, maxChars) + '…';
+  const scored = units.map((u, i) => ({ u, i, score: identifierTokens(u).filter((t) => q.has(t)).length }));
+  const chosen: Array<{ u: string; i: number }> = [];
+  let len = 0;
+  for (const s of [...scored].sort((a, b) => b.score - a.score)) {
+    if (len + s.u.length > maxChars) continue;
+    chosen.push(s);
+    len += s.u.length + 1;
+  }
+  if (chosen.length === 0) return text.slice(0, maxChars) + '…';
+  chosen.sort((a, b) => a.i - b.i);
+  return chosen.map((c) => c.u).join(' ') + ' …';
 }
 
 /** Identifier tokens (camel/snake split + whole word), for lexical reranking. */
