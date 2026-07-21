@@ -151,6 +151,12 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
     return { chunks: await context.ragQuery(req.auth!.orgId, q.project, q.q, q.k ? Number(q.k) : 5, q.mode ?? 'hybrid', q.uri) };
   });
 
+  // Retrieval eval harness: measure recall@k / MRR / precision on a labeled set.
+  app.post('/api/rag/eval', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
+    const b = req.body as { project: string; cases: Array<{ query: string; relevant: string[] }>; k?: number; mode?: 'hybrid' | 'dense' | 'sparse' };
+    return context.evalRetrieval(req.auth!.orgId, b.project, b.cases ?? [], b.k ?? 5, b.mode ?? 'hybrid');
+  });
+
   // Knowledge map: navigate specs/docs before drilling into chunks.
   app.get('/api/rag/map', { preHandler: requireAuth }, async (req) => {
     const q = req.query as { project?: string };

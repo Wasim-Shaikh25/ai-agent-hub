@@ -320,6 +320,41 @@ export class ContextService {
     return out;
   }
 
+  /**
+   * Retrieval eval: runs a labeled set through ragQuery and reports
+   * recall@k, MRR, and mean precision so retrieval changes are measurable.
+   * A hit counts as relevant if any label matches its path/uri or path:symbol.
+   */
+  async evalRetrieval(orgId: string, project: string, cases: Array<{ query: string; relevant: string[] }>, k = 5, mode: RagMode = 'hybrid'): Promise<{
+    cases: number; k: number; recallAtK: number; mrr: number; meanPrecision: number;
+    perCase: Array<{ query: string; recall: number; mrr: number; topHit: string | null }>;
+  }> {
+    let recallSum = 0, rrSum = 0, precSum = 0;
+    const perCase = [];
+    for (const c of cases) {
+      const hits = await this.ragQuery(orgId, project, c.query, k, mode);
+      const rel = (h: RagHit): boolean => {
+        const loc = `${h.path || h.uri}:${h.symbol || ''}`;
+        return c.relevant.some((r) => (h.path || h.uri || '').includes(r) || h.symbol === r || loc.includes(r));
+      };
+      const flags = hits.map(rel);
+      const firstIdx = flags.indexOf(true);
+      const recall = firstIdx >= 0 ? 1 : 0;
+      const mrr = firstIdx >= 0 ? 1 / (firstIdx + 1) : 0;
+      const precision = flags.filter(Boolean).length / Math.max(1, hits.length);
+      recallSum += recall; rrSum += mrr; precSum += precision;
+      perCase.push({ query: c.query, recall, mrr: Number(mrr.toFixed(3)), topHit: hits[0] ? `${hits[0].path || hits[0].uri}:${hits[0].symbol || ''}` : null });
+    }
+    const n = cases.length || 1;
+    return {
+      cases: cases.length, k,
+      recallAtK: Number((recallSum / n).toFixed(3)),
+      mrr: Number((rrSum / n).toFixed(3)),
+      meanPrecision: Number((precSum / n).toFixed(3)),
+      perCase,
+    };
+  }
+
   // -- context assembler ----------------------------------------------------
 
   /**
