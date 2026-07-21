@@ -113,13 +113,25 @@ async function buildServer(auth: AuthContext, defaults: McpDefaults = {}): Promi
   server.registerTool(
     'rag_query',
     {
-      title: 'RAG query',
-      description: 'Retrieves the most relevant indexed document chunks for a project.',
-      inputSchema: { project: z.string().optional(), query: z.string(), k: z.number().optional() },
+      title: 'RAG query (hybrid code-aware)',
+      description: 'Hybrid (dense + BM25) retrieval over indexed code/docs, reranked so exact symbol/API matches surface. Returns path:symbol-cited chunks.',
+      inputSchema: {
+        project: z.string().optional(),
+        query: z.string(),
+        k: z.number().optional(),
+        mode: z.enum(['hybrid', 'dense', 'sparse']).optional(),
+      },
     },
     async (args) => {
-      const hits = await context.ragQuery(org, P(args.project), args.query, args.k ?? 5);
-      return text(hits.map((h) => `[${h.score.toFixed(2)}] ${h.uri}\n${h.content}`).join('\n\n') || '(no matches)');
+      const hits = await context.ragQuery(org, P(args.project), args.query, args.k ?? 5, args.mode ?? 'hybrid');
+      return text(
+        hits
+          .map((h) => {
+            const loc = h.symbol ? `${h.path || h.uri}:${h.symbol}` : h.path || h.uri;
+            return `[${h.score.toFixed(3)}] ${loc}\n${h.content}`;
+          })
+          .join('\n\n') || '(no matches)',
+      );
     },
   );
 

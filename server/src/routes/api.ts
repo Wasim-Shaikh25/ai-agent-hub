@@ -111,13 +111,13 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
 
   // -- RAG ------------------------------------------------------------------
   app.post('/api/rag/index', { preHandler: requireAuth }, async (req) => {
-    const b = req.body as { project: string; uri: string; title?: string; content: string };
+    const b = req.body as { project: string; uri: string; title?: string; content: string; path?: string; language?: string };
     return context.indexDocument(req.auth!.orgId, b);
   });
 
   app.get('/api/rag/query', { preHandler: requireAuth }, async (req) => {
-    const q = req.query as { project: string; q: string; k?: string };
-    return { chunks: await context.ragQuery(req.auth!.orgId, q.project, q.q, q.k ? Number(q.k) : 5) };
+    const q = req.query as { project: string; q: string; k?: string; mode?: 'hybrid' | 'dense' | 'sparse' };
+    return { chunks: await context.ragQuery(req.auth!.orgId, q.project, q.q, q.k ? Number(q.k) : 5, q.mode ?? 'hybrid') };
   });
 
   // -- native MCP config snippet per agent ----------------------------------

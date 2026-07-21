@@ -20,7 +20,12 @@ export interface RagHit {
   uri: string;
   content: string;
   score: number;
+  path?: string;
+  symbol?: string;
+  signals?: { denseRank?: number; sparseRank?: number; lexMatches?: number };
 }
+
+export type RagMode = 'hybrid' | 'dense' | 'sparse';
 
 export interface TurnRecord {
   role: string;
@@ -139,38 +144,90 @@ export class ContextService {
 
   // -- RAG ------------------------------------------------------------------
 
-  async indexDocument(orgId: string, input: { project: string; uri: string; title?: string; content: string }): Promise<{ documentId: string; chunks: number }> {
+  async indexDocument(orgId: string, input: { project: string; uri: string; title?: string; content: string; path?: string; language?: string }): Promise<{ documentId: string; chunks: number }> {
     const projectId = await this.ensureProject(orgId, input.project);
     const doc = await queryOne<{ id: string }>(
       `INSERT INTO document (org_id, project_id, uri, title) VALUES ($1,$2,$3,$4) RETURNING id`,
       [orgId, projectId, input.uri, input.title ?? input.uri],
     );
-    const chunks = chunkText(clean(input.content));
+    const path = input.path ?? input.uri;
+    const language = input.language ?? languageFromPath(path);
+    const pieces = chunkCode(clean(input.content), language);
     let ord = 0;
-    for (const c of chunks) {
-      const vec = toVectorLiteral(await embed(c));
+    for (const p of pieces) {
+      const vec = toVectorLiteral(await embed(p.content));
       await query(
-        `INSERT INTO chunk (document_id, ord, content, embedding) VALUES ($1,$2,$3,$4::vector)`,
-        [doc!.id, ord++, c, vec],
+        `INSERT INTO chunk (document_id, ord, content, embedding, path, symbol, language) VALUES ($1,$2,$3,$4::vector,$5,$6,$7)`,
+        [doc!.id, ord++, p.content, vec, path, p.symbol, language],
       );
     }
-    return { documentId: doc!.id, chunks: chunks.length };
+    return { documentId: doc!.id, chunks: pieces.length };
   }
 
-  async ragQuery(orgId: string, project: string, queryText: string, k = 5): Promise<RagHit[]> {
+  /**
+   * Hybrid retrieval: fuse dense (pgvector) and sparse (Postgres FTS) rankings
+   * with Reciprocal Rank Fusion, then lexically rerank so exact-identifier
+   * matches (function/API names) surface — the accuracy win pure vector search
+   * misses on code.
+   */
+  async ragQuery(orgId: string, project: string, queryText: string, k = 5, mode: RagMode = 'hybrid'): Promise<RagHit[]> {
     const projectId = await this.ensureProject(orgId, project);
-    const vec = toVectorLiteral(await embed(queryText));
-    const rows = await query<{ uri: string; content: string; distance: number }>(
-      `SELECT d.uri, c.content, (c.embedding <=> $2::vector) AS distance
-         FROM chunk c
-         JOIN document d ON d.id = c.document_id
-        WHERE d.org_id = $1 AND d.project_id = $3
-          AND c.embedding IS NOT NULL
-        ORDER BY c.embedding <=> $2::vector
-        LIMIT $4`,
-      [orgId, vec, projectId, Math.min(Math.max(k, 1), 50)],
-    );
-    return rows.map((r) => ({ uri: r.uri, content: r.content, score: 1 - Number(r.distance) }));
+    const CAND = 30;
+    const RRF_K = 60;
+
+    type Row = { id: string; uri: string; content: string; path: string; symbol: string };
+    const fused = new Map<string, RagHit & { rrf: number }>();
+    const add = (rows: Row[], listKey: 'denseRank' | 'sparseRank') => {
+      rows.forEach((r, i) => {
+        const rank = i + 1;
+        const existing = fused.get(r.id);
+        const contribution = 1 / (RRF_K + rank);
+        if (existing) {
+          existing.rrf += contribution;
+          existing.signals![listKey] = rank;
+        } else {
+          fused.set(r.id, {
+            uri: r.uri, content: r.content, path: r.path, symbol: r.symbol,
+            score: 0, rrf: contribution, signals: { [listKey]: rank },
+          });
+        }
+      });
+    };
+
+    if (mode !== 'sparse') {
+      const vec = toVectorLiteral(await embed(queryText));
+      const dense = await query<Row>(
+        `SELECT c.id, d.uri, c.content, c.path, c.symbol
+           FROM chunk c JOIN document d ON d.id = c.document_id
+          WHERE d.org_id=$1 AND d.project_id=$2 AND c.embedding IS NOT NULL
+          ORDER BY c.embedding <=> $3::vector LIMIT ${CAND}`,
+        [orgId, projectId, vec],
+      );
+      add(dense, 'denseRank');
+    }
+    if (mode !== 'dense') {
+      const sparse = await query<Row>(
+        `SELECT c.id, d.uri, c.content, c.path, c.symbol, ts_rank_cd(c.ts, q) AS r
+           FROM chunk c JOIN document d ON d.id = c.document_id,
+                websearch_to_tsquery('simple', $3) q
+          WHERE d.org_id=$1 AND d.project_id=$2 AND c.ts @@ q
+          ORDER BY r DESC LIMIT ${CAND}`,
+        [orgId, projectId, queryText],
+      );
+      add(sparse, 'sparseRank');
+    }
+
+    // Lexical rerank: boost chunks containing the query's exact identifier tokens.
+    const qTokens = identifierTokens(queryText);
+    const results = [...fused.values()].map((h) => {
+      const hay = new Set(identifierTokens(h.content));
+      const lexMatches = qTokens.filter((t) => hay.has(t)).length;
+      h.signals!.lexMatches = lexMatches;
+      h.score = h.rrf + lexMatches * 0.02; // small, deterministic boost
+      return h;
+    });
+    results.sort((a, b) => b.score - a.score);
+    return results.slice(0, Math.min(Math.max(k, 1), 50)).map(({ rrf, ...h }) => ({ ...h, score: Number(h.score.toFixed(4)) }));
   }
 
   // -- context assembler ----------------------------------------------------
@@ -219,6 +276,84 @@ export class ContextService {
     if (out.length > budgetChars) out = out.slice(0, budgetChars) + '\n\n…(trimmed to token budget)';
     return out || '(no context available yet — add memory, index docs, or record session turns)';
   }
+}
+
+interface CodePiece { content: string; symbol: string; }
+
+/** Maps a file path to a coarse language name. */
+function languageFromPath(path: string): string {
+  const ext = path.split('.').pop()?.toLowerCase() ?? '';
+  const map: Record<string, string> = {
+    ts: 'typescript', tsx: 'typescript', js: 'javascript', jsx: 'javascript', mjs: 'javascript',
+    py: 'python', go: 'go', java: 'java', rb: 'ruby', rs: 'rust', cs: 'csharp', php: 'php',
+    md: 'markdown', markdown: 'markdown', txt: 'text',
+  };
+  return map[ext] ?? 'text';
+}
+
+/** Top-level definition regex per language (named group `name`), or null. */
+function defRegexFor(language: string): RegExp | null {
+  switch (language) {
+    case 'typescript':
+    case 'javascript':
+      return /^(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function\*?|class|const|let|var|interface|type|enum)\s+(?<name>[A-Za-z_$][\w$]*)/;
+    case 'python':
+      return /^(?:async\s+)?(?:def|class)\s+(?<name>[A-Za-z_]\w*)/;
+    case 'go':
+      return /^func\s+(?:\([^)]*\)\s*)?(?<name>[A-Za-z_]\w*)/;
+    default:
+      return null;
+  }
+}
+
+/**
+ * Code-aware chunker: splits source at top-level symbol boundaries so each
+ * chunk is a coherent function/class the agent can cite as `path:symbol`.
+ * Prose or unsupported languages fall back to paragraph chunking.
+ */
+function chunkCode(content: string, language: string): CodePiece[] {
+  const re = defRegexFor(language);
+  if (!re) return chunkText(content).map((c) => ({ content: c, symbol: '' }));
+
+  const lines = content.split('\n');
+  const starts: Array<{ line: number; symbol: string }> = [];
+  for (let i = 0; i < lines.length; i++) {
+    const m = re.exec(lines[i] ?? '');
+    if (m) starts.push({ line: i, symbol: m.groups?.name ?? '' });
+  }
+  if (starts.length === 0) return chunkText(content).map((c) => ({ content: c, symbol: '' }));
+
+  const pieces: CodePiece[] = [];
+  if (starts[0]!.line > 0) {
+    const pre = lines.slice(0, starts[0]!.line).join('\n').trim();
+    if (pre) pieces.push({ content: pre, symbol: '(module)' });
+  }
+  for (let s = 0; s < starts.length; s++) {
+    const from = starts[s]!.line;
+    const to = s + 1 < starts.length ? starts[s + 1]!.line : lines.length;
+    let body = lines.slice(from, to).join('\n');
+    if (body.length > 2000) body = body.slice(0, 2000) + '\n… (truncated)';
+    pieces.push({ content: body, symbol: starts[s]!.symbol });
+  }
+  return pieces;
+}
+
+function splitCamel(s: string): string[] {
+  return s.replace(/([a-z0-9])([A-Z])/g, '$1 $2').split(/\s+/).filter(Boolean);
+}
+
+/** Identifier tokens (camel/snake split + whole word), for lexical reranking. */
+function identifierTokens(text: string): string[] {
+  const raw = text.match(/[A-Za-z_$][A-Za-z0-9_$]*/g) ?? [];
+  const out = new Set<string>();
+  for (const w of raw) {
+    for (const part of w.split(/_+/).flatMap(splitCamel)) {
+      const t = part.toLowerCase();
+      if (t.length >= 2) out.add(t);
+    }
+    if (w.length >= 3) out.add(w.toLowerCase());
+  }
+  return [...out];
 }
 
 /** Naive paragraph/size-based chunker for RAG. */
