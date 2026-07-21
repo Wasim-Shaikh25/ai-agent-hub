@@ -180,6 +180,8 @@ export class ContextService {
 
   async indexDocument(orgId: string, input: { project: string; uri: string; title?: string; content: string; path?: string; language?: string; kind?: string }): Promise<{ documentId: string; chunks: number }> {
     const projectId = await this.ensureProject(orgId, input.project);
+    // Re-index replaces the prior version of the same file (chunks cascade).
+    await query('DELETE FROM document WHERE org_id = $1 AND project_id = $2 AND uri = $3', [orgId, projectId, input.uri]);
     const path = input.path ?? input.uri;
     const language = input.language ?? languageFromPath(path);
     const kind = input.kind ?? detectKind(path, language);

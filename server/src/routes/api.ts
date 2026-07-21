@@ -132,6 +132,20 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
     return context.indexDocument(req.auth!.orgId, b);
   });
 
+  // Batch index (auto-index a whole repo). Re-indexing replaces each file.
+  app.post('/api/rag/index-batch', { preHandler: [requireAuth, requireRole('member')] }, async (req) => {
+    const b = req.body as { project: string; files: Array<{ path: string; content: string; uri?: string }> };
+    let documents = 0;
+    let chunks = 0;
+    for (const f of (b.files ?? []).slice(0, 2000)) {
+      if (!f?.path || typeof f.content !== 'string') continue;
+      const r = await context.indexDocument(req.auth!.orgId, { project: b.project, uri: f.uri ?? f.path, path: f.path, content: f.content });
+      documents++;
+      chunks += r.chunks;
+    }
+    return { documents, chunks };
+  });
+
   app.get('/api/rag/query', { preHandler: requireAuth }, async (req) => {
     const q = req.query as { project: string; q: string; k?: string; mode?: 'hybrid' | 'dense' | 'sparse'; uri?: string };
     return { chunks: await context.ragQuery(req.auth!.orgId, q.project, q.q, q.k ? Number(q.k) : 5, q.mode ?? 'hybrid', q.uri) };

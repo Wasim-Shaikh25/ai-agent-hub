@@ -8,10 +8,29 @@
  *
  * No dependencies — Node built-ins only.
  */
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join, dirname, isAbsolute, basename } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { join, dirname, isAbsolute, basename, relative, extname } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
+
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', 'coverage', 'vendor', 'target', '__pycache__', '.venv', '.turbo', '.cache']);
+const CODE_EXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.java', '.rb', '.rs', '.cs', '.php', '.md', '.markdown', '.txt', '.json', '.yaml', '.yml', '.sql', '.sh', '.html', '.css', '.vue', '.svelte']);
+const MAX_FILE_BYTES = 200 * 1024;
+
+/** Recursively collects indexable source/doc files under a directory. */
+function walkFiles(root, dir = root, out = []) {
+  for (const name of readdirSync(dir)) {
+    if (SKIP_DIRS.has(name) || name.startsWith('.')) continue;
+    const full = join(dir, name);
+    let st;
+    try { st = statSync(full); } catch { continue; }
+    if (st.isDirectory()) walkFiles(root, full, out);
+    else if (st.isFile() && CODE_EXT.has(extname(name).toLowerCase()) && st.size <= MAX_FILE_BYTES) {
+      out.push({ path: relative(root, full), content: readFileSync(full, 'utf-8') });
+    }
+  }
+  return out;
+}
 
 /** Detects the repo name (project) and branch (session key) for a directory. */
 function detectWorkspace(dir) {
@@ -60,6 +79,37 @@ async function api(path, cfg) {
   const res = await fetch(`${cfg.url}${path}`, { headers: { Authorization: `Bearer ${cfg.key}` } });
   if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}: ${await res.text()}`);
   return res.json();
+}
+
+async function apiPost(path, cfg, body) {
+  if (!cfg.url || !cfg.key) throw new Error('Not logged in. Run: aihub login --url <URL> --key <API_KEY>');
+  const res = await fetch(`${cfg.url}${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${cfg.key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}: ${await res.text()}`);
+  return res.json();
+}
+
+async function cmdIndex(flags) {
+  const cfg = loadConfig();
+  if (!cfg.url || !cfg.key) throw new Error('Not logged in. Run: aihub login --url <URL> --key <API_KEY>');
+  const dir = flags.dir ?? '.';
+  const abs = isAbsolute(dir) ? dir : join(process.cwd(), dir);
+  const { project } = detectWorkspace(dir);
+  const proj = flags.project || project;
+  const files = walkFiles(abs);
+  if (!files.length) { console.log('No indexable files found.'); return; }
+  console.log(`Indexing ${files.length} files into project "${proj}"…`);
+  let docs = 0, chunks = 0;
+  const BATCH = 25;
+  for (let i = 0; i < files.length; i += BATCH) {
+    const r = await apiPost('/api/rag/index-batch', cfg, { project: proj, files: files.slice(i, i + BATCH) });
+    docs += r.documents; chunks += r.chunks;
+    process.stdout.write(`\r  ${docs}/${files.length} files · ${chunks} chunks`);
+  }
+  console.log(`\n✓ Indexed ${docs} files (${chunks} chunks) into "${proj}". Agents can now knowledge_map / rag_query this repo.`);
 }
 
 function expandHome(p) {
@@ -151,6 +201,7 @@ Usage:
   aihub login --url <URL> --key <API_KEY>   Save & validate credentials
   aihub status                              Show server + auth status
   aihub connect <agent> [--dir .]           Write native MCP config + gateway hint
+  aihub index [--dir .] [--project X]       Index the repo for RAG / knowledge map
   aihub config <agent>                      Print the MCP config snippet
 
 Agents: ${AGENTS.join(', ')}`);
@@ -164,6 +215,7 @@ async function main() {
       case 'login': await cmdLogin(flags); break;
       case 'status': await cmdStatus(); break;
       case 'connect': await cmdConnect(positional, flags); break;
+      case 'index': await cmdIndex(flags); break;
       case 'config': await cmdConfig(positional); break;
       default: usage();
     }

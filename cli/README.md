@@ -25,6 +25,9 @@ aihub connect vscode --dir .       # -> .vscode/mcp.json
 aihub connect windsurf             # -> ~/.codeium/windsurf/mcp_config.json
 
 aihub config cursor                # just print the snippet
+
+# index the whole repo for RAG + knowledge map (code-aware, by symbol)
+aihub index --dir .                # walks the repo, uploads to project=<repo>
 ```
 
 `connect` merges into any existing MCP config without clobbering other servers,
