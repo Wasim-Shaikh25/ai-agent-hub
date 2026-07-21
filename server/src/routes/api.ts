@@ -157,6 +157,12 @@ export async function registerApiRoutes(app: FastifyInstance): Promise<void> {
     return context.evalRetrieval(req.auth!.orgId, b.project, b.cases ?? [], b.k ?? 5, b.mode ?? 'hybrid');
   });
 
+  // Diagnostics-aware retrieval: referenced code for compiler/lint errors.
+  app.post('/api/rag/diagnostics', { preHandler: requireAuth }, async (req) => {
+    const b = req.body as { project: string; diagnostics: string[]; k?: number };
+    return { chunks: await context.diagnosticsContext(req.auth!.orgId, b.project, b.diagnostics ?? [], b.k ?? 4) };
+  });
+
   // Knowledge map: navigate specs/docs before drilling into chunks.
   app.get('/api/rag/map', { preHandler: requireAuth }, async (req) => {
     const q = req.query as { project?: string };

@@ -355,6 +355,48 @@ export class ContextService {
     };
   }
 
+  /**
+   * Diagnostics-aware retrieval: given compiler/lint error lines, pull the
+   * referenced files (by path) plus semantically-related code (by the error
+   * text) into context — so the agent sees the exact code it must fix.
+   */
+  async diagnosticsContext(orgId: string, project: string, diagnostics: string[], k = 4): Promise<RagHit[]> {
+    const projectId = await this.ensureProject(orgId, project);
+    const out: RagHit[] = [];
+    const seen = new Set<string>();
+
+    // 1. Files named in the diagnostics → fetch their chunks. Match on the
+    // basename so a "src/" prefix (or other index-root difference) still hits.
+    const files = new Set<string>();
+    for (const d of diagnostics) {
+      for (const f of d.match(/[\w./-]+\.(?:ts|tsx|js|jsx|mjs|py|go|java|rb|rs|cs|php|md)\b/gi) ?? []) {
+        const base = f.split('/').pop();
+        if (base) files.add(base);
+      }
+    }
+    for (const f of files) {
+      const rows = await query<{ uri: string; content: string; path: string; symbol: string }>(
+        `SELECT d.uri, c.content, c.path, c.symbol
+           FROM chunk c JOIN document d ON d.id = c.document_id
+          WHERE d.org_id = $1 AND d.project_id = $2 AND (c.path LIKE $3 OR d.uri LIKE $3)
+          ORDER BY c.ord LIMIT 4`,
+        [orgId, projectId, `%${f}`],
+      );
+      for (const r of rows) {
+        const key = `${r.path}:${r.symbol}`;
+        if (!seen.has(key)) { seen.add(key); out.push({ uri: r.uri, content: r.content, path: r.path, symbol: r.symbol, score: 1, signals: { lexMatches: -1 } }); }
+      }
+    }
+
+    // 2. Semantic retrieval on the error text (catches symbols not in a path).
+    const hits = await this.ragQuery(orgId, project, diagnostics.join(' ').slice(0, 500), k);
+    for (const h of hits) {
+      const key = `${h.path || h.uri}:${h.symbol || ''}`;
+      if (!seen.has(key)) { seen.add(key); out.push(h); }
+    }
+    return out.slice(0, k * 2);
+  }
+
   // -- context assembler ----------------------------------------------------
 
   /**
@@ -365,7 +407,7 @@ export class ContextService {
    * critical items are never dropped and only the low-priority evidence tail is
    * trimmed/compressed. This is the "accurate AND fewer tokens" component.
    */
-  async assembleContext(orgId: string, input: { project: string; key: string; query?: string; maxTokens?: number; authorId?: string }): Promise<string> {
+  async assembleContext(orgId: string, input: { project: string; key: string; query?: string; maxTokens?: number; authorId?: string; diagnostics?: string[] }): Promise<string> {
     const budgetChars = (input.maxTokens ?? 2000) * 4;
     const q = input.query ?? '';
     const blocks: Array<{ section: string; priority: number; score: number; text: string }> = [];
@@ -375,6 +417,15 @@ export class ContextService {
     for (const r of rules) blocks.push({ section: 'Active Rules', priority: 1, score: 1, text: `- **${r.name}**: ${r.description || r.body.slice(0, 160)}` });
     const skills = await this.content.listEnabled(orgId, 'skill');
     for (const s of skills) blocks.push({ section: 'Active Skills', priority: 2, score: 1, text: `- **${s.name}**: ${s.description || s.body.slice(0, 160)}` });
+
+    // 1b. Diagnostics the agent is actively fixing — errors + the referenced code.
+    if (input.diagnostics?.length) {
+      blocks.push({ section: 'Diagnostics', priority: 2, score: 1, text: input.diagnostics.map((d) => `- ${d}`).join('\n') });
+      const refs = await this.diagnosticsContext(orgId, input.project, input.diagnostics, 4);
+      for (const r of refs) {
+        blocks.push({ section: 'Referenced Code', priority: 2, score: 1, text: `- ${r.path || r.uri}:${r.symbol || ''}\n${compress(r.content, q || input.diagnostics.join(' '), 300)}` });
+      }
+    }
 
     // 2. Session continuity
     const session = await this.getSession(orgId, input.project, input.key, 8);

@@ -52,11 +52,25 @@ async function buildServer(auth: AuthContext, defaults: McpDefaults = {}, canAgg
         key: z.string().optional(),
         query: z.string().optional(),
         maxTokens: z.number().optional(),
+        diagnostics: z.array(z.string()).optional(),
       },
     },
     async (args) => text(await context.assembleContext(org, {
-      project: P(args.project), key: K(args.key), query: args.query, maxTokens: args.maxTokens, authorId: auth.userId,
+      project: P(args.project), key: K(args.key), query: args.query, maxTokens: args.maxTokens, authorId: auth.userId, diagnostics: args.diagnostics,
     })),
+  );
+
+  server.registerTool(
+    'diagnostics_context',
+    {
+      title: 'Retrieve code for diagnostics',
+      description: 'Given compiler/lint error lines, returns the referenced files + related code so you can fix them accurately.',
+      inputSchema: { project: z.string().optional(), diagnostics: z.array(z.string()) },
+    },
+    async (args) => {
+      const hits = await context.diagnosticsContext(org, P(args.project), args.diagnostics, 4);
+      return text(hits.map((h) => `${h.path || h.uri}:${h.symbol || ''}\n${h.content.slice(0, 400)}`).join('\n\n') || '(no referenced code found)');
+    },
   );
 
   if (canWrite) {
