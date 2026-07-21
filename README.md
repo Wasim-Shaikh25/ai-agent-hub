@@ -1,8 +1,31 @@
 # AI Agent Hub
 
-A VS Code extension that acts as a centralized control plane for managing
-AI behavior content (skills, rules, hooks) and syncing it to any
-configured AI agent target (Kiro, Cursor, GitHub Copilot, Amazon Q, etc.).
+**The shared brain and control plane for every AI coding agent your team uses.**
+
+Connect Cursor, Claude Code, Windsurf, Copilot, Codex, Cline and more to one
+place that gives them **shared context + memory**, **code-aware retrieval**, an
+**LLM gateway** (fallback, routing, cost metering), and **enterprise governance**
+(RBAC, audit, SSO, cost dashboards) — without touching the agents' internal
+prompts.
+
+- 🚀 **Get started:** [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md)
+- 🧠 **How it works / specs:** [`docs/specs/`](docs/specs/)
+- 📦 **Deploy (SaaS or self-host):** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+- 💳 **Plans & pricing:** [`docs/PRICING.md`](docs/PRICING.md)
+- 🔒 **Security:** [`SECURITY.md`](SECURITY.md)
+
+### Why it's different from an LLM router
+
+Routers (LiteLLM, 9Router) move *tokens*. AI Agent Hub adds the layer they don't:
+**shared context/memory across different agents**, **code-aware hybrid retrieval
++ a knowledge map**, and **team governance**. The gateway is one swappable
+component underneath — the value is the brain on top.
+
+---
+
+The original **VS Code extension** (below) is one client — a centralized control
+plane for AI behavior content (skills, rules, hooks) synced to any agent target
+(Kiro, Cursor, GitHub Copilot, Amazon Q, etc.).
 
 ## Platform (server) — new
 
