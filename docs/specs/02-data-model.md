@@ -85,6 +85,13 @@ the `/superadmin` Issues tab and the copilot's issue awareness. Indexed on
 Holds user 👍/👎 labels and copilot exchanges — **not** harvested gateway
 prompt/response pairs.
 
+### agent_connection  (migration 014)
+`id`, `org_id`, `user_id` (nullable), `agent` (normalized display name),
+`raw_name`, `version`, `source` (`mcp|gateway`), `last_model`, `project`,
+`seen_count`, `first_seen`, `last_seen`. Server-side **connected-agent
+detection** from the MCP `initialize` handshake + gateway traffic. Unique
+`(org_id, agent, source)` for upsert. See `17-agents-models-console.md`.
+
 ## 3. Indexing
 
 - `session (org_id, project_id, key)` unique.

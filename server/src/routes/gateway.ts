@@ -10,6 +10,8 @@ import { semanticCache, extractPrompt } from '../gateway/cache.js';
 import { classifyTask, nextTier, type Tier } from '../gateway/classifier.js';
 import { getPlan, entitled, limitOf } from '../billing/entitlements.js';
 import { events } from '../services/eventService.js';
+import { agents } from '../services/agentService.js';
+import { listModels, modelsPayload } from '../services/modelCatalog.js';
 
 const gateway = new GatewayService();
 const policies = new PolicyService();
@@ -53,6 +55,35 @@ export async function registerGatewayRoutes(app: FastifyInstance): Promise<void>
     return { ok: true };
   });
 
+  // -- model catalog --------------------------------------------------------
+  // OpenAI-standard model list (agents + external tools read this).
+  app.get('/v1/models', { preHandler: [requireAuth, requireRole('member')] }, async () => modelsPayload());
+
+  // UI-friendly: catalog + the org's current default model.
+  app.get('/api/models', { preHandler: requireAuth }, async (req) => ({
+    models: listModels(),
+    default: await defaultModel(req.auth!.orgId),
+  }));
+
+  // Pick the org's default model — enforced Hub-side via a `model` policy.
+  app.put('/api/settings/default-model', { preHandler: [requireAuth, requireRole('admin')] }, async (req, reply) => {
+    const model = (req.body as { model?: string }).model?.trim();
+    if (!model || !listModels().includes(model)) {
+      return reply.code(400).send({ error: { code: 'bad_request', message: 'model must be one of the catalog models' } });
+    }
+    // Replace any existing default-chain model policy with the new choice.
+    const existing = await policies.list(req.auth!.orgId, 'model');
+    for (const p of existing) {
+      if (Array.isArray((p.spec as { default_chain?: unknown }).default_chain)) await policies.remove(req.auth!.orgId, p.id);
+    }
+    await policies.create(req.auth!.orgId, 'model', { default_chain: [model] });
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'settings.default_model', model, { model });
+    return { ok: true, default: model };
+  });
+
+  // -- connected agents -----------------------------------------------------
+  app.get('/api/agents', { preHandler: requireAuth }, async (req) => agents.list(req.auth!.orgId));
+
   // -- usage summary --------------------------------------------------------
   app.get('/api/usage', { preHandler: requireAuth }, async (req) => {
     const [tokens, usd, budget] = await Promise.all([
@@ -71,6 +102,19 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   const body = (req.body ?? {}) as ChatBody;
   const task = typeof req.headers['x-hub-task'] === 'string' ? (req.headers['x-hub-task'] as string) : undefined;
   const plan = await getPlan(orgId);
+
+  // Connected-agent detection (gateway path): who is calling + what model.
+  // Prefer an explicit x-hub-agent; fall back to User-Agent but skip generic
+  // HTTP clients (curl, requests, node…) so the list stays real agents only.
+  const explicitAgent = req.headers['x-hub-agent'] as string | undefined;
+  const ua = req.headers['user-agent'] as string | undefined;
+  const agentName = explicitAgent ?? (ua && !isGenericHttpClient(ua) ? ua : undefined);
+  if (agentName) {
+    void agents.record({
+      orgId, userId, rawName: agentName, source: 'gateway',
+      model: body.model, project: req.headers['x-hub-project'] as string | undefined,
+    });
+  }
 
   // Plan limit: monthly gateway requests (free tier is capped).
   const reqLimit = limitOf(plan, 'monthlyRequests');
@@ -232,6 +276,21 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   });
 
   Readable.fromWeb(resp.body as never).pipe(meter).pipe(reply.raw);
+}
+
+/** True for generic HTTP clients we don't want to list as coding agents. */
+function isGenericHttpClient(ua: string): boolean {
+  return /^(curl|wget|python-requests|python-urllib|node|node-fetch|undici|axios|got|go-http-client|okhttp|postmanruntime|insomnia|java|libwww|httpie|guzzle|ruby|php)/i.test(ua.trim());
+}
+
+/** The org's currently-selected default model, if a model policy sets one. */
+async function defaultModel(orgId: string): Promise<string | undefined> {
+  const rows = await policies.list(orgId, 'model');
+  for (const p of rows) {
+    const chain = (p.spec as { default_chain?: unknown }).default_chain;
+    if (Array.isArray(chain) && typeof chain[0] === 'string') return chain[0] as string;
+  }
+  return undefined;
 }
 
 /** Extracts assistant text from a completion (OpenAI or Anthropic shape). */

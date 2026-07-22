@@ -26,9 +26,22 @@ aihub connect windsurf             # -> ~/.codeium/windsurf/mcp_config.json
 
 aihub config cursor                # just print the snippet
 
+# pick a terminal agent + model from one place, run it through the Hub
+aihub run                          # interactive: choose agent (auto-detected) + model
+aihub run --agent aider --model claude-sonnet   # non-interactive
+
+aihub models                       # list available models (from the Hub catalog)
+aihub agents                       # list agents currently connected to the Hub
+
 # index the whole repo for RAG + knowledge map (code-aware, by symbol)
 aihub index --dir .                # walks the repo, uploads to project=<repo>
 ```
+
+`run` auto-detects installed CLI agents on your PATH (currently **aider**,
+**claude**, **codex**), asks which model to use (from the Hub's catalog), then
+launches that agent with its base URL pointed at the Hub — so its inference
+flows through your gateway (fallback, routing, metering) and it shows up under
+`aihub agents` / the console's **Agents & Models** tab.
 
 `connect` merges into any existing MCP config without clobbering other servers,
 then prints how to point that agent's inference at the Hub gateway (OpenAI base

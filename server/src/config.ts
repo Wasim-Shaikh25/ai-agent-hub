@@ -32,6 +32,7 @@ export interface Config {
   rateLimitPerMin: number;
   memoryHalflifeDays: number;
   slowRequestMs: number;
+  models: string;
 }
 
 function env(key: string, fallback: string): string {
@@ -73,4 +74,5 @@ export const config: Config = {
   rateLimitPerMin: Number(env('RATE_LIMIT_PER_MIN', '600')),
   memoryHalflifeDays: Number(env('MEMORY_HALFLIFE_DAYS', '30')),
   slowRequestMs: Number(env('SLOW_REQUEST_MS', '20000')),
+  models: env('HUB_MODELS', ''),
 };

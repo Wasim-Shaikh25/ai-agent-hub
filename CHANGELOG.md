@@ -6,6 +6,36 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
 
 ## [Unreleased]
 
+### Added — Agents & Models console (Phase 1)
+
+- **Connected-agent detection (server-side, no local scanner)** — the Hub reads
+  each MCP client's `initialize` handshake (`clientInfo`) and each gateway
+  request's `x-hub-agent`/`User-Agent`, normalizes the name, and upserts an
+  `agent_connection` row. Generic HTTP clients (curl, requests, …) are filtered
+  out. Shows *what is actually using the Hub* — any agent, not a hardcoded list.
+- **`GET /api/agents`** — connected agents for the org (agent, via mcp/gateway,
+  last model, call count, last seen).
+- **Model catalog** — `GET /v1/models` (OpenAI-standard, read by agents/tools)
+  and `GET /api/models` (UI shape + current default), sourced from
+  `deploy/litellm.config.yaml` or `HUB_MODELS`, embeddings filtered out.
+- **Default model selection** — `PUT /api/settings/default-model` (admin) writes
+  a `model` policy `default_chain`; applied Hub-side to any connected agent that
+  doesn't pin its own model. We never override an agent's internal picker.
+- **`/admin` → Agents & Models tab** — connected agents, model catalog, and a
+  default-model selector.
+- **CLI launcher** — `aihub run` (auto-detects installed CLI agents on PATH →
+  pick agent + model → launches it routed through the Hub), plus `aihub models`
+  and `aihub agents`.
+- Requirements/design: `docs/specs/17-agents-models-console.md`.
+
+### Migrations (this set)
+
+- `014_agents.sql` — `agent_connection` (+ `(org_id, last_seen)` index).
+
+### Config (this set)
+
+- `HUB_MODELS` — comma list overriding the model catalog.
+
 ### Added — operator control plane
 
 - **Platform super-admin console** (`/superadmin`) — a vendor-only surface,

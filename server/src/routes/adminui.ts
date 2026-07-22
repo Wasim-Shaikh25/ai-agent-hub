@@ -57,7 +57,7 @@ const api=async(p,o={})=>{const r=await fetch(p,{headers:o.body?HJ:H,...o});cons
 const el=(h)=>{const d=document.createElement('div');d.innerHTML=h;return d};
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-const TABS=[['overview','Overview'],['content','Content'],['policies','Policies'],['keys','API Keys'],['team','Team'],['mcp','MCP Servers'],['audit','Audit']];
+const TABS=[['overview','Overview'],['agents','Agents & Models'],['content','Content'],['policies','Policies'],['keys','API Keys'],['team','Team'],['mcp','MCP Servers'],['audit','Audit']];
 const nav=document.getElementById('nav');
 TABS.forEach(([id,label])=>{const a=el('<a data-t="'+id+'">'+label+'</a>').firstChild;a.onclick=()=>show(id);nav.appendChild(a)});
 function show(id){[...nav.children].forEach(a=>a.classList.toggle('on',a.dataset.t===id));(VIEWS[id]||(()=>{}))();location.hash=id}
@@ -72,6 +72,18 @@ const VIEWS={
    tile(plan.plan,'plan')+tile((usage.tokens||0).toLocaleString(),'tokens/mo')+tile('$'+Number(usage.usd||0).toFixed(4),'cost/mo')+tile((plan.features||[]).length,'paid features')+
    '</div></div><div class="card"><h2>Included features</h2><p class="muted">'+((plan.features||[]).join(', ')||'core (free)')+'</p></div>';
  },
+ agents(){guard(async()=>{
+   const [list,cat]=await Promise.all([api('/api/agents'),api('/api/models')]);
+   const opts=(cat.models||[]).map(m=>'<option '+(cat.default===m?'selected':'')+'>'+esc(m)+'</option>').join('');
+   M.innerHTML='<div class="hdr"><h1>Agents &amp; Models</h1></div>'+
+   '<div class="card"><h2>Default model</h2><p class="muted" style="margin-top:-4px">Applied to any connected agent that doesn\\'t pin its own model. Enforced at the Hub — we never touch an agent\\'s internal picker.</p>'+
+   '<div class="row"><div style="flex:2"><label>Model</label><select id="dm">'+(opts||'<option>gpt-4o-mini</option>')+'</select></div><div style="flex:0"><label>&nbsp;</label><button onclick="setDefaultModel()">Save</button></div></div><div class="msg" id="dmm"></div></div>'+
+   '<div class="card"><h2>Available models ('+(cat.models||[]).length+')</h2><p class="muted mono">'+((cat.models||[]).map(esc).join(' · ')||'none')+'</p><p class="muted" style="font-size:12px">Edit <span class="mono">deploy/litellm.config.yaml</span> or set <span class="mono">HUB_MODELS</span> to change this list.</p></div>'+
+   '<div class="card"><h2>Connected agents ('+list.length+')</h2><p class="muted" style="margin-top:-4px">Detected from the MCP handshake and gateway traffic — what is actually using your Hub.</p>'+
+   '<table><tr><th>Agent</th><th>Via</th><th>Last model</th><th>Calls</th><th>Last seen</th></tr>'+
+   (list.length?list.map(a=>'<tr><td>'+esc(a.agent)+(a.version?' <span class="muted">'+esc(a.version)+'</span>':'')+'</td><td><span class="pill">'+esc(a.source)+'</span></td><td class="mono">'+esc(a.last_model||'—')+'</td><td>'+a.seen_count+'</td><td class="muted">'+new Date(a.last_seen).toLocaleString()+'</td></tr>').join(''):'<tr><td colspan="5" class="muted">No agents yet — connect one with <span class="mono">aihub connect</span> and it appears here on first call.</td></tr>')+
+   '</table></div>';
+ })},
  content(){guard(async()=>{
    const items=await api('/api/content');
    M.innerHTML='<div class="hdr"><h1>Content</h1></div>'+
@@ -131,6 +143,7 @@ async function addKey(){try{const d=await api('/api/keys',{method:'POST',body:JS
 async function revokeKey(id){await api('/api/keys/'+id,{method:'DELETE'});VIEWS.keys()}
 async function setRole(uid){try{await api('/api/members/'+uid,{method:'PUT',body:JSON.stringify({role:document.getElementById('r_'+uid).value})});VIEWS.team()}catch(e){alert(e.message)}}
 async function addMcp(){try{await api('/api/mcp-servers',{method:'POST',body:JSON.stringify({name:v('mn'),transport:'http',url:v('mu')})});VIEWS.mcp()}catch(e){msg('mm',e.message)}}
+async function setDefaultModel(){try{const d=await api('/api/settings/default-model',{method:'PUT',body:JSON.stringify({model:v('dm')})});msg('dmm','Default model set to '+d.default,true)}catch(e){msg('dmm',e.message)}}
 async function delMcp(id){await api('/api/mcp-servers/'+id,{method:'DELETE'});VIEWS.mcp()}
 function v(id){return document.getElementById(id).value}
 

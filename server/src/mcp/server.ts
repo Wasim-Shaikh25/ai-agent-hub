@@ -8,6 +8,28 @@ import { ContentService, type ContentType } from '../services/contentService.js'
 import { aggregator } from './aggregator.js';
 import { jsonSchemaToZodShape } from './jsonSchema.js';
 import { getPlan, entitled } from '../billing/entitlements.js';
+import { agents } from '../services/agentService.js';
+
+/**
+ * Reads `clientInfo` from an MCP `initialize` message (single or batched) and
+ * records the connecting agent. Best-effort detection — never blocks the call.
+ */
+function detectAgentFromInit(body: unknown, auth: AuthContext, project?: string): void {
+  const msgs = Array.isArray(body) ? body : [body];
+  for (const m of msgs) {
+    const msg = m as { method?: string; params?: { clientInfo?: { name?: string; version?: string } } };
+    if (msg?.method === 'initialize' && msg.params?.clientInfo?.name) {
+      void agents.record({
+        orgId: auth.orgId,
+        userId: auth.userId,
+        rawName: msg.params.clientInfo.name,
+        version: msg.params.clientInfo.version,
+        source: 'mcp',
+        project,
+      });
+    }
+  }
+}
 
 function slug(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -268,6 +290,9 @@ export async function handleMcpRequest(
     return Array.isArray(v) ? v[0] : v;
   };
   const defaults: McpDefaults = { project: hdr('x-hub-project'), key: hdr('x-hub-session') };
+
+  // Connected-agent detection from the MCP initialize handshake.
+  detectAgentFromInit(body, auth, defaults.project);
 
   const canAggregate = entitled(await getPlan(auth.orgId), 'mcp_aggregation');
   const server = await buildServer(auth, defaults, canAggregate);

@@ -11,7 +11,8 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname, isAbsolute, basename, relative, extname } from 'node:path';
 import { homedir } from 'node:os';
-import { execSync } from 'node:child_process';
+import { execSync, spawn } from 'node:child_process';
+import { createInterface } from 'node:readline';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', '.next', 'coverage', 'vendor', 'target', '__pycache__', '.venv', '.turbo', '.cache']);
 const CODE_EXT = new Set(['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.java', '.rb', '.rs', '.cs', '.php', '.md', '.markdown', '.txt', '.json', '.yaml', '.yml', '.sql', '.sh', '.html', '.css', '.vue', '.svelte']);
@@ -187,6 +188,93 @@ async function cmdConnect(positional, flags) {
   console.log(gatewayHint(agent, cfg.url, cfg.key));
 }
 
+// --- terminal launcher: pick a CLI agent + model, run it through the Hub -----
+
+/** How to launch each supported terminal agent, pointed at the Hub. */
+const RUNNERS = {
+  aider: (base, key, model) => ({
+    cmd: 'aider',
+    args: ['--model', `openai/${model}`, '--openai-api-base', `${base}/v1`, '--openai-api-key', key],
+    env: {},
+  }),
+  claude: (base, key, model) => ({
+    cmd: 'claude',
+    args: [],
+    env: { ANTHROPIC_BASE_URL: base, ANTHROPIC_API_KEY: key, ANTHROPIC_MODEL: model },
+  }),
+  codex: (base, key, model) => ({
+    cmd: 'codex',
+    args: ['-m', model],
+    env: { OPENAI_BASE_URL: `${base}/v1`, OPENAI_API_KEY: key },
+  }),
+};
+
+/** True if `bin` is on PATH. */
+function hasBin(bin) {
+  try { execSync(process.platform === 'win32' ? `where ${bin}` : `command -v ${bin}`, { stdio: 'ignore' }); return true; }
+  catch { return false; }
+}
+
+function ask(question) {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((res) => rl.question(question, (a) => { rl.close(); res(a.trim()); }));
+}
+
+async function pick(label, options) {
+  if (options.length === 1) return options[0];
+  console.log(`\n${label}:`);
+  options.forEach((o, i) => console.log(`  ${i + 1}) ${o}`));
+  const a = await ask(`Choose 1-${options.length}: `);
+  const idx = Number(a) - 1;
+  return options[idx] ?? options[0];
+}
+
+async function cmdModels() {
+  const cfg = loadConfig();
+  const { data } = await api('/v1/models', cfg);
+  console.log('Available models:');
+  for (const m of data) console.log(`  ${m.id}`);
+}
+
+async function cmdAgents() {
+  const cfg = loadConfig();
+  const list = await api('/api/agents', cfg);
+  if (!list.length) { console.log('No connected agents yet. Connect one with: aihub connect <agent>'); return; }
+  console.log('Connected agents:');
+  for (const a of list) {
+    console.log(`  ${a.agent.padEnd(16)} via ${a.source.padEnd(8)} model=${a.last_model ?? '—'}  calls=${a.seen_count}  last=${new Date(a.last_seen).toLocaleString()}`);
+  }
+}
+
+async function cmdRun(flags) {
+  const cfg = loadConfig();
+  if (!cfg.url || !cfg.key) throw new Error('Not logged in. Run: aihub login --url <URL> --key <API_KEY>');
+
+  // 1) pick the agent — auto-detect which CLI agents are installed.
+  const installed = Object.keys(RUNNERS).filter(hasBin);
+  if (!installed.length) {
+    throw new Error(`No supported CLI agent found on PATH. Install one of: ${Object.keys(RUNNERS).join(', ')} (e.g. "pip install aider-chat").`);
+  }
+  const agent = flags.agent && RUNNERS[flags.agent] ? flags.agent : await pick('Agent', installed);
+
+  // 2) pick the model — from the Hub's catalog.
+  const { data } = await api('/v1/models', cfg);
+  const models = data.map((m) => m.id);
+  const model = flags.model && models.includes(flags.model) ? flags.model : await pick('Model', models);
+
+  // 3) launch it, pointed at the Hub.
+  const base = cfg.url.replace(/\/$/, '');
+  const spec = RUNNERS[agent](base, cfg.key, model);
+  const { project, branch } = detectWorkspace(flags.dir ?? '.');
+  console.log(`\n▶ launching ${agent} · model=${model} · via ${base} (project=${project}, branch=${branch})\n`);
+  const child = spawn(spec.cmd, spec.args, {
+    stdio: 'inherit',
+    env: { ...process.env, ...spec.env, HUB_URL: base },
+  });
+  child.on('exit', (code) => process.exit(code ?? 0));
+  child.on('error', (e) => { console.error(`Failed to launch ${spec.cmd}: ${e.message}`); process.exit(1); });
+}
+
 async function cmdConfig(positional) {
   const agent = positional[0] ?? 'cursor';
   const cfg = loadConfig();
@@ -201,10 +289,14 @@ Usage:
   aihub login --url <URL> --key <API_KEY>   Save & validate credentials
   aihub status                              Show server + auth status
   aihub connect <agent> [--dir .]           Write native MCP config + gateway hint
+  aihub run [--agent X] [--model Y]         Pick a CLI agent + model, run via the Hub
+  aihub models                              List available models
+  aihub agents                              List agents connected to the Hub
   aihub index [--dir .] [--project X]       Index the repo for RAG / knowledge map
   aihub config <agent>                      Print the MCP config snippet
 
-Agents: ${AGENTS.join(', ')}`);
+Connect agents: ${AGENTS.join(', ')}
+Run agents:     ${Object.keys(RUNNERS).join(', ')}`);
 }
 
 async function main() {
@@ -215,6 +307,9 @@ async function main() {
       case 'login': await cmdLogin(flags); break;
       case 'status': await cmdStatus(); break;
       case 'connect': await cmdConnect(positional, flags); break;
+      case 'run': await cmdRun(flags); break;
+      case 'models': await cmdModels(); break;
+      case 'agents': await cmdAgents(); break;
       case 'index': await cmdIndex(flags); break;
       case 'config': await cmdConfig(positional); break;
       default: usage();
