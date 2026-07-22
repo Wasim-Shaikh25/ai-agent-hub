@@ -31,6 +31,7 @@ export interface Config {
   corsOrigin: string;
   rateLimitPerMin: number;
   memoryHalflifeDays: number;
+  trainingLog: boolean;
 }
 
 function env(key: string, fallback: string): string {
@@ -71,4 +72,5 @@ export const config: Config = {
   corsOrigin: env('CORS_ORIGIN', '*'),
   rateLimitPerMin: Number(env('RATE_LIMIT_PER_MIN', '600')),
   memoryHalflifeDays: Number(env('MEMORY_HALFLIFE_DAYS', '30')),
+  trainingLog: env('TRAINING_LOG', 'false') === 'true',
 };

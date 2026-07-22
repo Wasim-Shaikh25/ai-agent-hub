@@ -43,7 +43,7 @@ export async function seedDev(): Promise<void> {
     ['Dev Org', 'dev', 'enterprise'],
   );
   const user = await queryOne<{ id: string }>(
-    `INSERT INTO app_user (email, name) VALUES ($1,$2) RETURNING id`,
+    `INSERT INTO app_user (email, name, is_platform_admin) VALUES ($1,$2,true) RETURNING id`,
     ['dev@localhost', 'Dev User'],
   );
   await query('INSERT INTO membership (org_id, user_id, role) VALUES ($1,$2,$3)', [

@@ -45,6 +45,14 @@ Optional: `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`, `WORKOS_*`, `STRIPE_*`,
 - **Retention**: set a per-org `retention` policy (`{days}`); the scheduler
   sweeps daily.
 - **Rate limits**: `RATE_LIMIT_PER_MIN` (default 600/key/min).
+- **Platform console** — `/superadmin` gives you (the operator) cross-org
+  control: change any workspace's plan, suspend/resume it, browse captured
+  training data, and chat with the **operator copilot** (grounded in live
+  platform stats). Access is restricted to users flagged
+  `app_user.is_platform_admin = true`; a suspended org is blocked at auth (403).
+- **Training capture**: `TRAINING_LOG=true` records redacted gateway
+  request/response pairs; `POST /api/feedback` and the copilot also feed the
+  `training_sample` table. Export via `GET /api/platform/training?limit=…`.
 - **Scaling**: the server is stateless — run N replicas behind a load balancer;
   Postgres + Redis are the shared state. LiteLLM scales independently.
 - **Graceful shutdown**: SIGTERM drains in-flight requests and closes the pool.

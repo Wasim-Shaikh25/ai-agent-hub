@@ -39,20 +39,30 @@ export function planFeatures(plan: Plan): Feature[] {
 }
 
 // Small cache so hot paths (gateway, MCP) don't re-query the plan each call.
-const cache = new Map<string, { plan: Plan; ts: number }>();
+const cache = new Map<string, { plan: Plan; suspended: boolean; ts: number }>();
 const TTL = 30_000;
+
+async function orgState(orgId: string): Promise<{ plan: Plan; suspended: boolean }> {
+  const c = cache.get(orgId);
+  if (c && Date.now() - c.ts < TTL) return c;
+  const row = await queryOne<{ plan: string; suspended: boolean }>('SELECT plan, suspended FROM org WHERE id = $1', [orgId]);
+  const plan = (['free', 'team', 'enterprise'].includes(row?.plan ?? '') ? row!.plan : 'free') as Plan;
+  const state = { plan, suspended: Boolean(row?.suspended), ts: Date.now() };
+  cache.set(orgId, state);
+  return state;
+}
 
 /** Resolves an org's plan (cached ~30s). */
 export async function getPlan(orgId: string): Promise<Plan> {
-  const c = cache.get(orgId);
-  if (c && Date.now() - c.ts < TTL) return c.plan;
-  const row = await queryOne<{ plan: string }>('SELECT plan FROM org WHERE id = $1', [orgId]);
-  const plan = (['free', 'team', 'enterprise'].includes(row?.plan ?? '') ? row!.plan : 'free') as Plan;
-  cache.set(orgId, { plan, ts: Date.now() });
-  return plan;
+  return (await orgState(orgId)).plan;
 }
 
-/** Invalidate the plan cache for an org (call after a plan change). */
+/** True if the org is suspended (cached ~30s). */
+export async function isSuspended(orgId: string): Promise<boolean> {
+  return (await orgState(orgId)).suspended;
+}
+
+/** Invalidate the cache for an org (call after a plan/suspend change). */
 export function invalidatePlan(orgId: string): void {
   cache.delete(orgId);
 }

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { queryOne, query } from './db/pool.js';
 import { verifySession } from './auth/jwt.js';
+import { isSuspended } from './billing/entitlements.js';
 
 /** Resolved caller identity. */
 export interface AuthContext {
@@ -68,7 +69,23 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Pro
     await reply.code(401).send({ error: { code: 'unauthorized', message: 'Invalid or missing credentials' } });
     return;
   }
+  if (await isSuspended(ctx.orgId)) {
+    await reply.code(403).send({ error: { code: 'org_suspended', message: 'This workspace is suspended. Contact support.' } });
+    return;
+  }
   req.auth = ctx;
+}
+
+/** Fastify preHandler requiring the caller to be a platform super-admin. */
+export async function requireSuperadmin(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (!req.auth) {
+    await reply.code(401).send({ error: { code: 'unauthorized', message: 'Authentication required' } });
+    return;
+  }
+  const row = await queryOne<{ is_platform_admin: boolean }>('SELECT is_platform_admin FROM app_user WHERE id = $1', [req.auth.userId]);
+  if (!row?.is_platform_admin) {
+    await reply.code(403).send({ error: { code: 'forbidden', message: 'Platform admin only' } });
+  }
 }
 
 /**

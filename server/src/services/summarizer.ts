@@ -6,7 +6,7 @@ import { config } from '../config.js';
  * deterministic heuristic when no provider is reachable, so both features work
  * offline for local dev.
  */
-async function llmComplete(system: string, user: string, maxTokens = 400): Promise<string | undefined> {
+export async function llmComplete(system: string, user: string, maxTokens = 400): Promise<string | undefined> {
   try {
     const res = await fetch(`${config.litellmUrl}/v1/chat/completions`, {
       method: 'POST',

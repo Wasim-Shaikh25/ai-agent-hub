@@ -9,6 +9,7 @@ import { redact } from '../privacy/redact.js';
 import { semanticCache, extractPrompt } from '../gateway/cache.js';
 import { classifyTask, nextTier, type Tier } from '../gateway/classifier.js';
 import { getPlan, entitled, limitOf } from '../billing/entitlements.js';
+import { training } from '../services/trainingService.js';
 
 const gateway = new GatewayService();
 const policies = new PolicyService();
@@ -185,6 +186,13 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     await gateway.recordUsage(orgId, userId, servedModel, usage, { latency_ms: Date.now() - t0 });
     if (semanticCache.enabled && entitled(plan, 'semantic_cache')) {
       void semanticCache.store(orgId, cacheKeyModel, extractPrompt(body), json);
+    }
+    // Opt-in training capture (redacted at rest inside the service).
+    if (config.trainingLog) {
+      void training.record('gateway', orgId, extractPrompt(body), extractText(json, cfg.format), {
+        model: servedModel,
+        tokens: usage.inputTokens + usage.outputTokens,
+      });
     }
     reply.send(json);
     return;
