@@ -76,7 +76,7 @@ const VIEWS={
    const [list,cat]=await Promise.all([api('/api/agents'),api('/api/models')]);
    const opts=(cat.models||[]).map(m=>'<option '+(cat.default===m?'selected':'')+'>'+esc(m)+'</option>').join('');
    M.innerHTML='<div class="hdr"><h1>Agents &amp; Models</h1></div>'+
-   '<div class="card"><h2>Default model</h2><p class="muted" style="margin-top:-4px">Applied to any connected agent that doesn\\'t pin its own model. Enforced at the Hub — we never touch an agent\\'s internal picker.</p>'+
+   '<div class="card"><h2>Org default model</h2><p class="muted" style="margin-top:-4px">Fallback only — used for users who haven\\'t picked their own model on their Account page. Users always choose for themselves; this never overrides them. We never touch an agent\\'s internal picker.</p>'+
    '<div class="row"><div style="flex:2"><label>Model</label><select id="dm">'+(opts||'<option>gpt-4o-mini</option>')+'</select></div><div style="flex:0"><label>&nbsp;</label><button onclick="setDefaultModel()">Save</button></div></div><div class="msg" id="dmm"></div></div>'+
    '<div class="card"><h2>Available models ('+(cat.models||[]).length+')</h2><p class="muted mono">'+((cat.models||[]).map(esc).join(' · ')||'none')+'</p><p class="muted" style="font-size:12px">Edit <span class="mono">deploy/litellm.config.yaml</span> or set <span class="mono">HUB_MODELS</span> to change this list.</p></div>'+
    '<div class="card"><h2>Connected agents ('+list.length+')</h2><p class="muted" style="margin-top:-4px">Detected from the MCP handshake and gateway traffic — what is actually using your Hub.</p>'+

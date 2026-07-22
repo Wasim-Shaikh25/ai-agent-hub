@@ -18,11 +18,15 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
 - **Model catalog** — `GET /v1/models` (OpenAI-standard, read by agents/tools)
   and `GET /api/models` (UI shape + current default), sourced from
   `deploy/litellm.config.yaml` or `HUB_MODELS`, embeddings filtered out.
-- **Default model selection** — `PUT /api/settings/default-model` (admin) writes
-  a `model` policy `default_chain`; applied Hub-side to any connected agent that
-  doesn't pin its own model. We never override an agent's internal picker.
-- **`/admin` → Agents & Models tab** — connected agents, model catalog, and a
-  default-model selector.
+- **User-oriented model selection** — each developer picks their **own** model,
+  self-serve, on their Account page (`GET/PUT /api/me/model`, any member). The
+  user's choice is applied Hub-side when their agent doesn't pin a model, and it
+  **beats org quality routing** (an intentional choice wins). An explicit request
+  model always wins; we never override an agent's internal picker.
+- **Admin org default** — `PUT /api/settings/default-model` (admin) is only a
+  **fallback** for users who haven't chosen; it never overrides a user.
+- **`/admin` → Agents & Models tab** — connected agents, model catalog, and the
+  org fallback-default selector. **`/account`** gains the user's own model picker.
 - **CLI launcher** — `aihub run` (auto-detects installed CLI agents on PATH →
   pick agent + model → launches it routed through the Hub), plus `aihub models`
   and `aihub agents`.
@@ -31,6 +35,7 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
 ### Migrations (this set)
 
 - `014_agents.sql` — `agent_connection` (+ `(org_id, last_seen)` index).
+- `015_user_model.sql` — `user_model_pref` (per-user model choice).
 
 ### Config (this set)
 

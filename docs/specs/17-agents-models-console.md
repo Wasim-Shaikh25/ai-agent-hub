@@ -61,12 +61,19 @@ and fall back to the raw string. Detection never blocks the request.
 - `GET /api/models` → same list in a UI-friendly shape, plus the org's current
   default model.
 
-### FR4 — Choose the model (Hub-enforced)
-- `PUT /api/settings/default-model { model }` (admin) → upserts a single `model`
-  policy `{ default_chain: [model] }`; validates against the catalog; audited.
-- Effect: connected agents' gateway calls with no explicit routing use this
-  model. We never override a closed agent's internal picker — we make the Hub's
-  choice the one that runs.
+### FR4 — Choose the model (user-oriented, Hub-enforced)
+This product is **user-oriented**: each developer picks their **own** model,
+self-serve. The admin default is only a fallback.
+
+- `PUT /api/me/model { model }` (any member) → sets the caller's own model
+  (`user_model_pref`); empty clears it. `GET /api/me/model` reads it.
+- `PUT /api/settings/default-model { model }` (admin) → org **fallback** default,
+  a single `model` policy `{ default_chain: [model] }`. Never overrides a user.
+- **Precedence** when the agent doesn't pin a model:
+  `user's own choice` → org quality-routing (if no user choice) → org default →
+  catalog default. The user's explicit choice **beats org quality routing** —
+  it's an intentional selection. An explicit model in the request always wins;
+  we never override what the agent asked for or touch its internal picker.
 
 ### FR5 — Console UI (branded)
 - New **Agents** tab in `/admin`: connected-agents table, model catalog, and a
@@ -104,8 +111,9 @@ Unique `(org_id, agent, source)` for upsert. Indexed on `(org_id, last_seen)`.
 |---|---|---|---|
 | GET | `/api/agents` | member | connected agents for the org |
 | GET | `/v1/models` | member | OpenAI-standard model list |
-| GET | `/api/models` | member | UI model list + current default |
-| PUT | `/api/settings/default-model` | admin | set the org default model |
+| GET | `/api/models` | member | catalog + org default + **the caller's own choice** |
+| GET/PUT | `/api/me/model` | member | **read/set the caller's own model** (self-serve) |
+| PUT | `/api/settings/default-model` | admin | org fallback default (never overrides a user) |
 
 ## 7. Non-goals
 

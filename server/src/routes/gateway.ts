@@ -12,6 +12,7 @@ import { getPlan, entitled, limitOf } from '../billing/entitlements.js';
 import { events } from '../services/eventService.js';
 import { agents } from '../services/agentService.js';
 import { listModels, modelsPayload } from '../services/modelCatalog.js';
+import { getUserModel, setUserModel } from '../services/userPrefs.js';
 
 const gateway = new GatewayService();
 const policies = new PolicyService();
@@ -59,11 +60,26 @@ export async function registerGatewayRoutes(app: FastifyInstance): Promise<void>
   // OpenAI-standard model list (agents + external tools read this).
   app.get('/v1/models', { preHandler: [requireAuth, requireRole('member')] }, async () => modelsPayload());
 
-  // UI-friendly: catalog + the org's current default model.
+  // UI-friendly: catalog, the org default, and THIS user's own choice.
   app.get('/api/models', { preHandler: requireAuth }, async (req) => ({
     models: listModels(),
     default: await defaultModel(req.auth!.orgId),
+    mine: await getUserModel(req.auth!.orgId, req.auth!.userId),
   }));
+
+  // The caller's own model choice — self-serve, any member. Empty clears it.
+  app.get('/api/me/model', { preHandler: requireAuth }, async (req) => ({
+    model: await getUserModel(req.auth!.orgId, req.auth!.userId),
+  }));
+
+  app.put('/api/me/model', { preHandler: [requireAuth, requireRole('member')] }, async (req, reply) => {
+    const model = (req.body as { model?: string }).model?.trim() || '';
+    if (model && !listModels().includes(model)) {
+      return reply.code(400).send({ error: { code: 'bad_request', message: 'model must be one of the catalog models' } });
+    }
+    await setUserModel(req.auth!.orgId, req.auth!.userId, model || null);
+    return { ok: true, model: model || null };
+  });
 
   // Pick the org's default model — enforced Hub-side via a `model` policy.
   app.put('/api/settings/default-model', { preHandler: [requireAuth, requireRole('admin')] }, async (req, reply) => {
@@ -127,10 +143,20 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     }
   }
 
+  // User-oriented model choice: if the agent didn't pin a model and the caller
+  // has picked one in their UI, that wins — it's an intentional choice, so we
+  // honor it over org-level quality routing. (Explicit request model still wins
+  // over everything; we never override what the agent asked for.)
+  let userPinned = false;
+  if (!body.model) {
+    const pref = await getUserModel(orgId, userId);
+    if (pref) { body.model = pref; userPinned = true; reply.header('x-hub-model-source', 'user'); }
+  }
+
   // Quality-based routing (paid): classify the prompt and pick a model tier.
   let quality: { tiers: Record<string, string>; escalateOnShort?: number } | undefined;
   let tier: Tier | undefined;
-  if (!task && entitled(plan, 'quality_routing')) {
+  if (!task && !userPinned && entitled(plan, 'quality_routing')) {
     quality = await policies.quality(orgId);
     if (quality && Object.keys(quality.tiers).length) {
       tier = classifyTask(extractPrompt(body));

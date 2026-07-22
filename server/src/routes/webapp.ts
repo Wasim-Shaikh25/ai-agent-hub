@@ -88,6 +88,14 @@ const ACCOUNT_HTML = /* html */ `<!doctype html><html lang="en"><head><meta char
     <button class="ghost" onclick="newKey()" style="margin-top:14px">Create a new API key</button>
     <div class="msg" id="keymsg"></div>
     <hr style="border:0;border-top:1px solid var(--line);margin:22px 0"/>
+    <label>Your model</label>
+    <p class="small" style="margin:0 0 8px">Your choice — used whenever your agent doesn't pin its own model. This is yours, not an admin setting.</p>
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="mymodel" style="flex:1;padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--bg,#fff);color:inherit;font:inherit"></select>
+      <button class="ghost" onclick="saveModel()">Save</button>
+    </div>
+    <div class="msg" id="modelmsg"></div>
+    <hr style="border:0;border-top:1px solid var(--line);margin:22px 0"/>
     <div class="row"><span class="k">Plan</span><span class="v" id="planName">…</span></div>
     <div class="row"><span class="k">Included features</span><span class="v" id="features" style="text-align:right;max-width:60%"></span></div>
     <button id="upgrade" onclick="upgrade()">Upgrade to Team</button>
@@ -115,8 +123,25 @@ function logout(){localStorage.clear();location.href='/login';}
     const u=await (await fetch('/api/usage',{headers:h()})).json();
     document.getElementById('tokens').textContent=fmt(u.tokens);
     document.getElementById('usd').textContent='$'+Number(u.usd||0).toFixed(4);
+    await loadModels();
   }catch(e){}
 })();
+async function loadModels(){
+  try{
+    const c=await (await fetch('/api/models',{headers:h()})).json();
+    const sel=document.getElementById('mymodel');
+    const def=c.default?(' (org default: '+c.default+')'):'';
+    sel.innerHTML='<option value="">Automatic'+def+'</option>'+(c.models||[]).map(function(m){return '<option'+(c.mine===m?' selected':'')+'>'+m+'</option>'}).join('');
+  }catch(e){}
+}
+async function saveModel(){
+  const m=document.getElementById('modelmsg');m.className='msg';m.textContent='…';
+  const model=document.getElementById('mymodel').value;
+  const r=await fetch('/api/me/model',{method:'PUT',headers:{...h(),'Content-Type':'application/json'},body:JSON.stringify({model:model})});
+  const d=await r.json();
+  if(!r.ok){m.className='msg err';m.textContent=(d.error&&d.error.message)||'Failed';return;}
+  m.className='msg ok';m.textContent=d.model?('Your model is now '+d.model):'Cleared — using automatic routing.';
+}
 function fmt(n){return n===Infinity||n===null||n===undefined?'∞':Number(n).toLocaleString();}
 async function newKey(){
   const m=document.getElementById('keymsg');m.className='msg';m.textContent='…';
