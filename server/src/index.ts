@@ -15,6 +15,7 @@ import { registerPrivacyRoutes } from './routes/privacy.js';
 import { registerMetricsRoutes } from './routes/metrics.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerWebappRoutes } from './routes/webapp.js';
+import { registerAdminUiRoutes } from './routes/adminui.js';
 import { startRetentionScheduler } from './services/retentionScheduler.js';
 import { handleMcpRequest } from './mcp/server.js';
 
@@ -73,6 +74,7 @@ async function main(): Promise<void> {
   await registerMetricsRoutes(app);
   await registerDashboardRoutes(app);
   await registerWebappRoutes(app);
+  await registerAdminUiRoutes(app);
 
   // Native MCP endpoint (Streamable HTTP, stateless).
   app.post('/mcp', async (req, reply) => {

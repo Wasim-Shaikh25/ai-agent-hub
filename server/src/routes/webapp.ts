@@ -92,7 +92,7 @@ const ACCOUNT_HTML = /* html */ `<!doctype html><html lang="en"><head><meta char
     <div class="row"><span class="k">Included features</span><span class="v" id="features" style="text-align:right;max-width:60%"></span></div>
     <button id="upgrade" onclick="upgrade()">Upgrade to Team</button>
     <div class="msg" id="billmsg"></div>
-    <p class="small" style="margin-top:16px">Next: <a href="/dashboard">open the cost dashboard</a> · connect an agent with <span class="mono">aihub connect cursor</span>.</p>
+    <p class="small" style="margin-top:16px">Next: <a href="/admin">admin console</a> · <a href="/dashboard">cost dashboard</a> · connect an agent with <span class="mono">aihub connect cursor</span>.</p>
   </div>
 </div>
 <script>

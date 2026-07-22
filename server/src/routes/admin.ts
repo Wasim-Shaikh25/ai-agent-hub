@@ -32,6 +32,35 @@ export async function registerAdminRoutes(app: FastifyInstance): Promise<void> {
     return { ok: true };
   });
 
+  // -- Team members ---------------------------------------------------------
+  app.get('/api/members', { preHandler: [requireAuth, requireRole('admin')] }, async (req) => {
+    return query(
+      `SELECT u.id AS "userId", u.email, u.name, m.role
+         FROM membership m JOIN app_user u ON u.id = m.user_id
+        WHERE m.org_id = $1 ORDER BY m.role DESC, u.email`,
+      [req.auth!.orgId],
+    );
+  });
+
+  app.put('/api/members/:userId', { preHandler: [requireAuth, requireRole('admin')] }, async (req, reply) => {
+    const { userId } = req.params as { userId: string };
+    const role = (req.body as { role?: string }).role;
+    if (!['viewer', 'member', 'admin', 'owner'].includes(role ?? '')) {
+      return reply.code(400).send({ error: { code: 'bad_request', message: 'role must be viewer|member|admin|owner' } });
+    }
+    // Never remove the last owner.
+    if (role !== 'owner') {
+      const owners = await query<{ n: string }>(`SELECT COUNT(*) AS n FROM membership WHERE org_id = $1 AND role = 'owner'`, [req.auth!.orgId]);
+      const cur = await query<{ role: string }>('SELECT role FROM membership WHERE org_id = $1 AND user_id = $2', [req.auth!.orgId, userId]);
+      if (cur[0]?.role === 'owner' && Number(owners[0]?.n ?? 0) <= 1) {
+        return reply.code(400).send({ error: { code: 'last_owner', message: 'Cannot demote the last owner' } });
+      }
+    }
+    await query('UPDATE membership SET role = $3 WHERE org_id = $1 AND user_id = $2', [req.auth!.orgId, userId, role]);
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'member.role_change', userId, { role });
+    return { ok: true };
+  });
+
   // -- Audit log ------------------------------------------------------------
   app.get('/api/audit', { preHandler: [requireAuth, requireRole('admin'), requireFeature('audit')] }, async (req) => {
     const limit = Number((req.query as { limit?: string }).limit ?? '50');
