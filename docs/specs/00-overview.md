@@ -75,6 +75,14 @@ Each agent has **two independent connections** to the Hub:
   core, no editor dependency.
 - The **Hub server** is the product; each client is one front-end.
 
+### Operator control plane (vendor-only)
+
+Above the customer surfaces sits `/superadmin` — a console for **you, the
+vendor** who runs the SaaS: manage every org's plan, suspend/resume tenants,
+**analyze operational issues** across all workspaces, and ask a grounded
+copilot what's failing. Gated by `app_user.is_platform_admin`. Full detail in
+`16-platform-admin.md`.
+
 ## 7. Spec index
 
 | Doc | Contents |
@@ -83,4 +91,7 @@ Each agent has **two independent connections** to the Hub:
 | `02-data-model.md` | Entities + Postgres schema |
 | `03-api-and-mcp.md` | REST endpoints + MCP tool contracts |
 | `04-local-dev.md` | Run the full stack locally (docker compose) |
-| `05-roadmap.md` | Phased delivery plan & status |
+| `05-roadmap.md` / `06-roadmap-v2.md` | Phased delivery plan & status |
+| `07`–`14` | Data residency, guardrails, cache, metrics, dashboard, routing, scoping, code-aware RAG |
+| `15-plans-entitlements.md` | Open-core free/paid split, enforced in code |
+| `16-platform-admin.md` | Operator console: cross-org control, issue analysis, copilot |

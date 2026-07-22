@@ -13,6 +13,7 @@ prompts.
 - 📦 **Deploy (SaaS or self-host):** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 - 💳 **Plans & pricing:** [`docs/PRICING.md`](docs/PRICING.md)
 - 🔒 **Security:** [`SECURITY.md`](SECURITY.md)
+- 📝 **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)
 
 ### Why it's different from an LLM router
 
@@ -46,6 +47,21 @@ for provider fallback and model routing.
 The extension is the free, local **Content Plane**; the server is the
 collaborative + governed **Context / Gateway / Governance** planes. See
 [`docs/specs/00-overview.md`](docs/specs/00-overview.md) for the open-core split.
+
+### Customer & operator consoles
+
+| Surface | Who | What |
+|---|---|---|
+| `/login`, `/account` | any customer user | sign up, plan, usage, API key |
+| `/dashboard` | customer | cost / usage / audit |
+| `/admin` | customer org admin/owner | manage **their** workspace (content, policies, keys, team, MCP, audit) |
+| `/superadmin` | **you, the operator** | cross-org control, **issue analysis**, and a grounded **copilot** — vendor-only, gated by `is_platform_admin` |
+
+The operator console (`/superadmin`) is where you run the SaaS: change any org's
+plan, suspend/resume tenants, analyze operational issues (provider errors,
+budget/limit hits, redaction blocks, slow calls) across every workspace, and ask
+the copilot what's failing. See
+[`docs/specs/16-platform-admin.md`](docs/specs/16-platform-admin.md).
 
 ## What It Does
 

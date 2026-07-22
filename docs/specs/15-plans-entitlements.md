@@ -52,3 +52,11 @@ routing, and governance — the agent always chooses what to use.
 Plan is stored on `org.plan`. The Stripe webhook sets it: an active subscription
 → `team` (or keeps `enterprise`); cancellation → `free`. Enterprise is assigned
 on contract. Local dev seeds `enterprise` so all features are available.
+
+## 6. Not a plan feature: the operator (platform admin)
+
+Plans describe what a **customer** org can do. The **vendor/operator** is
+orthogonal: `app_user.is_platform_admin` grants the cross-org `/superadmin`
+console regardless of any org's plan, and it is only settable in the database.
+Suspending an org (`org.suspended`) blocks it at auth independent of its plan.
+See `16-platform-admin.md`.

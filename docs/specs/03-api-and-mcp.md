@@ -64,6 +64,23 @@ best-effort side-effect of gateway metering.
 | GET/POST | `/api/keys` · `/api/keys/:id` (DELETE) | mint / list / revoke API keys (raw key shown once) |
 | GET | `/api/audit?limit=` | recent audit entries |
 | GET | `/api/usage/breakdown` | current-month cost grouped by model (member+) |
+| GET/PUT | `/api/members` · `/api/members/:userId` | list members / change role (last-owner protected) |
+
+### Platform endpoints (super-admin only) — the operator console
+
+Gated by `requireSuperadmin` (`app_user.is_platform_admin`). A normal user —
+even an org owner — gets `403`. Full spec in `16-platform-admin.md`.
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/platform/stats` | platform-wide snapshot (orgs, plans, cost, 24h issues) |
+| GET | `/api/platform/orgs` | every org with plan, suspended, seats, month tokens |
+| PUT | `/api/platform/orgs/:id` | change `plan` and/or `suspended` (invalidates cache; audited) |
+| GET | `/api/platform/events/summary?hours=` | issue aggregates: by level, top codes, worst orgs |
+| GET | `/api/platform/events?level=&source=&code=&orgId=&limit=` | recent issues (also JSON export) |
+| POST | `/api/platform/assistant` | operator copilot, grounded in the live snapshot + issues |
+| GET | `/api/platform/training` | user feedback labels + copilot exchanges |
+| POST | `/api/feedback` | (any auth) record 👍/👎 on a completion |
 
 ## 2. REST API (management)
 

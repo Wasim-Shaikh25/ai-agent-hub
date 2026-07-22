@@ -13,6 +13,9 @@ you can follow along).
 | **Diagnostics-aware retrieval** | Feed compiler/lint errors → referenced files pulled into context (`session_get_context` `diagnostics[]`, `diagnostics_context` tool, `POST /api/rag/diagnostics`). | ✅ done |
 | **LLM reranker** | Optional cross-encoder-style rerank of the top-N via the gateway (`rerank=llm`). | ✅ done |
 | **Memory decay** | Recency weighting in memory scoring (`MEMORY_HALFLIFE_DAYS`). | ✅ done |
+| **Platform admin console** | `/superadmin`: cross-org plan changes + suspend/resume, gated by `is_platform_admin`. | ✅ done |
+| **Issue analysis** | Operational event log (`system_event`) with gateway/auth capture + `/api/platform/events(/summary)` + Issues tab. | ✅ done |
+| **Operator copilot** | `/api/platform/assistant`, grounded in live stats + 24h issues, with offline fallback. | ✅ done |
 
 ## B. Needs your accounts / decisions
 

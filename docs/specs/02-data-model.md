@@ -20,10 +20,12 @@ Org ──< Membership >── User
 ## 2. Core tables (see `server/migrations/001_init.sql` for the DDL)
 
 ### org
-`id`, `name`, `slug`, `plan` (`free|team|enterprise`), `created_at`.
+`id`, `name`, `slug`, `plan` (`free|team|enterprise`), `suspended` (bool — a
+suspended org is blocked at auth with `403 org_suspended`), `created_at`.
 
 ### app_user
-`id`, `email`, `name`, `created_at`.
+`id`, `email`, `name`, `password_hash` (nullable; scrypt), `is_platform_admin`
+(bool — grants the vendor-only `/superadmin` console), `created_at`.
 
 ### membership
 `org_id`, `user_id`, `role` (`owner|admin|member|viewer`). PK `(org_id,user_id)`.
@@ -68,6 +70,20 @@ Powers RAG over repo/docs.
 ### usage_event
 `id`, `org_id`, `user_id`, `kind` (`mcp_call|tokens|rag_query`), `qty`,
 `meta jsonb`, `created_at`. Rolls up into billing.
+
+### system_event  (migration 013)
+`id`, `org_id` (nullable), `level` (`error|warn|info`), `source`
+(`gateway|auth|…`), `code` (`provider_error|budget_exceeded|…`), `message`
+(redacted), `meta jsonb`, `created_at`. The operational **issue log** — powers
+the `/superadmin` Issues tab and the copilot's issue awareness. Indexed on
+`created_at`, `(code, created_at)`, and `(org_id, created_at)`. See
+`16-platform-admin.md`.
+
+### training_sample  (migration 012)
+`id`, `org_id` (nullable), `kind` (`feedback|assistant`), `input`, `output`
+(both redacted), `meta jsonb`, `rating` (`1|-1`, feedback only), `created_at`.
+Holds user 👍/👎 labels and copilot exchanges — **not** harvested gateway
+prompt/response pairs.
 
 ## 3. Indexing
 
