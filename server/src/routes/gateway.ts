@@ -9,7 +9,7 @@ import { redact } from '../privacy/redact.js';
 import { semanticCache, extractPrompt } from '../gateway/cache.js';
 import { classifyTask, nextTier, type Tier } from '../gateway/classifier.js';
 import { getPlan, entitled, limitOf } from '../billing/entitlements.js';
-import { training } from '../services/trainingService.js';
+import { events } from '../services/eventService.js';
 
 const gateway = new GatewayService();
 const policies = new PolicyService();
@@ -77,6 +77,7 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   if (Number.isFinite(reqLimit)) {
     const used = await gateway.monthRequests(orgId);
     if (used >= reqLimit) {
+      void events.record('warn', 'gateway', 'limit_reached', `Monthly request limit reached (${used}/${reqLimit})`, orgId, { used, limit: reqLimit, plan });
       reply.code(402).send({ error: { code: 'limit_reached', message: `Monthly request limit reached (${used}/${reqLimit}). Upgrade for more.`, plan } });
       return;
     }
@@ -101,6 +102,7 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   if (config.redactionEnabled) {
     const found = scrubBody(body, config.redactionMode === 'redact');
     if (found > 0 && config.redactionMode === 'block') {
+      void events.record('warn', 'gateway', 'redaction_block', `Blocked ${found} secret/PII item(s) in request`, orgId, { found });
       reply.code(422).send({ error: { code: 'sensitive_content', message: `Blocked: ${found} secret/PII item(s) detected` } });
       return;
     }
@@ -133,6 +135,7 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     await gateway.assertWithinBudget(orgId);
   } catch (err) {
     if (err instanceof BudgetExceededError) {
+      void events.record('warn', 'gateway', 'budget_exceeded', err.message, orgId, {});
       reply.code(429).send({ error: { code: 'budget_exceeded', message: err.message } });
       return;
     }
@@ -144,7 +147,9 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
   try {
     result = await gateway.forwardTo(orgId, cfg.path, body, task, { injectStreamUsage: cfg.format === 'openai' });
   } catch (err) {
-    reply.code(400).send({ error: { code: 'gateway_error', message: err instanceof Error ? err.message : String(err) } });
+    const msg = err instanceof Error ? err.message : String(err);
+    void events.record('error', 'gateway', 'gateway_error', msg, orgId, { path: cfg.path });
+    reply.code(400).send({ error: { code: 'gateway_error', message: msg } });
     return;
   }
   const { resp, model, triedModels } = result;
@@ -156,8 +161,15 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     const errText = await resp.text();
     let parsed: unknown = errText;
     try { parsed = JSON.parse(errText); } catch { /* keep text */ }
+    void events.record('error', 'gateway', 'provider_error', `Provider returned ${resp.status} for ${model}`, orgId, { status: resp.status, model, tried: triedModels });
     reply.code(resp.status).send(parsed);
     return;
+  }
+
+  // Latency watchdog — flag unusually slow upstream calls for investigation.
+  const elapsed = Date.now() - t0;
+  if (elapsed > config.slowRequestMs) {
+    void events.record('warn', 'gateway', 'slow_request', `Upstream call took ${elapsed}ms on ${model}`, orgId, { latency_ms: elapsed, model });
   }
 
   // Non-streaming: read JSON, meter precisely, return.
@@ -186,13 +198,6 @@ async function proxy(req: FastifyRequest, reply: FastifyReply, cfg: ProxyConfig)
     await gateway.recordUsage(orgId, userId, servedModel, usage, { latency_ms: Date.now() - t0 });
     if (semanticCache.enabled && entitled(plan, 'semantic_cache')) {
       void semanticCache.store(orgId, cacheKeyModel, extractPrompt(body), json);
-    }
-    // Opt-in training capture (redacted at rest inside the service).
-    if (config.trainingLog) {
-      void training.record('gateway', orgId, extractPrompt(body), extractText(json, cfg.format), {
-        model: servedModel,
-        tokens: usage.inputTokens + usage.outputTokens,
-      });
     }
     reply.send(json);
     return;

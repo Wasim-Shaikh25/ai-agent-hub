@@ -10,27 +10,39 @@ export interface PlatformSnapshot {
   orgs: number;
   suspended: number;
   byPlan: Record<string, number>;
-  training: { total: number; byKind: Array<{ kind: string; n: number }> };
   monthTokens: number;
   monthUsd: number;
+  issues: {
+    windowHours: number;
+    total: number;
+    byLevel: Record<string, number>;
+    byCode: Array<{ code: string; level: string; n: number }>;
+    topOrgs: Array<{ name: string | null; n: number }>;
+  };
 }
 
 const SYSTEM = [
   'You are the operator copilot for "AI Agent Hub", a SaaS control plane.',
-  'You help the platform super-admin run the service: reading the metrics below,',
-  'explaining trends, and advising on training data, plans, and operations.',
-  'Be concise and concrete. Ground every claim in the provided snapshot; if the',
-  'snapshot lacks the answer, say so and suggest what to check. Never invent numbers.',
+  'You help the platform super-admin run and debug the service: reading the',
+  'metrics and recent issue log below, explaining what is failing and why,',
+  'spotting trends, and advising on plans and operations.',
+  'Be concise and concrete. Ground every claim in the provided snapshot; when a',
+  'question is about problems, reason from the issue codes and affected orgs.',
+  'If the snapshot lacks the answer, say so and suggest what to check. Never invent numbers.',
 ].join(' ');
 
 function snapshotText(s: PlatformSnapshot): string {
   const plans = Object.entries(s.byPlan).map(([p, n]) => `${p}=${n}`).join(', ') || 'none';
-  const kinds = s.training.byKind.map((k) => `${k.kind}=${k.n}`).join(', ') || 'none';
+  const codes = s.issues.byCode.map((c) => `${c.code}(${c.level})=${c.n}`).join(', ') || 'none';
+  const levels = Object.entries(s.issues.byLevel).map(([l, n]) => `${l}=${n}`).join(', ') || 'none';
+  const worst = s.issues.topOrgs.map((o) => `${o.name ?? 'unknown'}=${o.n}`).join(', ') || 'none';
   return [
     `Orgs: ${s.orgs} (suspended ${s.suspended})`,
     `Plans: ${plans}`,
-    `Training samples: ${s.training.total} (${kinds})`,
     `This month: ${s.monthTokens} tokens, $${s.monthUsd.toFixed(4)}`,
+    `Issues (last ${s.issues.windowHours}h): ${s.issues.total} total — ${levels}`,
+    `Issue codes: ${codes}`,
+    `Orgs with most errors: ${worst}`,
   ].join('\n');
 }
 

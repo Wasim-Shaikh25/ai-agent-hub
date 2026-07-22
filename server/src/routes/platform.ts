@@ -3,6 +3,7 @@ import { requireAuth, requireSuperadmin } from '../auth.js';
 import { query, queryOne } from '../db/pool.js';
 import { invalidatePlan, type Plan } from '../billing/entitlements.js';
 import { training } from '../services/trainingService.js';
+import { events } from '../services/eventService.js';
 import { assistantReply, type PlatformSnapshot } from '../services/assistant.js';
 import { AuditService } from '../services/auditService.js';
 
@@ -21,13 +22,20 @@ async function snapshot(): Promise<PlatformSnapshot> {
   );
   const byPlan: Record<string, number> = {};
   for (const r of byPlanRows) byPlan[r.plan] = Number(r.n);
+  const iss = await events.summary(24);
   return {
     orgs: Number(orgs?.n ?? 0),
     suspended: Number(orgs?.suspended ?? 0),
     byPlan,
-    training: await training.stats(),
     monthTokens: Number(usage?.tokens ?? 0),
     monthUsd: Number(usage?.usd ?? 0),
+    issues: {
+      windowHours: iss.windowHours,
+      total: iss.total,
+      byLevel: iss.byLevel,
+      byCode: iss.byCode.map((c) => ({ code: c.code, level: c.level, n: c.n })),
+      topOrgs: iss.topOrgs.map((o) => ({ name: o.name, n: o.n })),
+    },
   };
 }
 
@@ -78,7 +86,18 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     return row;
   });
 
-  // -- training data --------------------------------------------------------
+  // -- issue analysis (operational event log) -------------------------------
+  app.get('/api/platform/events/summary', guard, async (req) => {
+    const hours = Number((req.query as { hours?: string }).hours ?? '24');
+    return events.summary(hours);
+  });
+
+  app.get('/api/platform/events', guard, async (req) => {
+    const q = req.query as { level?: string; source?: string; code?: string; orgId?: string; limit?: string };
+    return events.list({ level: q.level, source: q.source, code: q.code, orgId: q.orgId, limit: Number(q.limit ?? '100') });
+  });
+
+  // -- feedback labels (👍/👎 from users) -----------------------------------
   app.get('/api/platform/training', guard, async (req) => {
     const q = req.query as { kind?: string; limit?: string };
     const [samples, stats] = await Promise.all([training.list(q.kind, Number(q.limit ?? '50')), training.stats()]);

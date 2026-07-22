@@ -34,6 +34,10 @@ button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line
 button.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
 .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:color-mix(in oklab,var(--cyan) 16%,transparent);color:var(--cyan)}
 .pill.bad{background:color-mix(in oklab,var(--bad) 16%,transparent);color:var(--bad)}
+.pill.amber{background:color-mix(in oklab,var(--amber) 18%,transparent);color:var(--amber)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{display:inline-block;font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);cursor:pointer;color:var(--muted)}
+.chip.on{border-color:var(--cyan);color:var(--ink)}.chip:hover{color:var(--ink)}.chip b{color:var(--ink)}
 .right{text-align:right}.msg{font-size:13px;margin-top:8px;min-height:16px}.err{color:var(--bad)}.ok{color:var(--good)}
 .locked{color:var(--amber);font-size:13px}
 h2{font-size:15px;margin:0 0 12px}
@@ -63,7 +67,7 @@ const api=async(p,o={})=>{const r=await fetch(p,{headers:o.body?HJ:H,...o});cons
 const el=(h)=>{const d=document.createElement('div');d.innerHTML=h;return d};
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-const TABS=[['overview','Overview'],['orgs','Organizations'],['training','Training data'],['assistant','Copilot']];
+const TABS=[['overview','Overview'],['orgs','Organizations'],['issues','Issues'],['assistant','Copilot']];
 const nav=document.getElementById('nav');
 TABS.forEach(([id,label])=>{const a=el('<a data-t="'+id+'">'+label+'</a>').firstChild;a.onclick=()=>show(id);nav.appendChild(a)});
 function show(id){[...nav.children].forEach(a=>a.classList.toggle('on',a.dataset.t===id));(VIEWS[id]||(()=>{}))();location.hash=id}
@@ -74,13 +78,17 @@ const VIEWS={
  overview(){guard(async()=>{
    const s=await api('/api/platform/stats');
    const plans=Object.entries(s.byPlan||{}).map(([p,n])=>p+' '+n).join(' · ')||'—';
-   const kinds=(s.training.byKind||[]).map(k=>k.kind+' '+k.n).join(' · ')||'none yet';
+   const iss=s.issues||{byLevel:{},byCode:[],total:0,windowHours:24};
+   const errs=(iss.byLevel||{}).error||0, warns=(iss.byLevel||{}).warn||0;
+   const topCodes=(iss.byCode||[]).slice(0,5).map(c=>c.code+' '+c.n).join(' · ')||'none';
    M.innerHTML='<h1>Platform overview</h1><p class="sub">Everything across every workspace.</p>'+
    '<div class="card"><div class="tiles">'+
    tile(s.orgs,'organizations')+tile(s.suspended,'suspended')+tile((s.monthTokens||0).toLocaleString(),'tokens/mo')+tile('$'+Number(s.monthUsd||0).toFixed(2),'cost/mo')+
    '</div></div>'+
    '<div class="card"><h2>Plans</h2><p class="muted">'+esc(plans)+'</p></div>'+
-   '<div class="card"><h2>Training samples</h2><p class="muted">'+s.training.total+' total · '+esc(kinds)+'</p></div>';
+   '<div class="card"><h2>Issues · last '+iss.windowHours+'h</h2><div class="tiles" style="grid-template-columns:repeat(3,1fr)">'+
+   tile('<span style="color:var(--bad)">'+errs+'</span>','errors')+tile('<span style="color:var(--amber)">'+warns+'</span>','warnings')+tile(iss.total,'total events')+
+   '</div><p class="muted" style="margin-top:10px">Top: '+esc(topCodes)+'</p></div>';
  })},
  orgs(){guard(async()=>{
    const os=await api('/api/platform/orgs');
@@ -93,24 +101,35 @@ const VIEWS={
    '<button class="'+(o.suspended?'ghost':'danger')+'" onclick="toggleSuspend(\\''+o.id+'\\','+(o.suspended?'false':'true')+')">'+(o.suspended?'Resume':'Suspend')+'</button></td></tr>').join('')+
    '</table><div class="msg" id="om"></div></div>';
  })},
- training(){guard(async()=>{
-   const d=await api('/api/platform/training?limit=60');
-   const kinds=(d.stats.byKind||[]).map(k=>k.kind+' '+k.n).join(' · ')||'none';
-   M.innerHTML='<div class="hdr"><h1>Training data</h1><a class="top" href="/api/platform/training?limit=500" target="_blank">Export JSON →</a></div>'+
-   '<div class="card"><p class="muted">'+d.stats.total+' samples · '+esc(kinds)+'. Everything is redacted at rest. Enable capture with TRAINING_LOG=true.</p></div>'+
-   '<div class="card"><table><tr><th>Kind</th><th>Input</th><th>Output</th><th>Rating</th><th>When</th></tr>'+
-   (d.samples||[]).map(s=>'<tr><td><span class="pill">'+esc(s.kind)+'</span></td><td class="mono">'+esc((s.input||'').slice(0,90))+'</td><td class="mono">'+esc((s.output||'').slice(0,90))+'</td><td>'+(s.rating==null?'—':(s.rating>0?'👍':'👎'))+'</td><td class="muted">'+new Date(s.created_at).toLocaleString()+'</td></tr>').join('')+
+ issues(){guard(async()=>{
+   const flt=window.__issf||{};
+   const qs=Object.entries(flt).filter(([,v])=>v).map(([k,v])=>k+'='+encodeURIComponent(v)).join('&');
+   const [sum,list]=await Promise.all([api('/api/platform/events/summary?hours=24'),api('/api/platform/events?limit=100'+(qs?'&'+qs:''))]);
+   const errs=(sum.byLevel||{}).error||0, warns=(sum.byLevel||{}).warn||0;
+   const codeChips=(sum.byCode||[]).map(c=>'<a class="chip'+(flt.code===c.code?' on':'')+'" onclick="setIssueFilter(\\'code\\',\\''+esc(c.code)+'\\')">'+esc(c.code)+' <b>'+c.n+'</b></a>').join('');
+   const worst=(sum.topOrgs||[]).map(o=>esc(o.name||'unknown')+' ('+o.n+')').join(' · ')||'none';
+   M.innerHTML='<div class="hdr"><h1>Issues</h1><a class="top" href="/api/platform/events?limit=500" target="_blank">Export JSON →</a></div>'+
+   '<div class="card"><div class="tiles" style="grid-template-columns:repeat(3,1fr)">'+
+   tile('<span style="color:var(--bad)">'+errs+'</span>','errors · 24h')+tile('<span style="color:var(--amber)">'+warns+'</span>','warnings · 24h')+tile(sum.total,'total · 24h')+
+   '</div><p class="muted" style="margin-top:10px">Orgs with most errors: '+worst+'</p></div>'+
+   '<div class="card"><h2>Filter by code</h2><div class="chips">'+(codeChips||'<span class="muted">No events yet — issues appear here as they occur.</span>')+
+   (Object.keys(flt).length?' <a class="chip" onclick="clearIssueFilter()">clear ✕</a>':'')+'</div></div>'+
+   '<div class="card"><table><tr><th>Level</th><th>Source</th><th>Code</th><th>Message</th><th>Org</th><th>When</th></tr>'+
+   (list||[]).map(e=>'<tr><td>'+levelPill(e.level)+'</td><td>'+esc(e.source)+'</td><td class="mono">'+esc(e.code)+'</td><td>'+esc((e.message||'').slice(0,120))+'</td><td class="mono">'+esc((e.org_id||'').slice(0,8))+'</td><td class="muted">'+new Date(e.created_at).toLocaleString()+'</td></tr>').join('')+
    '</table></div>';
  })},
  assistant(){guard(async()=>{
    M.innerHTML='<div class="hdr"><h1>Operator copilot</h1></div>'+
    '<div class="card"><div class="chat" id="chat"></div>'+
-   '<div class="row"><div style="flex:5"><input id="q" placeholder="Ask about orgs, plans, training, cost…" onkeydown="if(event.key===\\'Enter\\')ask()"/></div><div style="flex:0"><button onclick="ask()">Send</button></div></div>'+
+   '<div class="row"><div style="flex:5"><input id="q" placeholder="e.g. what is failing today? which orgs have the most errors?" onkeydown="if(event.key===\\'Enter\\')ask()"/></div><div style="flex:0"><button onclick="ask()">Send</button></div></div>'+
    '<p class="muted" style="font-size:12px;margin-top:8px">Grounded in your live platform snapshot. Set SUMMARY_MODEL for conversational answers.</p></div>';
-   bubble('a','Hi — I can read your platform stats and help with training, plans, and operations. Ask me anything.');
+   bubble('a','Hi — I can read your platform stats and the last 24h of issues. Ask me what is failing, which orgs are affected, or anything about plans and operations.');
  })},
 };
 function tile(n,l){return '<div class="tile"><div class="n">'+n+'</div><div class="l">'+l+'</div></div>'}
+function levelPill(l){const c=l==='error'?'bad':(l==='warn'?'amber':'');return '<span class="pill '+c+'">'+esc(l)+'</span>'}
+function setIssueFilter(k,v){window.__issf={...(window.__issf||{}),[k]:v};VIEWS.issues()}
+function clearIssueFilter(){window.__issf={};VIEWS.issues()}
 function bubble(who,text,tag){const c=document.getElementById('chat');const b=el('<div class="bub '+who+'">'+esc(text)+(tag?'<div class="tag">'+esc(tag)+'</div>':'')+'</div>').firstChild;c.appendChild(b);c.scrollTop=c.scrollHeight}
 function msg(id,t,ok){const m=document.getElementById(id);if(m){m.className='msg '+(ok?'ok':'err');m.textContent=t}}
 

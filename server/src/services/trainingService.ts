@@ -13,8 +13,9 @@ export interface TrainingSample {
 }
 
 /**
- * Opt-in capture of training/eval data. Everything is redacted before storage;
- * enabled only when TRAINING_LOG=true (gateway samples) or via explicit feedback.
+ * User feedback labels (👍/👎) and copilot exchanges, redacted before storage.
+ * Written via POST /api/feedback and the operator copilot — not from live
+ * gateway traffic (we do not harvest prompt/response pairs).
  */
 export class TrainingService {
   async record(kind: string, orgId: string | null, input: string, output: string, meta: Record<string, unknown> = {}, rating: number | null = null): Promise<void> {

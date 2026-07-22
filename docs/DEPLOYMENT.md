@@ -46,13 +46,19 @@ Optional: `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`, `WORKOS_*`, `STRIPE_*`,
   sweeps daily.
 - **Rate limits**: `RATE_LIMIT_PER_MIN` (default 600/key/min).
 - **Platform console** — `/superadmin` gives you (the operator) cross-org
-  control: change any workspace's plan, suspend/resume it, browse captured
-  training data, and chat with the **operator copilot** (grounded in live
-  platform stats). Access is restricted to users flagged
+  control: change any workspace's plan, suspend/resume it, analyze the **issue
+  log**, and chat with the **operator copilot** (grounded in live platform
+  stats + recent issues). Access is restricted to users flagged
   `app_user.is_platform_admin = true`; a suspended org is blocked at auth (403).
-- **Training capture**: `TRAINING_LOG=true` records redacted gateway
-  request/response pairs; `POST /api/feedback` and the copilot also feed the
-  `training_sample` table. Export via `GET /api/platform/training?limit=…`.
+- **Issue analysis**: the gateway and auth layers log operational events
+  (provider errors, budget/limit hits, redaction blocks, suspended-org denials,
+  and slow calls past `SLOW_REQUEST_MS`) to `system_event`. The Issues tab
+  aggregates them (errors/warnings over 24h, top codes, worst-affected orgs) so
+  you can spot and diagnose problems; the copilot reads the same summary.
+  Messages are redacted at rest. Endpoints: `GET /api/platform/events` and
+  `GET /api/platform/events/summary`.
+- **Feedback labels**: `POST /api/feedback` records 👍/👎 on completions into
+  `training_sample` — useful signal, and thumbs-down is worth wiring to alerts.
 - **Scaling**: the server is stateless — run N replicas behind a load balancer;
   Postgres + Redis are the shared state. LiteLLM scales independently.
 - **Graceful shutdown**: SIGTERM drains in-flight requests and closes the pool.

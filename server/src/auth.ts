@@ -3,6 +3,7 @@ import type { FastifyReply, FastifyRequest } from 'fastify';
 import { queryOne, query } from './db/pool.js';
 import { verifySession } from './auth/jwt.js';
 import { isSuspended } from './billing/entitlements.js';
+import { events } from './services/eventService.js';
 
 /** Resolved caller identity. */
 export interface AuthContext {
@@ -70,6 +71,7 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Pro
     return;
   }
   if (await isSuspended(ctx.orgId)) {
+    void events.record('warn', 'auth', 'org_suspended', 'Blocked request from suspended workspace', ctx.orgId, {});
     await reply.code(403).send({ error: { code: 'org_suspended', message: 'This workspace is suspended. Contact support.' } });
     return;
   }
