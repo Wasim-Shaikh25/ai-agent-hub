@@ -23,6 +23,7 @@ aihub connect cursor --dir .       # -> .cursor/mcp.json
 aihub connect claude --dir .       # -> .mcp.json (Claude Code) + ANTHROPIC_BASE_URL
 aihub connect vscode --dir .       # -> .vscode/mcp.json
 aihub connect windsurf             # -> ~/.codeium/windsurf/mcp_config.json
+aihub connect cline                # -> .cline/mcp.json + OpenAI-compatible base URL
 
 aihub config cursor                # just print the snippet
 

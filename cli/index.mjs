@@ -126,7 +126,7 @@ function mergeMcpConfig(existing, incoming) {
   return out;
 }
 
-const AGENTS = ['cursor', 'claude', 'vscode', 'windsurf'];
+const AGENTS = ['cursor', 'claude', 'vscode', 'windsurf', 'cline'];
 
 function gatewayHint(agent, url, key) {
   const base = url.replace(/\/$/, '');
