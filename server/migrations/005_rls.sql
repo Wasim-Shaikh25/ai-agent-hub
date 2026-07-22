@@ -2,10 +2,11 @@
 -- complementing the app's org_id-scoped queries.
 --
 -- The policy restricts rows to the org set in the `app.current_org` session GUC.
--- When the GUC is unset it allows all rows, so existing app-layer-scoped queries
--- keep working unchanged; when a request sets the GUC (see withOrg() in
--- db/pool.ts) the database itself enforces isolation. FORCE makes the policy
--- apply even to the table owner the app connects as.
+-- When the GUC is unset it allows all rows, so auth-bootstrap and background
+-- queries keep working; when a request sets the GUC (setOrgContext() in
+-- db/pool.ts, active when RLS_ENABLED=true) the database itself enforces
+-- isolation. FORCE makes the policy apply even to the table owner the app
+-- connects as.
 --
 -- Hardening note: to make isolation mandatory, drop the "IS NULL" escape and
 -- run the app under a dedicated non-owner role.

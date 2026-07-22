@@ -9,6 +9,7 @@ import { aggregator } from './aggregator.js';
 import { jsonSchemaToZodShape } from './jsonSchema.js';
 import { getPlan, entitled } from '../billing/entitlements.js';
 import { agents } from '../services/agentService.js';
+import { setOrgContext } from '../db/pool.js';
 
 /**
  * Reads `clientInfo` from an MCP `initialize` message (single or batched) and
@@ -290,6 +291,9 @@ export async function handleMcpRequest(
     return Array.isArray(v) ? v[0] : v;
   };
   const defaults: McpDefaults = { project: hdr('x-hub-project'), key: hdr('x-hub-session') };
+
+  // Bind this request's org for DB-layer RLS enforcement (no-op unless RLS_ENABLED).
+  setOrgContext(auth.orgId);
 
   // Connected-agent detection from the MCP initialize handshake.
   detectAgentFromInit(body, auth, defaults.project);

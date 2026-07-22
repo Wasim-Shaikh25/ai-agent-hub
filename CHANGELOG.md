@@ -6,6 +6,24 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
 
 ## [Unreleased]
 
+### Fixed — Row-Level Security actually enforces now
+
+- RLS was **enabled but dormant**: the `app.current_org` GUC that the policies
+  key on was never set (the `withOrg()` helper was dead code), so every row
+  passed. `rls` is an advertised Enterprise feature, so this was a real gap.
+- `query()`/`queryOne()` now bind the request's org via AsyncLocalStorage
+  (`setOrgContext()` in `requireAuth` + the MCP handler) and run with
+  `SET LOCAL app.current_org` when `RLS_ENABLED=true`, so Postgres enforces
+  tenant isolation. Platform-admin routes `clearOrgContext()` to read across
+  orgs; auth bootstrap and background jobs stay permissive.
+- **Migration 017** fixes a connection-reuse bug: after `SET LOCAL`, the custom
+  GUC reverts to `''` (not unset), which made a reused pooled connection error on
+  `''::uuid`. The policy now uses `NULLIF(current_setting(...), '')` so `''` and
+  unset both read as "no org". Verified: cross-org reads/writes blocked, no
+  cross-request bleed, platform-admin cross-org reads intact.
+- Default (`RLS_ENABLED=false`) behavior is unchanged. Removed the dead
+  `withOrg()` and `containsSensitive()` helpers.
+
 ### Added — Agents & Models console
 
 - **Connected-agent detection (server-side, no local scanner)** — the Hub reads

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { queryOne, query } from './db/pool.js';
+import { queryOne, query, setOrgContext, clearOrgContext } from './db/pool.js';
 import { verifySession } from './auth/jwt.js';
 import { isSuspended } from './billing/entitlements.js';
 import { events } from './services/eventService.js';
@@ -78,6 +78,8 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Pro
     return;
   }
   req.auth = ctx;
+  // Bind this request's org for DB-layer RLS enforcement (no-op unless RLS_ENABLED).
+  setOrgContext(ctx.orgId);
 }
 
 /** True if the user is a platform super-admin. */
@@ -94,7 +96,10 @@ export async function requireSuperadmin(req: FastifyRequest, reply: FastifyReply
   }
   if (!(await isPlatformAdmin(req.auth.userId))) {
     await reply.code(403).send({ error: { code: 'forbidden', message: 'Platform admin only' } });
+    return;
   }
+  // Platform admins read across every org — drop the RLS org binding.
+  clearOrgContext();
 }
 
 /**

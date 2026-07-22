@@ -28,10 +28,16 @@ SSO users are provisioned into the org as `member`.
 ### RLS (defense-in-depth isolation)
 
 Migration 005 adds Row-Level Security policies keyed on an `app.current_org`
-session GUC. It is non-breaking by default (unset GUC → app-layer scoping still
-applies); opt a path into DB-enforced isolation with `withOrg()` in
-`db/pool.ts`. Verified: with the GUC set, one org's connection cannot read
-another org's rows.
+session GUC (migration 017 makes the escape treat the empty-string GUC as
+unset). Enable with `RLS_ENABLED=true`: `requireAuth`/the MCP handler bind the
+request's org via `setOrgContext()` (`db/pool.ts`), and `query()` runs those
+statements with `SET LOCAL app.current_org`, so the database itself blocks
+cross-org reads/writes — belt-and-suspenders behind the app's own `org_id`
+scoping. Platform-admin routes call `clearOrgContext()` to read across orgs;
+auth bootstrap and background jobs run with no context (permissive escape).
+Default (`RLS_ENABLED=false`) is unchanged — no GUC is ever set. Verified: with
+RLS on, one org cannot read another's rows and cross-org writes are blocked,
+with no cross-request bleed on pooled connections.
 
 Roles are ranked `viewer < member < admin < owner`. A key inherits its user's
 membership role, or carries an explicit override (`api_key.role`) — so you can
