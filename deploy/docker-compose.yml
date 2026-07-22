@@ -54,7 +54,7 @@ services:
       REDIS_URL: redis://redis:6379
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: sk-local-master
-      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-local}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-minilm}
       EMBEDDING_DIM: "1536"
       DEV_SEED: "true"
       DEV_API_KEY: ${DEV_API_KEY:-hub_dev_localkey}

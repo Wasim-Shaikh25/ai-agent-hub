@@ -19,12 +19,17 @@ deterministic fallbacks** — so the product runs with zero LLM configured. See
 
 ## P0 — cannot take money without these
 
-- [ ] 🔴 **Enable in-process embeddings for semantic RAG.** No LLM provider
-  needed: set `EMBEDDINGS_PROVIDER=minilm` (real vectors, runs inside the Hub,
-  no API key). Confirm the model loads in your deploy image (`@xenova/transformers`
-  was blocked by the proxy here — bake it into the image or pre-download weights),
-  then re-check retrieval quality on a real repo. `local` is only a non-semantic
-  hash fallback — don't ship on it.
+- [x] ✅ **In-process semantic embeddings are the default** (`EMBEDDINGS_PROVIDER=minilm`
+  in code + all deploy configs). Real vectors, runs inside the Hub, no API key,
+  no provider. Falls back to a local hash automatically if the model dep is
+  missing.
+- [ ] 🔴 **Ship the model in your production image.** `@xenova/transformers` is an
+  optional dep; make sure `npm ci` installs it in your build (it was blocked by
+  the proxy in *this* sandbox only), and **pre-download the MiniLM weights into
+  the image** (set `TRANSFORMERS_CACHE`) so first request doesn't depend on a
+  runtime fetch from HuggingFace. Then re-check retrieval quality on a real repo.
+  Note: if you switch providers after data exists, **re-index** — vectors from
+  different models aren't comparable.
 - [ ] 🟢 **(Optional) LLM gateway** — only if you *choose* to offer inference
   routing to the agents that can point a base URL at you (aider, Claude Code),
   and only **BYO-key** (the customer's key). Not required for Cursor/Kiro, not a
