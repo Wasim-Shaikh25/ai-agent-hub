@@ -6,6 +6,16 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
 
 ## [Unreleased]
 
+### Added — integration test suite + CI
+
+- `server/test/` — a black-box integration suite on Node's built-in test runner
+  (no new deps): spawns the built server + a mock LLM and exercises health/ready,
+  auth, entitlements (free 402 vs enterprise allow), memory, code-aware RAG
+  (BM25), gateway metering, model catalog + per-user model choice, MCP-handshake
+  agent detection, and RLS (cross-org isolation, no cross-request bleed,
+  platform-admin bypass). `npm test`. Server CI now runs it against
+  Postgres+pgvector instead of a one-line smoke check.
+
 ### Fixed — Row-Level Security actually enforces now
 
 - RLS was **enabled but dormant**: the `app.current_org` GUC that the policies
