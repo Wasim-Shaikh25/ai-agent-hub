@@ -42,8 +42,8 @@ for provider fallback and model routing.
   `cd deploy && cp .env.example .env && docker compose up --build`.
 - **Server code:** [`server/`](server/) (Fastify + Postgres/pgvector + MCP).
 - **CLI connector:** [`cli/`](cli/) — `aihub connect <agent>` points any agent
-  (Cursor, Claude Code, Codex, Cline…) at the Hub in one command; `aihub run`
-  picks a terminal agent + model from one place and launches it through the Hub.
+  (Cursor, Claude Code, Kiro, Windsurf…) at the Hub in one command; `aihub detect`
+  reports which agents are installed/running on the machine.
 - **Agents & Models:** the Hub detects which agents are actually connected (from
   the MCP handshake + gateway traffic) and lets you pick the default model — see
   the `/admin` **Agents & Models** tab and

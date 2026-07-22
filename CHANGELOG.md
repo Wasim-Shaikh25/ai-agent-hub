@@ -6,7 +6,7 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
 
 ## [Unreleased]
 
-### Added — Agents & Models console (Phase 1)
+### Added — Agents & Models console
 
 - **Connected-agent detection (server-side, no local scanner)** — the Hub reads
   each MCP client's `initialize` handshake (`clientInfo`) and each gateway
@@ -27,9 +27,8 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
   **fallback** for users who haven't chosen; it never overrides a user.
 - **`/admin` → Agents & Models tab** — connected agents, model catalog, and the
   org fallback-default selector. **`/account`** gains the user's own model picker.
-- **CLI launcher** — `aihub run` (auto-detects installed CLI agents on PATH →
-  pick agent + model → launches it routed through the Hub), plus `aihub models`
-  and `aihub agents`.
+- **CLI helpers** — `aihub models` and `aihub agents` list the catalog and the
+  connected agents.
 - **Local detection** — `aihub detect` scans the machine for running/installed
   agents (Cursor, Kiro, Windsurf, VS Code, CLI agents) and reports to
   `POST /api/agents/local`; `--connect` wires them all. The Agents tab groups by

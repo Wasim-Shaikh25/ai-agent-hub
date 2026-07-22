@@ -52,11 +52,6 @@ export function redact(input: string): RedactionResult {
   return { text, counts, total };
 }
 
-/** True if the string contains any redactable secret/PII. */
-export function containsSensitive(input: string): boolean {
-  return redact(input).total > 0;
-}
-
 /** Luhn checksum — filters credit-card-shaped numbers that aren't valid cards. */
 function luhnValid(candidate: string): boolean {
   const digits = candidate.replace(/[^\d]/g, '');

@@ -192,8 +192,6 @@ function buildMcpConfig(agent: string, url: string, key: string, project?: strin
       return { agent: 'claude-code', file: '.mcp.json', config: { mcpServers: { 'ai-agent-hub': server } }, note: 'Place in project root; Claude Code reads .mcp.json.' };
     case 'windsurf':
       return { agent: 'windsurf', file: '~/.codeium/windsurf/mcp_config.json', config: { mcpServers: { 'ai-agent-hub': server } }, note: 'Windsurf MCP config.' };
-    case 'cline':
-      return { agent: 'cline', file: '.cline/mcp.json', config: { mcpServers: { 'ai-agent-hub': server } }, note: 'Cline MCP config (or add via Cline → MCP Servers). Set provider "OpenAI Compatible" → base URL <hub>/v1.' };
     case 'kiro':
       return { agent: 'kiro', file: '.kiro/settings/mcp.json', config: { mcpServers: { 'ai-agent-hub': server } }, note: 'Kiro MCP config (workspace .kiro/settings/mcp.json or ~/.kiro/settings/mcp.json).' };
     case 'vscode':

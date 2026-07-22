@@ -1,11 +1,11 @@
 # Agents & Models Console — Requirements & Design
 
-> Status: **building (Phase 1)** · Owner: Wasim Shaikh · Depends on: gateway
+> Status: **built** · Owner: Wasim Shaikh · Depends on: gateway
 > (`04`), MCP server (`03`), policies (`12`), platform console (`16`).
 
 ## 1. Problem / intent
 
-Give users **one branded place** to see which AI coding agents are talking to
+Give users **one place** to see which AI coding agents are talking to
 the Hub, what models are available, and to choose the model — without building a
 coding agent from scratch and without touching any agent's internal prompts.
 
@@ -18,15 +18,11 @@ Two realities shape the design (see conversation + `16`):
   already owns the model catalog and routing, so "pick a model" = set the Hub's
   default/routing, which every connected agent then rides.
 
-## 2. Phasing (decision: "both, phased")
+## 2. Approach
 
-- **Phase 1 — Branded control panel (this spec, now).** Detect *connected*
-  agents via MCP, list available models, let the user pick the default model
-  (enforced Hub-side), and launch CLI agents through the Hub. Server-side, lands
-  in the existing console. Low effort, no fork to maintain.
-- **Phase 2 — Own branded agent (later).** Fork an Apache-2.0 UI agent
-  (Continue or Cline), rebrand, and route it through the Hub. Fully owns its UI +
-  model picker. Tracked in §9; not built here.
+Detect *connected* agents via MCP, list available models, let each user pick
+their own model (enforced Hub-side), and surface which agents are running/
+installed via `aihub detect`. Server-side, lands in the existing console.
 
 ## 3. Detection model (the key idea)
 
@@ -84,14 +80,12 @@ self-serve. The admin default is only a fallback.
   it's an intentional selection. An explicit model in the request always wins;
   we never override what the agent asked for or touch its internal picker.
 
-### FR5 — Console UI (branded)
-- New **Agents** tab in `/admin`: connected-agents table, model catalog, and a
-  default-model selector. Vanilla, theme-aware, matches the existing console.
+### FR5 — Console UI
+- **Agents & Models** tab in `/admin`: connected-agents table, model catalog, and
+  the org fallback-default selector. **`/account`** carries each user's own model
+  picker. Vanilla, theme-aware, matches the existing console.
 
-### FR6 — Terminal launcher (CLI agents)
-- `aihub run` → menu: pick agent (auto-detected from `PATH`: aider, claude,
-  codex, …) + pick model (from `/v1/models`) → sets the right env (base URL →
-  Hub, key, model) and execs the agent.
+### FR6 — CLI helpers
 - `aihub models` / `aihub agents` → list catalog / connected agents.
 
 ### FR7 — Local detection (`aihub detect`)
@@ -115,7 +109,8 @@ self-serve. The admin default is only a fallback.
 | agent | text | normalized display name |
 | raw_name | text | as reported by the client |
 | version | text | |
-| source | text | `mcp` \| `gateway` |
+| source | text | `mcp` \| `gateway` \| `local` |
+| status | text | `connected` \| `running` \| `installed` (migration 016) |
 | last_model | text | last model seen (gateway) |
 | project | text | from `x-hub-project` |
 | seen_count | int | incremented on upsert |
@@ -141,7 +136,7 @@ Unique `(org_id, agent, source)` for upsert. Indexed on `(org_id, last_seen)`.
 - No local machine scanning from the server (detection of *installed* agents
   stays in the extension).
 
-## 8. Acceptance criteria (Phase 1)
+## 8. Acceptance criteria
 
 1. An MCP `initialize` from a client with `clientInfo.name="cursor"` creates/updates
    an `agent_connection` row; `GET /api/agents` shows it.
@@ -149,14 +144,6 @@ Unique `(org_id, agent, source)` for upsert. Indexed on `(org_id, last_seen)`.
 3. `GET /v1/models` returns the catalog from the yaml (no embeddings).
 4. `PUT /api/settings/default-model` sets a `model` policy; a subsequent gateway
    call with no routing uses that model.
-5. `/admin` **Agents** tab renders agents + models + a working default selector.
-6. `aihub run` lists installed CLI agents + models and launches one through the Hub.
+5. `/admin` **Agents** tab renders agents + models + a working model selector.
+6. `aihub detect` lists installed/running agents and reports them to the Hub.
 
-## 9. Phase 2 notes (fork a branded agent)
-
-- Candidates: **Continue** or **Cline** (Apache-2.0, real chat UI, custom
-  OpenAI-compatible base URL). Rebrand = swap name/icons, keep `NOTICE`/license.
-- Point its provider at `<hub>/v1` with the org key; its context comes from the
-  Hub over MCP exactly like Cursor's does today.
-- Cost: maintain the fork (periodic upstream merges). Decide base after Phase 1
-  ships and we see real usage.

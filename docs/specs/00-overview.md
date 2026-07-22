@@ -95,5 +95,4 @@ copilot what's failing. Gated by `app_user.is_platform_admin`. Full detail in
 | `07`–`14` | Data residency, guardrails, cache, metrics, dashboard, routing, scoping, code-aware RAG |
 | `15-plans-entitlements.md` | Open-core free/paid split, enforced in code |
 | `16-platform-admin.md` | Operator console: cross-org control, issue analysis, copilot |
-| `17-agents-models-console.md` | Connected-agent detection, model catalog, user model picker, `aihub run` |
-| `18-branded-agent.md` | Phase 2: fork Cline into a branded, Hub-routed agent |
+| `17-agents-models-console.md` | Connected-agent detection, model catalog, user model picker, `aihub detect` |
