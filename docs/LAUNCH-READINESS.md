@@ -7,16 +7,28 @@
 
 Legend: 🔴 blocker · 🟠 needed for paid · 🟢 enterprise/GA · ✅ done
 
+## Scope note: we provide NO LLM
+
+This product provides **services to agents (Cursor, Kiro, and others)** — shared
+context, memory, code-aware retrieval, and governance over MCP. It does **not**
+sell or provide LLM inference; each agent uses its own model. The repo contains
+an *optional* LLM gateway and a few LLM-assisted niceties (session summaries,
+memory extraction, RAG reranker, operator copilot) — **all optional, all with
+deterministic fallbacks** — so the product runs with zero LLM configured. See
+`docs/specs/17` / `18` history for why closed agents can't be driven anyway.
+
 ## P0 — cannot take money without these
 
-- [ ] 🔴 **Run against real LLM providers.** Everything is verified with a mock.
-  Wire real OpenAI/Anthropic keys into `deploy/litellm.config.yaml`, and confirm:
-  real chat + streaming, accurate token/cost metering, fallback on a real 429,
-  and the semantic cache. *Owner action: provide keys.*
-- [ ] 🔴 **Real embeddings for RAG.** `EMBEDDINGS_PROVIDER=local` is a hash
-  fallback (not semantic). Switch to `minilm` or a provider embedding model and
-  re-check retrieval quality on a real repo. (`@xenova/transformers` install was
-  blocked by the proxy — resolve or use a provider embedding endpoint.)
+- [ ] 🔴 **Enable in-process embeddings for semantic RAG.** No LLM provider
+  needed: set `EMBEDDINGS_PROVIDER=minilm` (real vectors, runs inside the Hub,
+  no API key). Confirm the model loads in your deploy image (`@xenova/transformers`
+  was blocked by the proxy here — bake it into the image or pre-download weights),
+  then re-check retrieval quality on a real repo. `local` is only a non-semantic
+  hash fallback — don't ship on it.
+- [ ] 🟢 **(Optional) LLM gateway** — only if you *choose* to offer inference
+  routing to the agents that can point a base URL at you (aider, Claude Code),
+  and only **BYO-key** (the customer's key). Not required for Cursor/Kiro, not a
+  vendor-LLM business. Leave it off if it's not part of your offering.
 - [ ] 🔴 **Deploy to real infrastructure.** It has only ever run on localhost.
   Need: a host (Fly/Render/ECS/K8s), managed Postgres **with pgvector**, Redis,
   TLS + domain, `/ready` as the readiness probe. See `docs/DEPLOYMENT.md`.
@@ -72,10 +84,13 @@ Legend: 🔴 blocker · 🟠 needed for paid · 🟢 enterprise/GA · ✅ done
 
 ## What's genuinely solid today (don't re-litigate)
 
-Auth (API keys, JWT, password, SSO scaffolding), open-core entitlements (free/
-team/enterprise enforced in code), shared context/memory/RAG over MCP,
-code-aware hybrid retrieval + knowledge map, the LLM gateway (fallback, routing,
-semantic cache, budgets, metering), governance (RBAC, audit, policies, cost
-dashboards), the admin/account/dashboard/superadmin consoles, connected-agent
-detection, PII/secret redaction, retention, and DB-enforced tenant isolation
-(RLS). All covered by the test suite.
+**Core (the product):** auth (API keys, JWT, password, SSO scaffolding),
+open-core entitlements (free/team/enterprise enforced in code), shared
+context/memory/RAG over MCP, code-aware hybrid retrieval + knowledge map,
+governance (RBAC, audit, policies, cost dashboards), the admin/account/
+dashboard/superadmin consoles, connected-agent detection, PII/secret redaction,
+retention, and DB-enforced tenant isolation (RLS). All covered by the test suite.
+
+**Optional (off by default in your model):** the LLM gateway (BYO-key routing,
+fallback, semantic cache, budgets, metering) and the LLM-assisted niceties
+(summaries, memory extraction, reranker, copilot) — each with a no-LLM fallback.
