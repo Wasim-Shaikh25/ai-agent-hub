@@ -70,12 +70,20 @@ export async function requireAuth(req: FastifyRequest, reply: FastifyReply): Pro
     await reply.code(401).send({ error: { code: 'unauthorized', message: 'Invalid or missing credentials' } });
     return;
   }
-  if (await isSuspended(ctx.orgId)) {
+  // Platform admins are exempt — a suspended org must never lock its own
+  // operator out of the controls that un-suspend it.
+  if (await isSuspended(ctx.orgId) && !(await isPlatformAdmin(ctx.userId))) {
     void events.record('warn', 'auth', 'org_suspended', 'Blocked request from suspended workspace', ctx.orgId, {});
     await reply.code(403).send({ error: { code: 'org_suspended', message: 'This workspace is suspended. Contact support.' } });
     return;
   }
   req.auth = ctx;
+}
+
+/** True if the user is a platform super-admin. */
+export async function isPlatformAdmin(userId: string): Promise<boolean> {
+  const row = await queryOne<{ is_platform_admin: boolean }>('SELECT is_platform_admin FROM app_user WHERE id = $1', [userId]);
+  return Boolean(row?.is_platform_admin);
 }
 
 /** Fastify preHandler requiring the caller to be a platform super-admin. */
@@ -84,8 +92,7 @@ export async function requireSuperadmin(req: FastifyRequest, reply: FastifyReply
     await reply.code(401).send({ error: { code: 'unauthorized', message: 'Authentication required' } });
     return;
   }
-  const row = await queryOne<{ is_platform_admin: boolean }>('SELECT is_platform_admin FROM app_user WHERE id = $1', [req.auth.userId]);
-  if (!row?.is_platform_admin) {
+  if (!(await isPlatformAdmin(req.auth.userId))) {
     await reply.code(403).send({ error: { code: 'forbidden', message: 'Platform admin only' } });
   }
 }
