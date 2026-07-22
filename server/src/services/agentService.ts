@@ -8,6 +8,7 @@ export interface AgentConnection {
   raw_name: string;
   version: string;
   source: string;
+  status: string;
   last_model: string | null;
   project: string | null;
   seen_count: number;
@@ -20,7 +21,8 @@ export interface RecordInput {
   userId?: string | null;
   rawName: string;
   version?: string;
-  source: 'mcp' | 'gateway';
+  source: 'mcp' | 'gateway' | 'local';
+  status?: 'connected' | 'running' | 'installed';
   model?: string;
   project?: string;
 }
@@ -60,18 +62,20 @@ export class AgentService {
   async record(input: RecordInput): Promise<void> {
     try {
       const agent = normalizeAgent(input.rawName);
+      const status = input.status ?? 'connected';
       await query(
-        `INSERT INTO agent_connection (org_id, user_id, agent, raw_name, version, source, last_model, project)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+        `INSERT INTO agent_connection (org_id, user_id, agent, raw_name, version, source, status, last_model, project)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
          ON CONFLICT (org_id, agent, source) DO UPDATE SET
            user_id    = COALESCE(EXCLUDED.user_id, agent_connection.user_id),
            raw_name   = EXCLUDED.raw_name,
            version    = COALESCE(NULLIF(EXCLUDED.version,''), agent_connection.version),
+           status     = EXCLUDED.status,
            last_model = COALESCE(EXCLUDED.last_model, agent_connection.last_model),
            project    = COALESCE(EXCLUDED.project, agent_connection.project),
            seen_count = agent_connection.seen_count + 1,
            last_seen  = now()`,
-        [input.orgId, input.userId ?? null, agent, input.rawName.slice(0, 120), (input.version ?? '').slice(0, 40), input.source, input.model ?? null, input.project ?? null],
+        [input.orgId, input.userId ?? null, agent, input.rawName.slice(0, 120), (input.version ?? '').slice(0, 40), input.source, status, input.model ?? null, input.project ?? null],
       );
     } catch {
       /* detection must never break the request it observes */

@@ -33,6 +33,7 @@ button{padding:8px 14px;border-radius:8px;border:0;background:var(--cyan);color:
 button.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
 button.danger{background:transparent;color:var(--bad);border:1px solid var(--line)}
 .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:color-mix(in oklab,var(--cyan) 16%,transparent);color:var(--cyan)}
+.pill.amber{background:color-mix(in oklab,var(--amber) 18%,transparent);color:var(--amber)}
 .right{text-align:right}.msg{font-size:13px;margin-top:8px;min-height:16px}.err{color:var(--bad)}.ok{color:var(--good)}
 .locked{color:var(--amber);font-size:13px}
 h2{font-size:15px;margin:0 0 12px}
@@ -79,10 +80,10 @@ const VIEWS={
    '<div class="card"><h2>Org default model</h2><p class="muted" style="margin-top:-4px">Fallback only — used for users who haven\\'t picked their own model on their Account page. Users always choose for themselves; this never overrides them. We never touch an agent\\'s internal picker.</p>'+
    '<div class="row"><div style="flex:2"><label>Model</label><select id="dm">'+(opts||'<option>gpt-4o-mini</option>')+'</select></div><div style="flex:0"><label>&nbsp;</label><button onclick="setDefaultModel()">Save</button></div></div><div class="msg" id="dmm"></div></div>'+
    '<div class="card"><h2>Available models ('+(cat.models||[]).length+')</h2><p class="muted mono">'+((cat.models||[]).map(esc).join(' · ')||'none')+'</p><p class="muted" style="font-size:12px">Edit <span class="mono">deploy/litellm.config.yaml</span> or set <span class="mono">HUB_MODELS</span> to change this list.</p></div>'+
-   '<div class="card"><h2>Connected agents ('+list.length+')</h2><p class="muted" style="margin-top:-4px">Detected from the MCP handshake and gateway traffic — what is actually using your Hub.</p>'+
-   '<table><tr><th>Agent</th><th>Via</th><th>Last model</th><th>Calls</th><th>Last seen</th></tr>'+
-   (list.length?list.map(a=>'<tr><td>'+esc(a.agent)+(a.version?' <span class="muted">'+esc(a.version)+'</span>':'')+'</td><td><span class="pill">'+esc(a.source)+'</span></td><td class="mono">'+esc(a.last_model||'—')+'</td><td>'+a.seen_count+'</td><td class="muted">'+new Date(a.last_seen).toLocaleString()+'</td></tr>').join(''):'<tr><td colspan="5" class="muted">No agents yet — connect one with <span class="mono">aihub connect</span> and it appears here on first call.</td></tr>')+
-   '</table></div>';
+   '<div class="card"><h2>Agents ('+Object.keys(groupAgents(list)).length+')</h2><p class="muted" style="margin-top:-4px">Connected = talking to your Hub (MCP/gateway). Running/installed comes from <span class="mono">aihub detect</span> on the machine.</p>'+
+   '<table><tr><th>Agent</th><th>Status</th><th>Via</th><th>Last model</th><th>Last seen</th><th></th></tr>'+
+   (list.length?Object.values(groupAgents(list)).map(g=>'<tr><td>'+esc(g.agent)+(g.version?' <span class="muted">'+esc(g.version)+'</span>':'')+'</td><td>'+statusPill(g.status)+'</td><td class="muted">'+[...g.sources].map(esc).join(', ')+'</td><td class="mono">'+esc(g.last_model||'—')+'</td><td class="muted">'+new Date(g.last_seen).toLocaleString()+'</td><td class="right">'+(g.status==='connected'?'':'<button class="ghost" onclick="showConnect(\\''+esc(g.agent)+'\\')">Connect</button>')+'</td></tr>').join(''):'<tr><td colspan="6" class="muted">No agents yet — run <span class="mono">aihub detect</span> on your machine, or <span class="mono">aihub connect</span> an agent.</td></tr>')+
+   '</table><div class="msg" id="connmsg"></div></div>';
  })},
  content(){guard(async()=>{
    const items=await api('/api/content');
@@ -132,6 +133,11 @@ const VIEWS={
  })},
 };
 function tile(n,l){return '<div class="tile"><div class="n">'+n+'</div><div class="l">'+l+'</div></div>'}
+const STATUS_RANK={connected:3,running:2,installed:1};
+function groupAgents(list){const g={};list.forEach(a=>{const k=a.agent;if(!g[k])g[k]={agent:a.agent,status:a.status,sources:new Set(),last_model:null,last_seen:a.last_seen,version:a.version};const e=g[k];e.sources.add(a.source);if((STATUS_RANK[a.status]||0)>(STATUS_RANK[e.status]||0))e.status=a.status;if(a.last_model)e.last_model=a.last_model;if(new Date(a.last_seen)>new Date(e.last_seen))e.last_seen=a.last_seen;if(a.version)e.version=a.version;});return g}
+function statusPill(s){const c=s==='connected'?'':(s==='running'?'amber':'');const dot=s==='installed'?'○':'●';return '<span class="pill '+c+'">'+dot+' '+esc(s)+'</span>'}
+const CONNECT_SLUG={'Cursor':'cursor','Kiro':'kiro','Windsurf':'windsurf','VS Code':'vscode','Cline':'cline','Claude Code':'claude'};
+function showConnect(agent){const slug=CONNECT_SLUG[agent];const m=document.getElementById('connmsg');if(!slug){m.className='msg';m.textContent=agent+': launch it with  aihub run  (terminal agent).';return}m.className='msg ok';m.textContent='Run on your machine:  aihub connect '+slug+'   (writes its MCP config + gateway URL).'}
 function msg(id,t,ok){const m=document.getElementById(id);m.className='msg '+(ok?'ok':'err');m.textContent=t}
 
 async function addContent(){try{await api('/api/content',{method:'POST',body:JSON.stringify({type:content_type(),name:v('cn'),description:v('cd'),body:v('cb')})});VIEWS.content()}catch(e){msg('cm',e.message)}}

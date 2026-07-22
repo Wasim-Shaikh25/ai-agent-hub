@@ -85,12 +85,17 @@ the `/superadmin` Issues tab and the copilot's issue awareness. Indexed on
 Holds user 👍/👎 labels and copilot exchanges — **not** harvested gateway
 prompt/response pairs.
 
-### agent_connection  (migration 014)
+### agent_connection  (migrations 014, 016)
 `id`, `org_id`, `user_id` (nullable), `agent` (normalized display name),
-`raw_name`, `version`, `source` (`mcp|gateway`), `last_model`, `project`,
-`seen_count`, `first_seen`, `last_seen`. Server-side **connected-agent
-detection** from the MCP `initialize` handshake + gateway traffic. Unique
+`raw_name`, `version`, `source` (`mcp|gateway|local`), `status`
+(`connected|running|installed`), `last_model`, `project`, `seen_count`,
+`first_seen`, `last_seen`. **Agent detection** from the MCP `initialize`
+handshake, gateway traffic, and the local `aihub detect` scan. Unique
 `(org_id, agent, source)` for upsert. See `17-agents-models-console.md`.
+
+### user_model_pref  (migration 015)
+`(org_id, user_id)` PK, `model`, `updated_at`. Each user's own model choice —
+user-oriented, applied Hub-side when their agent doesn't pin a model.
 
 ## 3. Indexing
 

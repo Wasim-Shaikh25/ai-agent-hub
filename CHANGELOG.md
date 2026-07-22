@@ -30,12 +30,18 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
 - **CLI launcher** — `aihub run` (auto-detects installed CLI agents on PATH →
   pick agent + model → launches it routed through the Hub), plus `aihub models`
   and `aihub agents`.
+- **Local detection** — `aihub detect` scans the machine for running/installed
+  agents (Cursor, Kiro, Windsurf, VS Code, CLI agents) and reports to
+  `POST /api/agents/local`; `--connect` wires them all. The Agents tab groups by
+  agent (strongest of connected>running>installed) with a **Connect** action for
+  those not yet wired. Kiro added as a connectable agent.
 - Requirements/design: `docs/specs/17-agents-models-console.md`.
 
 ### Migrations (this set)
 
 - `014_agents.sql` — `agent_connection` (+ `(org_id, last_seen)` index).
 - `015_user_model.sql` — `user_model_pref` (per-user model choice).
+- `016_agent_status.sql` — `agent_connection.status` (connected/running/installed).
 
 ### Config (this set)
 

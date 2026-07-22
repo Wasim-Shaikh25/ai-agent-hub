@@ -126,7 +126,7 @@ function mergeMcpConfig(existing, incoming) {
   return out;
 }
 
-const AGENTS = ['cursor', 'claude', 'vscode', 'windsurf', 'cline'];
+const AGENTS = ['cursor', 'claude', 'vscode', 'windsurf', 'cline', 'kiro'];
 
 function gatewayHint(agent, url, key) {
   const base = url.replace(/\/$/, '');
@@ -229,6 +229,81 @@ async function pick(label, options) {
   return options[idx] ?? options[0];
 }
 
+// Standalone agent apps we can detect by process name / install dir. In-editor
+// agents (Amazon Q, Copilot) aren't separate processes — the VS Code extension
+// detects those; a CLI process scan can't.
+const APP_MATCHERS = [
+  { name: 'Cursor', slug: 'cursor', proc: /cursor/i, dir: '~/.cursor' },
+  { name: 'Kiro', slug: 'kiro', proc: /kiro/i, dir: '~/.kiro' },
+  { name: 'Windsurf', slug: 'windsurf', proc: /windsurf/i, dir: '~/.codeium/windsurf' },
+  { name: 'VS Code', slug: 'vscode', proc: /(^|[\\/])code(\.exe)?$/i, dir: '~/.vscode' },
+];
+// CLI agents detected on PATH (from the RUNNERS registry) count as installed.
+const CLI_SLUGS = { aider: 'claude', claude: 'claude', codex: 'codex' };
+
+function runningProcesses() {
+  try {
+    const cmd = process.platform === 'win32' ? 'tasklist' : 'ps -A -o comm=';
+    return execSync(cmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch { return ''; }
+}
+
+/** Scans the machine for known agents; returns [{agent, slug, status}]. */
+function detectAgents() {
+  const procs = runningProcesses();
+  const lines = procs.split('\n');
+  const found = [];
+  for (const m of APP_MATCHERS) {
+    const running = lines.some((l) => m.proc.test(l));
+    const installed = existsSync(expandHome(m.dir));
+    if (running) found.push({ agent: m.name, slug: m.slug, status: 'running' });
+    else if (installed) found.push({ agent: m.name, slug: m.slug, status: 'installed' });
+  }
+  // CLI agents on PATH (Claude Code, Codex) — installed, launchable via `aihub run`.
+  for (const bin of Object.keys(RUNNERS)) {
+    if (hasBin(bin)) {
+      const name = bin === 'aider' ? 'Aider' : bin === 'claude' ? 'Claude Code' : 'Codex';
+      if (!found.some((f) => f.agent === name)) found.push({ agent: name, slug: bin, status: 'installed' });
+    }
+  }
+  return found;
+}
+
+async function cmdDetect(flags) {
+  const cfg = loadConfig();
+  const found = detectAgents();
+  if (!found.length) {
+    console.log('No known agents detected (looked for Cursor, Kiro, Windsurf, VS Code, and CLI agents on PATH).');
+    return;
+  }
+  console.log('Detected agents:');
+  for (const f of found) console.log(`  ${f.agent.padEnd(14)} ${f.status}`);
+
+  // Report to the Hub so they appear in the console's Agents tab.
+  if (cfg.url && cfg.key) {
+    try {
+      const r = await apiPost('/api/agents/local', cfg, { agents: found.map((f) => ({ agent: f.agent, status: f.status })) });
+      console.log(`\n✓ Reported ${r.recorded} agents to the Hub — see ${cfg.url}/admin → Agents & Models.`);
+    } catch (e) {
+      console.log(`\n(Not reported: ${e.message})`);
+    }
+  } else {
+    console.log('\nNot logged in — run `aihub login` to report these to your Hub console.');
+  }
+
+  // Optionally wire each detected agent to the Hub in one shot.
+  if (flags.connect) {
+    console.log('\nConnecting detected agents…');
+    for (const f of found) {
+      if (!AGENTS.includes(f.slug)) { console.log(`  ${f.agent}: launch via \`aihub run\` (CLI agent)`); continue; }
+      try { await cmdConnect([f.slug], { dir: flags.dir ?? '.' }); }
+      catch (e) { console.log(`  ${f.agent}: ${e.message}`); }
+    }
+  } else {
+    console.log('\nTip: `aihub detect --connect` wires them all to the Hub at once.');
+  }
+}
+
 async function cmdModels() {
   const cfg = loadConfig();
   const { data } = await api('/v1/models', cfg);
@@ -289,6 +364,7 @@ Usage:
   aihub login --url <URL> --key <API_KEY>   Save & validate credentials
   aihub status                              Show server + auth status
   aihub connect <agent> [--dir .]           Write native MCP config + gateway hint
+  aihub detect [--connect]                  Scan for installed/running agents, report to Hub
   aihub run [--agent X] [--model Y]         Pick a CLI agent + model, run via the Hub
   aihub models                              List available models
   aihub agents                              List agents connected to the Hub
@@ -307,6 +383,7 @@ async function main() {
       case 'login': await cmdLogin(flags); break;
       case 'status': await cmdStatus(); break;
       case 'connect': await cmdConnect(positional, flags); break;
+      case 'detect': await cmdDetect(flags); break;
       case 'run': await cmdRun(flags); break;
       case 'models': await cmdModels(); break;
       case 'agents': await cmdAgents(); break;

@@ -34,9 +34,18 @@ Detection has two complementary sources — we use **both**, for different jobs:
 
 | Source | Detects | Where | Used for |
 |---|---|---|---|
-| **MCP `initialize` handshake** (`clientInfo.name/version`) | agents **actually connected** to the Hub (any agent) | server-side | the console's live "Connected agents" list |
+| **MCP `initialize` handshake** (`clientInfo.name/version`) | agents **actually connected** to the Hub (any agent) | server-side | the console's live "connected" agents |
 | **Gateway request** (`x-hub-agent` / `User-Agent` + `model`) | agent + **the model it just used** | server-side | "agent → last model" attribution |
-| VS Code extension (`agentDetector.ts`, existing) | agents **installed but idle** | client-side (VS Code only) | onboarding / connect step |
+| **`aihub detect`** (local process/PATH scan) | standalone apps **running/installed** on the machine (Cursor, Kiro, Windsurf, VS Code) + CLI agents on PATH | client-side (any OS) | the "what's on the machine" list + Connect nudge |
+| VS Code extension (`agentDetector.ts`, existing) | in-editor extensions (Amazon Q, Copilot) | client-side (VS Code only) | onboarding for extension-based agents |
+
+**Why a local command for "what's open":** a cloud server can't see a user's
+running programs, and in-editor agents (Amazon Q, Copilot) aren't separate
+processes. So `aihub detect` runs locally — no daemon, no special permissions,
+the *user* runs it — scans for standalone agent apps + CLI agents, and reports
+to `POST /api/agents/local`. Rows are labeled `running`/`installed` (vs
+`connected`); the console groups by agent and shows the strongest status with a
+**Connect** action for those not yet wired.
 
 `clientInfo.name` is self-reported; we **normalize** known names → display names
 and fall back to the raw string. Detection never blocks the request.
@@ -84,6 +93,15 @@ self-serve. The admin default is only a fallback.
   codex, …) + pick model (from `/v1/models`) → sets the right env (base URL →
   Hub, key, model) and execs the agent.
 - `aihub models` / `aihub agents` → list catalog / connected agents.
+
+### FR7 — Local detection (`aihub detect`)
+- Scans running processes + install dirs for standalone agents (Cursor, Kiro,
+  Windsurf, VS Code) and CLI agents on `PATH`; reports to `POST /api/agents/local`
+  as `source=local`, `status=running|installed`.
+- `--connect` additionally wires each detected+supported agent via the existing
+  `aihub connect` flow.
+- The console groups all sources per agent, strongest status wins
+  (`connected>running>installed`), and offers **Connect** for the rest.
 
 ## 5. Data model
 

@@ -27,6 +27,10 @@ aihub connect cline                # -> .cline/mcp.json + OpenAI-compatible base
 
 aihub config cursor                # just print the snippet
 
+# scan this machine for installed/running agents and report them to the Hub
+aihub detect                       # lists Cursor/Kiro/Windsurf/VS Code + CLI agents
+aihub detect --connect             # also wires each detected agent to the Hub
+
 # pick a terminal agent + model from one place, run it through the Hub
 aihub run                          # interactive: choose agent (auto-detected) + model
 aihub run --agent aider --model claude-sonnet   # non-interactive

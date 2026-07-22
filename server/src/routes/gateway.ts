@@ -100,6 +100,18 @@ export async function registerGatewayRoutes(app: FastifyInstance): Promise<void>
   // -- connected agents -----------------------------------------------------
   app.get('/api/agents', { preHandler: requireAuth }, async (req) => agents.list(req.auth!.orgId));
 
+  // Local scan report (from `aihub detect`): agents present on the user's
+  // machine but possibly not yet wired to the Hub.
+  app.post('/api/agents/local', { preHandler: requireAuth }, async (req) => {
+    const items = ((req.body as { agents?: Array<{ agent?: string; status?: string; model?: string }> }).agents ?? []).slice(0, 50);
+    for (const it of items) {
+      if (!it.agent) continue;
+      const status = it.status === 'running' || it.status === 'installed' ? it.status : 'installed';
+      await agents.record({ orgId: req.auth!.orgId, userId: req.auth!.userId, rawName: it.agent, source: 'local', status, model: it.model });
+    }
+    return { ok: true, recorded: items.length };
+  });
+
   // -- usage summary --------------------------------------------------------
   app.get('/api/usage', { preHandler: requireAuth }, async (req) => {
     const [tokens, usd, budget] = await Promise.all([
