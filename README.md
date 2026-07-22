@@ -14,6 +14,7 @@ prompts.
 - 💳 **Plans & pricing:** [`docs/PRICING.md`](docs/PRICING.md)
 - 🔒 **Security:** [`SECURITY.md`](SECURITY.md)
 - 📝 **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)
+- 🚦 **Launch readiness:** [`docs/LAUNCH-READINESS.md`](docs/LAUNCH-READINESS.md) · legal drafts in [`docs/legal/`](docs/legal/)
 
 ### Why it's different from an LLM router
 
