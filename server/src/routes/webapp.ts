@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { TOKENS, MARK } from './theme.js';
 
 /** Serves the customer-facing web app: /login (signup+login) and /account. */
 export async function registerWebappRoutes(app: FastifyInstance): Promise<void> {
@@ -7,14 +8,13 @@ export async function registerWebappRoutes(app: FastifyInstance): Promise<void> 
 }
 
 const STYLE = /* css */ `
-:root{--bg:#0a0e1a;--panel:#111a2e;--line:#1c2740;--ink:#eaf0fb;--muted:#8ea0c0;--cyan:#3ee0d0;--violet:#8b93f8;--good:#54d98c;--bad:#f4707f}
-@media(prefers-color-scheme:light){:root{--bg:#f4f7fc;--panel:#fff;--line:#e3e9f4;--ink:#111a2e;--muted:#4d5c78;--cyan:#0d9488;--violet:#5b63c4;--good:#137a4b;--bad:#c02a3b}}
+${TOKENS}
+${MARK}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 .wrap{max-width:440px;margin:8vh auto;padding:0 20px}
 .acct{max-width:720px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:750;letter-spacing:-.02em;margin-bottom:22px}
-.mark{width:30px;height:30px;border-radius:8px;background:conic-gradient(from 210deg,var(--cyan),var(--violet),var(--cyan));display:grid;place-items:center;color:#04060c;font-weight:900}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:26px}
 h1{font-size:22px;letter-spacing:-.02em;margin:0 0 4px}.sub{color:var(--muted);font-size:14px;margin:0 0 20px}
 label{display:block;font-size:13px;color:var(--muted);margin:14px 0 5px}

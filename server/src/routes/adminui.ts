@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { TOKENS, MARK } from './theme.js';
 
 /** Serves the org admin console at /admin (manage everything in a workspace). */
 export async function registerAdminUiRoutes(app: FastifyInstance): Promise<void> {
@@ -7,14 +8,13 @@ export async function registerAdminUiRoutes(app: FastifyInstance): Promise<void>
 
 const ADMIN_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Admin · AI Agent Hub</title>
 <style>
-:root{--bg:#0a0e1a;--panel:#111a2e;--panel2:#0d1526;--line:#1c2740;--ink:#eaf0fb;--muted:#8ea0c0;--cyan:#3ee0d0;--violet:#8b93f8;--good:#54d98c;--bad:#f4707f;--amber:#f5b53d}
-@media(prefers-color-scheme:light){:root{--bg:#f4f7fc;--panel:#fff;--panel2:#f7f9fd;--line:#e3e9f4;--ink:#111a2e;--muted:#4d5c78;--cyan:#0d9488;--violet:#5b63c4;--good:#137a4b;--bad:#c02a3b;--amber:#b7791f}}
+${TOKENS}
+${MARK}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 .app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
 aside{background:var(--panel2);border-right:1px solid var(--line);padding:18px 12px}
 .brand{display:flex;align-items:center;gap:9px;font-weight:750;padding:0 8px 16px;letter-spacing:-.02em}
-.mark{width:26px;height:26px;border-radius:7px;background:conic-gradient(from 210deg,var(--cyan),var(--violet),var(--cyan));display:grid;place-items:center;color:#04060c;font-weight:900}
 .nav a{display:block;padding:9px 10px;border-radius:8px;color:var(--muted);cursor:pointer;font-weight:600;font-size:13.5px}
 .nav a.on{background:var(--panel);color:var(--ink)}
 .nav a:hover{color:var(--ink)}

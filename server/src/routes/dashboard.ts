@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { TOKENS, MARK } from './theme.js';
 
 /** Serves the self-contained web dashboard at GET /dashboard. */
 export async function registerDashboardRoutes(app: FastifyInstance): Promise<void> {
@@ -14,27 +15,23 @@ const DASHBOARD_HTML = /* html */ `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI Agent Hub — Dashboard</title>
 <style>
-  :root{
-    --bg:#f5f7fb; --surface:#fff; --text:#161b2b; --muted:#5c6579; --border:#e6e9f2;
-    --accent:#4f46e5; --accent-soft:#ecedff; --good:#137a4b; --warn:#9a6a00; --bad:#c02a3b;
-    --bar:#8b93f5; --grid:#eef0f6;
-  }
-  @media(prefers-color-scheme:dark){:root{
-    --bg:#0b0e16; --surface:#121724; --text:#e7eaf3; --muted:#8b93a9; --border:#212739;
-    --accent:#818cf8; --accent-soft:#1b2038; --good:#4ade80; --warn:#e0b64a; --bad:#f4707f;
-    --bar:#5b63c4; --grid:#1a2032;
-  }}
+${TOKENS}
+${MARK}
+  /* Map the dashboard's local names onto the shared palette. */
+  :root{--surface:var(--panel);--text:var(--ink);--border:var(--line);--accent:var(--cyan);
+    --accent-soft:color-mix(in oklab,var(--cyan) 16%,transparent);--warn:var(--amber);
+    --bar:var(--violet);--grid:var(--line)}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
   .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+  .brand{width:30px;height:30px;border-radius:8px;background:conic-gradient(from 210deg,var(--cyan),var(--violet),var(--amber),var(--cyan));display:grid;place-items:center;color:#04060c;font-weight:900}
   .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
   header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
   h1{font-size:20px;margin:0;letter-spacing:-.01em}
-  .brand{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#22d3ee);display:grid;place-items:center;color:#fff;font-weight:800}
   .spacer{flex:1}
   input,button{font:inherit;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);padding:8px 12px}
   input{min-width:230px}
-  button{cursor:pointer;background:var(--accent);color:#fff;border-color:transparent;font-weight:600}
+  button{cursor:pointer;background:var(--accent);color:#04120f;border-color:transparent;font-weight:700}
   .hint{color:var(--muted);font-size:12.5px;margin:2px 0 20px}
   .tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
   @media(max-width:820px){.tiles{grid-template-columns:repeat(2,1fr)}}
