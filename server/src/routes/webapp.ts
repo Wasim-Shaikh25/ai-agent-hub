@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { TOKENS, MARK } from './theme.js';
+import { TOKENS, MARK, BASE } from './theme.js';
 
 /** Serves the customer-facing web app: /login (signup+login) and /account. */
 export async function registerWebappRoutes(app: FastifyInstance): Promise<void> {
@@ -10,8 +10,8 @@ export async function registerWebappRoutes(app: FastifyInstance): Promise<void> 
 const STYLE = /* css */ `
 ${TOKENS}
 ${MARK}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+${BASE}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:14.5px;line-height:1.6}
 .wrap{max-width:440px;margin:8vh auto;padding:0 20px}
 .acct{max-width:720px}
 .brand{display:flex;align-items:center;gap:10px;font-weight:750;letter-spacing:-.02em;margin-bottom:22px}

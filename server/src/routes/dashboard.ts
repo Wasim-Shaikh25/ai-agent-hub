@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { TOKENS, MARK } from './theme.js';
+import { TOKENS, MARK, BASE } from './theme.js';
 
 /** Serves the self-contained web dashboard at GET /dashboard. */
 export async function registerDashboardRoutes(app: FastifyInstance): Promise<void> {
@@ -21,9 +21,9 @@ ${MARK}
   :root{--surface:var(--panel);--text:var(--ink);--border:var(--line);--accent:var(--cyan);
     --accent-soft:color-mix(in oklab,var(--cyan) 16%,transparent);--warn:var(--amber);
     --bar:var(--violet);--grid:var(--line)}
-  *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--text);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+${BASE}
+  body{margin:0;background:var(--bg);color:var(--text);font-size:14.5px;line-height:1.6}
+  .mono{font-variant-numeric:tabular-nums}
   .brand{width:30px;height:30px;border-radius:8px;background:conic-gradient(from 210deg,var(--cyan),var(--violet),var(--amber),var(--cyan));display:grid;place-items:center;color:#04060c;font-weight:900}
   .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 80px}
   header{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:8px}
@@ -35,7 +35,7 @@ ${MARK}
   .hint{color:var(--muted);font-size:12.5px;margin:2px 0 20px}
   .tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
   @media(max-width:820px){.tiles{grid-template-columns:repeat(2,1fr)}}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
   .tile .n{font-size:23px;font-weight:750;letter-spacing:-.02em}
   .tile .l{font-size:12px;color:var(--muted);margin-top:3px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}

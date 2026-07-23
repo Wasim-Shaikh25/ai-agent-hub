@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { TOKENS, MARK } from './theme.js';
+import { TOKENS, MARK, BASE } from './theme.js';
 
 /** Serves the org admin console at /admin (manage everything in a workspace). */
 export async function registerAdminUiRoutes(app: FastifyInstance): Promise<void> {
@@ -10,8 +10,8 @@ const ADMIN_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charse
 <style>
 ${TOKENS}
 ${MARK}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+${BASE}
+body{margin:0;background:var(--bg);color:var(--ink);font-size:14.5px;line-height:1.6}
 .app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
 aside{background:var(--panel2);border-right:1px solid var(--line);padding:18px 12px}
 .brand{display:flex;align-items:center;gap:9px;font-weight:750;padding:0 8px 16px;letter-spacing:-.02em}
@@ -20,7 +20,7 @@ aside{background:var(--panel2);border-right:1px solid var(--line);padding:18px 1
 .nav a:hover{color:var(--ink)}
 main{padding:26px 30px;max-width:960px}
 h1{font-size:20px;margin:0 0 4px;letter-spacing:-.02em}.muted{color:var(--muted)}.sub{color:var(--muted);font-size:13px;margin:0 0 18px}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:16px}
 .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .tile .n{font-size:20px;font-weight:750}.tile .l{font-size:12px;color:var(--muted)}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 8px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top}
