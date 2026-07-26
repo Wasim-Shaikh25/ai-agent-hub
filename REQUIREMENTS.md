@@ -43,6 +43,26 @@ The `claude/multi-agent-ai-platform-9sigxi` branch turns AI Agent Hub into a hos
 - Add placeholders/stubs for **Apple** and **mobile OTP** sign-up (provider-specific secrets and SMS gateway are out of scope; the schema and route contract must be ready).
 - All OAuth sign-ups still create an org + membership exactly like the email/password flow.
 
+### R7 — Env-fed superadmin + OTP login
+- The application owner is defined by `SUPERADMIN_EMAIL`, `SUPERADMIN_MOBILE`, `SUPERADMIN_PASSWORD`, and optional `SUPERADMIN_ID`.
+- Superadmin login uses a password + one-time code sent by email (SMTP) or logged to stdout in dev/test.
+- Regular `/auth/login` rejects platform admins so they must use `/auth/superadmin/login`.
+
+### R8 — Org provisioning by superadmin
+- Superadmin creates an org from `/superadmin` with name, slug, plan, and an `admin_email`.
+- The org's `admin_email` domain becomes the SSO/OAuth auto-join domain.
+- The first user signing in with the `admin_email` becomes `owner`; later same-domain users become `member`.
+
+### R9 — SSO/OAuth domain-based auto-join
+- SSO `/auth/sso/callback` and OAuth `/auth/oauth/:provider/callback` resolve the workspace by explicit `org` slug first, then by matching email domain.
+- A user with no existing membership whose email domain matches an org's `admin_email` domain joins that org.
+- Auto-join requires the workspace to be on a plan that includes `sso`.
+
+### R10 — Dashboard visibility
+- `/admin` and its APIs require `admin`/`owner` role and expose team, agents, usage, and policies.
+- `/superadmin` is visible only to the platform superadmin and shows all orgs, issues, and tickets.
+- `/activity` is a user-facing dashboard showing the logged-in user's own usage, agents, and recent actions.
+
 ## Non-functional Requirements
 - All new routes must use the existing Fastify/Postgres stack and follow the same auth/audit patterns.
 - All changes must be covered by the existing CI (lint, build, test) where applicable.

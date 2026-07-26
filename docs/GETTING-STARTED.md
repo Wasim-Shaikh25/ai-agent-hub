@@ -10,8 +10,10 @@ cp .env.example .env
 docker compose up --build
 ```
 
-It prints a `DEV_API_KEY` on first boot. Copy it. The Hub is now at
-`http://localhost:8080` (dashboard at `/dashboard`).
+It prints a `DEV_API_KEY` on first boot. Copy it. The operator account is seeded
+from `SUPERADMIN_EMAIL`/`SUPERADMIN_PASSWORD` in `.env` (default
+`admin@localhost` / `change-me`). The Hub is at `http://localhost:8080`
+(dashboard at `/dashboard`, operator console at `/superadmin-login`).
 
 ## 2. Connect an agent
 
@@ -48,8 +50,14 @@ Point the agent's base URL at the Hub for fallback, routing, and cost metering:
 
 ## 5. See the value
 
-Open `http://localhost:8080/dashboard`, paste your key — cost, tokens, cache-hit
-rate, latency, per-developer spend, savings, and audit trail.
+- Open `http://localhost:8080/dashboard` with a user key for cost, tokens,
+  cache-hit rate, latency, per-developer spend, and audit trail.
+- Open `http://localhost:8080/activity` for a user's own usage, connected agents,
+  and recent actions.
+- Open `http://localhost:8080/admin` as an org `admin`/`owner` to manage the
+  workspace, team, and agents.
+- Open `http://localhost:8080/superadmin-login` as the operator to provision
+  orgs, change plans, and triage tickets.
 
 ## What you get for free vs paid
 

@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import { config } from './config.js';
-import { migrate, seedDev } from './db/migrate.js';
+import { migrate, seedDev, seedSuperadmin } from './db/migrate.js';
 import { pool } from './db/pool.js';
 import { resolveAuth, bearer } from './auth.js';
 import { registerApiRoutes } from './routes/api.js';
@@ -16,6 +16,7 @@ import { registerPrivacyRoutes } from './routes/privacy.js';
 import { registerMetricsRoutes } from './routes/metrics.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerWebappRoutes } from './routes/webapp.js';
+import { registerActivityRoutes } from './routes/activity.js';
 import { registerAdminUiRoutes } from './routes/adminui.js';
 import { registerPlatformRoutes, registerFeedbackRoute } from './routes/platform.js';
 import { registerSuperadminUiRoutes } from './routes/superadminui.js';
@@ -25,9 +26,10 @@ import { startRetentionScheduler } from './services/retentionScheduler.js';
 import { handleMcpRequest } from './mcp/server.js';
 
 async function main(): Promise<void> {
-  // Ensure schema + dev seed before serving traffic.
+  // Ensure schema + dev seed + configured superadmin before serving traffic.
   await migrate();
   await seedDev();
+  await seedSuperadmin();
 
   const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024, trustProxy: true });
 
@@ -80,6 +82,7 @@ async function main(): Promise<void> {
   await registerMetricsRoutes(app);
   await registerDashboardRoutes(app);
   await registerWebappRoutes(app);
+  await registerActivityRoutes(app);
   await registerAdminUiRoutes(app);
   await registerPlatformRoutes(app);
   await registerFeedbackRoute(app);

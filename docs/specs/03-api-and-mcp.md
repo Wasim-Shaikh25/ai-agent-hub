@@ -13,17 +13,42 @@ In local dev a seed key is printed on first boot (`DEV_API_KEY`).
 Credentials may be an **API key** or a **session JWT** issued by SSO login. Both
 resolve to the same `{org, user, role}` and work on REST and MCP.
 
+### Superadmin OTP login
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/auth/superadmin/login` | send OTP to the configured superadmin email |
+| POST | `/auth/superadmin/verify-otp` | verify OTP and return a JWT |
+| GET | `/auth/debug/otp?email=` | dev/test only — peek the latest active OTP |
+
+The operator is seeded from `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD`. OTPs are
+emailed via SMTP when `SMTP_HOST` is set; otherwise printed to stdout. Regular
+`/auth/login` rejects platform admins so the OTP flow must be used.
+
 ### SSO (session login)
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/auth/sso/login?org=<slug>` | begin SSO (redirects to the IdP) |
+| GET | `/auth/sso/login?org=<slug>` | begin SSO (redirects to the IdP); empty `org` resolves by email domain |
 | GET | `/auth/sso/callback` | IdP redirect; provisions the user (JIT) and returns a JWT |
 | GET | `/auth/sso/info` | active provider |
 
 `SSO_PROVIDER=dev` works fully offline (no IdP) for local testing;
-`SSO_PROVIDER=workos` uses WorkOS (set `WORKOS_API_KEY`/`WORKOS_CLIENT_ID`). New
-SSO users are provisioned into the org as `member`.
+`SSO_PROVIDER=workos` uses WorkOS (set `WORKOS_API_KEY`/`WORKOS_CLIENT_ID`).
+The callback resolves the workspace by explicit `org` slug, then by matching the
+user's email domain to an org's `admin_email` domain. The first user whose email
+exactly matches `admin_email` becomes `owner`; other same-domain users become
+`member`.
+
+### OAuth (Google / Apple / mobile)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/auth/oauth/:provider?org=<slug>` | begin OAuth (`google`, `apple`, `mobile` stub); `org` optional |
+| GET | `/auth/oauth/:provider/callback` | provider redirect; provisions the user and returns JWT + API key |
+
+Resolution uses the same slug-then-domain logic as SSO. If no workspace matches,
+a new free org is created and the user becomes `owner`.
 
 ### RLS (defense-in-depth isolation)
 
@@ -80,10 +105,13 @@ even an org owner — gets `403`. Full spec in `16-platform-admin.md`.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/platform/stats` | platform-wide snapshot (orgs, plans, cost, 24h issues) |
-| GET | `/api/platform/orgs` | every org with plan, suspended, seats, month tokens |
+| GET | `/api/platform/orgs` | every org with plan, suspended, seats, admin_email, month tokens |
+| POST | `/api/platform/orgs` | create a new org (name, slug, admin_email, plan) |
 | PUT | `/api/platform/orgs/:id` | change `plan` and/or `suspended` (invalidates cache; audited) |
 | GET | `/api/platform/events/summary?hours=` | issue aggregates: by level, top codes, worst orgs |
 | GET | `/api/platform/events?level=&source=&code=&orgId=&limit=` | recent issues (also JSON export) |
+| GET | `/api/platform/tickets` | support tickets submitted by users |
+| POST | `/api/platform/tickets/:id/comments` | comment on a ticket |
 | POST | `/api/platform/assistant` | operator copilot, grounded in the live snapshot + issues |
 | GET | `/api/platform/training` | user feedback labels + copilot exchanges |
 | POST | `/api/feedback` | (any auth) record 👍/👎 on a completion |

@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { config } from '../config.js';
 import { pool, query, queryOne } from './pool.js';
+import { hashPassword } from '../auth/password.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = join(__dirname, '..', '..', 'migrations');
@@ -74,10 +75,49 @@ export async function seedDev(): Promise<void> {
   console.log('');
 }
 
+/** Seeds the platform superadmin from env variables (idempotent). */
+export async function seedSuperadmin(): Promise<void> {
+  if (!config.superadminEmail) return;
+
+  const user = await queryOne<{ id: string }>(
+    `INSERT INTO app_user (id, email, name, mobile, password_hash, is_platform_admin)
+     VALUES ($1, $2, $3, $4, $5, true)
+     ON CONFLICT (email) DO UPDATE SET
+       name = COALESCE(EXCLUDED.name, app_user.name),
+       mobile = COALESCE(EXCLUDED.mobile, app_user.mobile),
+       password_hash = COALESCE(EXCLUDED.password_hash, app_user.password_hash),
+       is_platform_admin = true
+     RETURNING id`,
+    [
+      config.superadminId,
+      config.superadminEmail.toLowerCase().trim(),
+      'Super Admin',
+      config.superadminMobile || null,
+      hashPassword(config.superadminPassword),
+    ],
+  );
+
+  // Give the superadmin a platform org so the JWT can carry a valid orgId.
+  const platformOrg = await queryOne<{ id: string }>(
+    `INSERT INTO org (id, name, slug, plan) VALUES (gen_random_uuid(), 'Platform', 'platform', 'enterprise')
+     ON CONFLICT (slug) DO UPDATE SET name = 'Platform', plan = 'enterprise'
+     RETURNING id`,
+  );
+
+  await query(
+    `INSERT INTO membership (org_id, user_id, role) VALUES ($1, $2, 'owner')
+     ON CONFLICT (org_id, user_id) DO UPDATE SET role = 'owner'`,
+    [platformOrg!.id, user!.id],
+  );
+
+  console.log(`[seed] superadmin ${config.superadminEmail} ready`);
+}
+
 // Allow `npm run migrate` to run this file directly.
 if (import.meta.url === `file://${process.argv[1]}`) {
   migrate()
     .then(() => seedDev())
+    .then(() => seedSuperadmin())
     .then(() => pool.end())
     .then(() => process.exit(0))
     .catch((err) => {

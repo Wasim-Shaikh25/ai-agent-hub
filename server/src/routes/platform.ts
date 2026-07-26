@@ -53,13 +53,45 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
   // -- orgs: list + control -------------------------------------------------
   app.get('/api/platform/orgs', guard, async () => {
     return query(
-      `SELECT o.id, o.name, o.slug, o.plan, o.suspended, o.created_at,
+      `SELECT o.id, o.name, o.slug, o.plan, o.admin_email, o.suspended, o.created_at,
               (SELECT COUNT(*) FROM membership m WHERE m.org_id = o.id) AS seats,
               (SELECT COALESCE(SUM(qty),0) FROM usage_event u
                  WHERE u.org_id = o.id AND u.kind = 'tokens'
                    AND u.created_at >= date_trunc('month', now())) AS month_tokens
          FROM org o ORDER BY o.created_at DESC`,
     );
+  });
+
+  app.post('/api/platform/orgs', guard, async (req, reply) => {
+    const b = req.body as { name?: string; slug?: string; adminEmail?: string; plan?: string };
+    const name = (b.name ?? '').trim();
+    const slug = (b.slug ?? '').trim().toLowerCase();
+    const adminEmail = (b.adminEmail ?? '').trim().toLowerCase();
+    const plan = PLANS.includes(b.plan as Plan) ? (b.plan as Plan) : 'enterprise';
+    if (!name || !slug) return reply.code(400).send({ error: { code: 'bad_request', message: 'name and slug are required' } });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+      return reply.code(400).send({ error: { code: 'bad_request', message: 'Valid admin email required' } });
+    }
+    const existing = await queryOne<{ id: string }>('SELECT id FROM org WHERE slug = $1', [slug]);
+    if (existing) return reply.code(409).send({ error: { code: 'exists', message: 'An org with this slug already exists' } });
+
+    const org = await queryOne<{ id: string }>(
+      `INSERT INTO org (name, slug, plan, admin_email) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [name, slug, plan, adminEmail],
+    );
+
+    // Pre-provision the admin user so the first SSO login from that email becomes owner.
+    const user = await queryOne<{ id: string }>(
+      `INSERT INTO app_user (email, name, is_platform_admin) VALUES ($1, $2, false)
+       ON CONFLICT (email) DO NOTHING RETURNING id`,
+      [adminEmail, adminEmail.split('@')[0]],
+    );
+    if (user) {
+      await query(`INSERT INTO membership (org_id, user_id, role) VALUES ($1,$2,'owner') ON CONFLICT DO NOTHING`, [org!.id, user.id]);
+    }
+
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'platform.org_create', org!.id, { name, slug, adminEmail, plan });
+    return reply.code(201).send({ id: org!.id, name, slug, adminEmail, plan });
   });
 
   app.put('/api/platform/orgs/:id', guard, async (req, reply) => {

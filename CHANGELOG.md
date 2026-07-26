@@ -6,6 +6,27 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
 
 ## [Unreleased]
 
+### Added — superadmin OTP, org provisioning, and domain-based SSO/OAuth
+
+- **Env-fed superadmin** — `SUPERADMIN_EMAIL`, `SUPERADMIN_MOBILE`, `SUPERADMIN_PASSWORD`,
+  and optional `SUPERADMIN_ID` seed the platform owner on first boot.
+- **OTP login** — `/superadmin-login` calls `/auth/superadmin/login` (sends OTP)
+  and `/auth/superadmin/verify-otp` returns a JWT. Codes are sent via SMTP when
+  configured; otherwise printed to stdout in dev/test for validation.
+- **Superadmin org provisioning** — `/superadmin` has an "Add organization" form;
+  `POST /api/platform/orgs` creates an org with name, slug, plan, and `admin_email`.
+- **Domain-based SSO/OAuth auto-join** — `/auth/sso/callback` and
+  `/auth/oauth/:provider/callback` resolve the workspace by explicit `org` slug
+  first, then by matching the user's email domain to an org's `admin_email` domain.
+  The first exact `admin_email` match becomes `owner`; later same-domain users
+  become `member`.
+- **User activity dashboard** — new `/activity` page and `GET /api/me/activity`
+  show the signed-in user's requests, tokens, cost, model usage, connected agents,
+  and recent actions.
+- **Automated auth-flow validation** — `server/test/auth-flow.test.mjs` exercises
+  the superadmin OTP flow, org creation, SSO owner assignment, domain member
+  auto-join, admin promotion, and role-gated dashboard visibility.
+
 ### Added — integration test suite + CI
 
 - `server/test/` — a black-box integration suite on Node's built-in test runner

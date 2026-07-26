@@ -66,7 +66,7 @@ a.top{color:var(--cyan);text-decoration:none;font-size:13px}
 </div>
 <script>
 const T=localStorage.getItem('hub_token');
-if(!T)location.href='/login';
+if(!T)location.href='/superadmin-login';
 const H={Authorization:'Bearer '+T};
 const HJ={...H,'Content-Type':'application/json'};
 document.getElementById('logout').onclick=()=>{localStorage.clear();location.href='/login'};
@@ -100,10 +100,14 @@ const VIEWS={
  })},
  orgs(){guard(async()=>{
    const os=await api('/api/platform/orgs');
-   M.innerHTML='<div class="hdr"><h1>Organizations</h1></div><div class="card"><table><tr><th>Name</th><th>Plan</th><th>Seats</th><th>Tokens/mo</th><th>State</th><th></th></tr>'+
+   M.innerHTML='<div class="hdr"><h1>Organizations</h1></div>'+
+   '<div class="card"><h2>Register a new organization</h2><div class="row"><div style="flex:2"><label>Org name</label><input id="oname" placeholder="Acme Engineering"/></div><div style="flex:1"><label>Slug</label><input id="oslug" placeholder="acme"/></div><div style="flex:2"><label>Admin email</label><input id="oadmin" placeholder="admin@acme.com"/></div><div style="flex:0"><label>&nbsp;</label><button onclick="createOrg()">Add</button></div></div>'+
+   '<div class="msg" id="om2"></div></div>'+
+   '<div class="card"><table><tr><th>Name</th><th>Plan</th><th>Seats</th><th>Tokens/mo</th><th>Admin email</th><th>State</th><th></th></tr>'+
    os.map(o=>'<tr><td>'+esc(o.name)+'<div class="muted mono">'+esc(o.slug)+'</div></td>'+
    '<td><select id="p_'+o.id+'">'+['free','team','enterprise'].map(p=>'<option '+(o.plan===p?'selected':'')+'>'+p+'</option>').join('')+'</select></td>'+
    '<td>'+o.seats+'</td><td>'+Number(o.month_tokens||0).toLocaleString()+'</td>'+
+   '<td>'+esc(o.admin_email||'—')+'</td>'+
    '<td>'+(o.suspended?'<span class="pill bad">suspended</span>':'<span class="pill">active</span>')+'</td>'+
    '<td class="right"><button class="ghost" onclick="savePlan(\\''+o.id+'\\')">Save plan</button> '+
    '<button class="'+(o.suspended?'ghost':'danger')+'" onclick="toggleSuspend(\\''+o.id+'\\','+(o.suspended?'false':'true')+')">'+(o.suspended?'Resume':'Suspend')+'</button></td></tr>').join('')+
@@ -161,6 +165,7 @@ function bubble(who,text,tag){const c=document.getElementById('chat');const b=el
 function msg(id,t,ok){const m=document.getElementById(id);if(m){m.className='msg '+(ok?'ok':'err');m.textContent=t}}
 
 async function savePlan(id){try{const plan=document.getElementById('p_'+id).value;await api('/api/platform/orgs/'+id,{method:'PUT',body:JSON.stringify({plan})});msg('om','Plan updated for '+id.slice(0,8)+' → '+plan,true)}catch(e){msg('om',e.message)}}
+async function createOrg(){try{const name=document.getElementById('oname').value;const slug=document.getElementById('oslug').value;const adminEmail=document.getElementById('oadmin').value;await api('/api/platform/orgs',{method:'POST',body:JSON.stringify({name,slug,adminEmail,plan:'enterprise'})});msg('om2','Created '+name,true);VIEWS.orgs()}catch(e){msg('om2',e.message)}}
 async function toggleSuspend(id,to){try{await api('/api/platform/orgs/'+id,{method:'PUT',body:JSON.stringify({suspended:to})});VIEWS.orgs()}catch(e){msg('om',e.message)}}
 async function ask(){const i=document.getElementById('q');const q=i.value.trim();if(!q)return;i.value='';bubble('u',q);try{const d=await api('/api/platform/assistant',{method:'POST',body:JSON.stringify({message:q})});bubble('a',d.reply,d.llm?'':'offline · snapshot only')}catch(e){bubble('a','Error: '+e.message)}}
 

@@ -6,12 +6,28 @@ import { hashPassword, verifyPassword } from '../auth/password.js';
 import { getPlan, entitled } from '../billing/entitlements.js';
 import { KeyService } from '../services/keyService.js';
 import { AuditService } from '../services/auditService.js';
+import { config } from '../config.js';
+import { createOtp, verifyOtp, peekOtp } from '../services/otpService.js';
 
 const audit = new AuditService();
 const keys = new KeyService();
 
 function slugify(s: string): string {
   return (s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'org').slice(0, 32);
+}
+
+function emailDomain(email: string): string {
+  return email.split('@')[1]?.toLowerCase() ?? '';
+}
+
+/** Finds the org whose admin email domain matches the user's email domain. */
+async function resolveOrgByDomain(email: string): Promise<{ id: string; admin_email: string | null } | undefined> {
+  const domain = emailDomain(email);
+  if (!domain) return undefined;
+  return queryOne<{ id: string; admin_email: string | null }>(
+    `SELECT id, admin_email FROM org WHERE admin_email ILIKE $1 AND suspended = false ORDER BY created_at DESC LIMIT 1`,
+    [`%@${domain}`],
+  );
 }
 
 /** Encodes/decodes the org slug in the OAuth `state` parameter. */
@@ -28,10 +44,11 @@ function decodeState(state: string): { org: string } {
 
 /** SSO login + callback. `dev` provider works offline; `workos` is the real IdP. */
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
-  // Kick off SSO. `org` selects the tenant; `email` is only used by the dev provider.
+  // Kick off SSO. `org` selects the tenant; when omitted the callback resolves by
+  // email domain. `email` is only used by the dev provider.
   app.get('/auth/sso/login', async (req, reply) => {
     const q = req.query as { org?: string; email?: string };
-    const orgSlug = q.org ?? 'dev';
+    const orgSlug = q.org ?? '';
     const url = getSsoProvider().authorizeUrl(encodeState(orgSlug), { email: q.email });
     return reply.redirect(url);
   });
@@ -41,15 +58,6 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const q = req.query as { code?: string; state?: string };
     if (!q.code) return reply.code(400).send({ error: { code: 'bad_request', message: 'missing code' } });
 
-    const { org: orgSlug } = decodeState(q.state ?? '');
-    const org = await queryOne<{ id: string }>('SELECT id FROM org WHERE slug = $1', [orgSlug]);
-    if (!org) return reply.code(404).send({ error: { code: 'not_found', message: `org "${orgSlug}" not found` } });
-
-    // SSO is an Enterprise feature.
-    if (!entitled(await getPlan(org.id), 'sso')) {
-      return reply.code(402).send({ error: { code: 'upgrade_required', message: 'SSO requires the Enterprise plan', feature: 'sso' } });
-    }
-
     let profile;
     try {
       profile = await getSsoProvider().exchangeCode(q.code);
@@ -58,31 +66,109 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
     if (!profile.email) return reply.code(401).send({ error: { code: 'sso_failed', message: 'no email in profile' } });
 
-    // Provision user + membership (JIT).
+    const { org: orgSlug } = decodeState(q.state ?? '');
+    const stateOrg = await queryOne<{ id: string; admin_email: string | null }>('SELECT id, admin_email FROM org WHERE slug = $1', [orgSlug]);
+
+    // Determine the target org. Explicit state slug wins, then same-domain lookup.
+    let targetOrg: { id: string; admin_email: string | null } | undefined = stateOrg ?? undefined;
     const user = await queryOne<{ id: string }>(
       `INSERT INTO app_user (email, name) VALUES ($1,$2)
        ON CONFLICT (email) DO UPDATE SET name = COALESCE(NULLIF(EXCLUDED.name,''), app_user.name)
        RETURNING id`,
       [profile.email, profile.name],
     );
-    const membership = await queryOne<{ role: string }>(
-      `INSERT INTO membership (org_id, user_id, role) VALUES ($1,$2,'member')
-       ON CONFLICT (org_id, user_id) DO UPDATE SET role = membership.role
-       RETURNING role`,
-      [org.id, user!.id],
+    const existingMembership = await queryOne<{ role: string; org_id: string }>(
+      `SELECT role, org_id FROM membership WHERE user_id = $1 ORDER BY role DESC LIMIT 1`,
+      [user!.id],
     );
 
-    const token = signSession({ orgId: org.id, userId: user!.id, role: membership!.role, email: profile.email });
-    await audit.log(org.id, user!.id, 'auth.sso_login', profile.email, { provider: getSsoProvider().name });
+    if (existingMembership) {
+      // Already a member somewhere; stay there.
+      targetOrg = { id: existingMembership.org_id, admin_email: null };
+    } else if (!targetOrg) {
+      const domainOrg = await resolveOrgByDomain(profile.email);
+      targetOrg = domainOrg ?? undefined;
+    }
+
+    if (!targetOrg) {
+      return reply.code(404).send({ error: { code: 'not_found', message: `No workspace found for "${orgSlug}" or domain ${emailDomain(profile.email)}` } });
+    }
+
+    // SSO is an Enterprise feature on the resolved workspace.
+    if (!entitled(await getPlan(targetOrg.id), 'sso')) {
+      return reply.code(402).send({ error: { code: 'upgrade_required', message: 'SSO requires the Enterprise plan', feature: 'sso' } });
+    }
+
+    // First user whose email matches the org's admin_email becomes owner; otherwise member.
+    let role = existingMembership?.role ?? 'member';
+    if (!existingMembership) {
+      role = targetOrg.admin_email && profile.email.toLowerCase() === targetOrg.admin_email.toLowerCase() ? 'owner' : 'member';
+      await query(`INSERT INTO membership (org_id, user_id, role) VALUES ($1,$2,$3) ON CONFLICT (org_id, user_id) DO NOTHING`, [
+        targetOrg.id,
+        user!.id,
+        role,
+      ]);
+    }
+
+    const token = signSession({ orgId: targetOrg.id, userId: user!.id, role, email: profile.email });
+    await audit.log(targetOrg.id, user!.id, 'auth.sso_login', profile.email, { provider: getSsoProvider().name });
 
     // Return the token (a real web UI would set a cookie / redirect to the app).
-    return reply.send({ token, org: org.id, email: profile.email, role: membership!.role });
+    return reply.send({ token, org: targetOrg.id, email: profile.email, role });
   });
 
   // Convenience: list SSO config status (no secrets).
   app.get('/auth/sso/info', async () => {
     return { provider: getSsoProvider().name, loginUrl: '/auth/sso/login?org=<slug>' };
   });
+
+  // -- Superadmin OTP login --------------------------------------------------
+
+  app.post('/auth/superadmin/login', async (req, reply) => {
+    const b = req.body as { email?: string; password?: string };
+    const email = (b.email ?? '').trim().toLowerCase();
+    const user = await queryOne<{ id: string; password_hash: string | null; is_platform_admin: boolean }>(
+      'SELECT id, password_hash, is_platform_admin FROM app_user WHERE email = $1',
+      [email],
+    );
+    if (!user || !user.is_platform_admin || !verifyPassword(b.password ?? '', user.password_hash)) {
+      return reply.code(401).send({ error: { code: 'invalid_credentials', message: 'Incorrect email or password' } });
+    }
+    await createOtp(email, 'superadmin_login');
+    return reply.send({ otpSent: true });
+  });
+
+  app.post('/auth/superadmin/verify-otp', async (req, reply) => {
+    const b = req.body as { email?: string; code?: string };
+    const email = (b.email ?? '').trim().toLowerCase();
+    const code = (b.code ?? '').trim();
+    if (!await verifyOtp(email, code, 'superadmin_login')) {
+      return reply.code(401).send({ error: { code: 'invalid_otp', message: 'Invalid or expired code' } });
+    }
+    const user = await queryOne<{ id: string }>('SELECT id FROM app_user WHERE email = $1 AND is_platform_admin = true', [email]);
+    if (!user) return reply.code(401).send({ error: { code: 'invalid_credentials', message: 'User not found' } });
+
+    // Use the platform org created in seedSuperadmin.
+    const membership = await queryOne<{ org_id: string; role: string }>(
+      `SELECT org_id, role FROM membership WHERE user_id = $1 ORDER BY role DESC LIMIT 1`,
+      [user.id],
+    );
+    if (!membership) return reply.code(500).send({ error: { code: 'server_error', message: 'Superadmin membership not configured' } });
+
+    const token = signSession({ orgId: membership.org_id, userId: user.id, role: membership.role, email });
+    await audit.log(membership.org_id, user.id, 'auth.superadmin_login', email);
+    return reply.send({ token, org: membership.org_id, email, role: membership.role });
+  });
+
+  // Dev/test helper: read the latest OTP for an email. Hidden unless DEV_SEED is true.
+  if (config.devSeed) {
+    app.get('/auth/debug/otp', async (req, reply) => {
+      const q = req.query as { email?: string; purpose?: string };
+      const code = await peekOtp(q.email ?? '', q.purpose ?? 'superadmin_login');
+      if (!code) return reply.code(404).send({ error: { code: 'not_found', message: 'No active OTP for that email' } });
+      return reply.send({ code });
+    });
+  }
 
   // -- Email/password signup + login (customer web app) ---------------------
 
@@ -112,14 +198,17 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
   app.post('/auth/login', async (req, reply) => {
     const b = req.body as { email?: string; password?: string };
     const email = (b.email ?? '').trim().toLowerCase();
-    const row = await queryOne<{ id: string; password_hash: string | null; org_id: string; role: string }>(
-      `SELECT u.id, u.password_hash, m.org_id, m.role
+    const row = await queryOne<{ id: string; password_hash: string | null; org_id: string; role: string; is_platform_admin: boolean }>(
+      `SELECT u.id, u.password_hash, u.is_platform_admin, m.org_id, m.role
          FROM app_user u JOIN membership m ON m.user_id = u.id
         WHERE u.email = $1 ORDER BY m.role DESC LIMIT 1`,
       [email],
     );
     if (!row || !verifyPassword(b.password ?? '', row.password_hash)) {
       return reply.code(401).send({ error: { code: 'invalid_credentials', message: 'Incorrect email or password' } });
+    }
+    if (row.is_platform_admin) {
+      return reply.code(401).send({ error: { code: 'use_superadmin_login', message: 'Use the superadmin login page' } });
     }
     const token = signSession({ orgId: row.org_id, userId: row.id, role: row.role, email });
     return reply.send({ token, org: row.org_id, email, role: row.role });

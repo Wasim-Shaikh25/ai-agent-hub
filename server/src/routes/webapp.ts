@@ -4,6 +4,7 @@ import { TOKENS, MARK, BASE } from './theme.js';
 /** Serves the customer-facing web app: /login (signup+login) and /account. */
 export async function registerWebappRoutes(app: FastifyInstance): Promise<void> {
   app.get('/login', async (_req, reply) => reply.type('text/html').send(LOGIN_HTML));
+  app.get('/superadmin-login', async (_req, reply) => reply.type('text/html').send(SUPERADMIN_LOGIN_HTML));
   app.get('/account', async (_req, reply) => reply.type('text/html').send(ACCOUNT_HTML));
 }
 
@@ -33,10 +34,48 @@ button{width:100%;margin-top:18px;padding:12px;border-radius:10px;border:0;backg
 a{color:var(--cyan)}.small{font-size:13px;color:var(--muted)}
 `;
 
+const SUPERADMIN_LOGIN_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Superadmin · AI Agent Hub</title><style>${STYLE}</style></head><body>
+<div class="wrap">
+  <div class="brand"><span class="mark">◈</span> AI Agent Hub · Superadmin</div>
+  <div class="card">
+    <h1>Sign in as application owner</h1>
+    <p class="sub">An OTP will be sent to the registered email address.</p>
+    <label>Email</label><input id="email" type="email" placeholder="admin@company.com"/>
+    <label>Password</label><input id="password" type="password" placeholder="Password"/>
+    <button id="go" onclick="startOtp()">Send sign-in code</button>
+    <div id="otpWrap" style="display:none">
+      <label>One-time code</label><input id="otp" type="text" inputmode="numeric" placeholder="123456"/>
+      <button onclick="verifyOtp()">Verify and sign in</button>
+    </div>
+    <div class="msg" id="msg"></div>
+  </div>
+</div>
+<script>
+let email='';
+async function startOtp(){
+  const msg=document.getElementById('msg');msg.className='msg';msg.textContent='…';
+  email=document.getElementById('email').value;
+  const r=await fetch('/auth/superadmin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password:document.getElementById('password').value})});
+  const d=await r.json();
+  if(!r.ok){msg.className='msg err';msg.textContent=(d.error&&d.error.message)||'Failed';return;}
+  document.getElementById('otpWrap').style.display='block';
+  msg.className='msg ok';msg.textContent='Check the server output or your inbox for the code.';
+}
+async function verifyOtp(){
+  const msg=document.getElementById('msg');msg.className='msg';msg.textContent='…';
+  const code=document.getElementById('otp').value;
+  const r=await fetch('/auth/superadmin/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code})});
+  const d=await r.json();
+  if(!r.ok){msg.className='msg err';msg.textContent=(d.error&&d.error.message)||'Invalid code';return;}
+  localStorage.setItem('hub_token',d.token);
+  location.href='/superadmin';
+}
+</script></body></html>`;
+
 const LOGIN_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Sign in · AI Agent Hub</title><style>${STYLE}</style></head><body>
 <div class="wrap">
   <div class="brand"><span class="mark">◈</span> AI Agent Hub</div>
-  <div style="text-align:right;margin-bottom:8px"><a class="small" href="/help">Help</a></div>
+  <div style="text-align:right;margin-bottom:8px"><a class="small" href="/help">Help</a> · <a class="small" href="/superadmin-login">Superadmin</a></div>
   <div class="card">
     <div class="tabs"><div class="tab on" id="tabSignup" onclick="mode('signup')">Sign up</div><div class="tab" id="tabLogin" onclick="mode('login')">Log in</div></div>
     <h1 id="title">Create your account</h1>
@@ -112,7 +151,7 @@ const ACCOUNT_HTML = /* html */ `<!doctype html><html lang="en"><head><meta char
     <div class="row"><span class="k">Included features</span><span class="v" id="features" style="text-align:right;max-width:60%"></span></div>
     <button id="upgrade" onclick="upgrade()">Upgrade to Team</button>
     <div class="msg" id="billmsg"></div>
-    <p class="small" style="margin-top:16px">Next: <a href="/admin">admin console</a> · <a href="/dashboard">cost dashboard</a> · connect an agent with <span class="mono">aihub connect cursor</span>.</p>
+    <p class="small" style="margin-top:16px">Next: <a href="/admin">admin console</a> · <a href="/dashboard">cost dashboard</a> · <a href="/activity">my activity</a> · connect an agent with <span class="mono">aihub connect cursor</span>.</p>
   </div>
 </div>
 <script>

@@ -20,10 +20,10 @@ This is distinct from the two customer surfaces:
 
 ## 2. Access model
 
-- A user is a platform admin iff `app_user.is_platform_admin = true`. This flag
-  is **only** settable in the database — there is no self-serve path, which is
-  what you want for a vendor-only control plane. The dev seed flags
-  `dev@localhost`.
+- A user is a platform admin iff `app_user.is_platform_admin = true`. The operator
+  account is seeded from env vars (`SUPERADMIN_EMAIL`, `SUPERADMIN_MOBILE`,
+  `SUPERADMIN_PASSWORD`, optional `SUPERADMIN_ID`) by `seedSuperadmin()` on first
+  boot. There is no self-serve path to become a platform admin.
 - `requireSuperadmin` (`server/src/auth.ts`) gates every `/api/platform/*`
   route. A normal user — even an org **owner** — gets `403 "Platform admin only"`.
 - The `/superadmin` page HTML is served to anyone, but it is an empty shell:
@@ -33,7 +33,12 @@ This is distinct from the two customer surfaces:
 ## 3. Organization control
 
 `GET /api/platform/orgs` lists every org with plan, suspended state, seat count,
-and month-to-date tokens. `PUT /api/platform/orgs/:id` changes:
+`admin_email`, and month-to-date tokens. `POST /api/platform/orgs` lets the
+operator register a new workspace with name, slug, plan, and an `admin_email`;
+the user whose email matches `admin_email` becomes the first `owner` on first
+SSO/OAuth login.
+
+`PUT /api/platform/orgs/:id` changes:
 
 - **plan** — `free | team | enterprise`; invalidates the entitlement cache
   immediately (`invalidatePlan`) so the change takes effect on the next request.
@@ -41,6 +46,20 @@ and month-to-date tokens. `PUT /api/platform/orgs/:id` changes:
   `403 org_suspended` **before** any handler runs.
 
 Both actions are written to the audit log (`platform.org_update`).
+
+### 3.1 Superadmin sign-in
+
+The operator logs in at `/superadmin-login`:
+
+1. `POST /auth/superadmin/login` accepts email and password, and creates a
+   one-time code in `otp_code` (10-minute TTL).
+2. The OTP is emailed via SMTP when `SMTP_HOST` is configured; in dev/test it is
+   printed to stdout (and readable via the dev-only `GET /auth/debug/otp` helper).
+3. `POST /auth/superadmin/verify-otp` verifies the code, issues a JWT, and lands
+   in `/superadmin`.
+
+Regular `/auth/login` rejects platform admins (`use_superadmin_login`) so the
+operator must use the OTP flow.
 
 ### Suspension exemption (self-lockout guard)
 
@@ -105,15 +124,36 @@ orgs have the most errors?" from real data, never invented numbers.
 thumbs-down is a natural signal to wire to alerts. `GET /api/platform/training`
 lists the labels for the operator.
 
-## 7. Config
+## 7. Dashboard visibility
+
+| Surface | Required role | Scope |
+|---|---|---|
+| `/superadmin` | platform superadmin | All orgs, tickets, events, training labels |
+| `/admin` | org `admin` or `owner` | Own workspace: team, agents, content, keys, audit |
+| `/dashboard` | any authenticated member | Own org cost/usage/audit |
+| `/activity` | any authenticated user | Only the signed-in user's usage, agents, actions |
+
+`/admin` APIs use `requireRole('admin')`; `/api/platform/*` use
+`requireSuperadmin` and read across all orgs.
+
+## 8. Config
 
 | Env | Default | Purpose |
 |---|---|---|
 | `SLOW_REQUEST_MS` | `20000` | latency threshold for the `slow_request` event |
 | `SUMMARY_MODEL` | `gpt-4o-mini` | model the copilot (and summarizer) uses |
+| `SUPERADMIN_EMAIL` | `admin@localhost` | operator account email |
+| `SUPERADMIN_PASSWORD` | `change-me` | operator account password (change in prod) |
+| `SUPERADMIN_MOBILE` | `''` | operator mobile (stored for audit/contact) |
+| `SMTP_HOST` | `''` | SMTP server for OTP delivery |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` / `SMTP_PASS` | `''` | SMTP credentials |
+| `SMTP_FROM` | `noreply@example.com` | From address for OTP emails |
 
-## 8. Data model touchpoints
+## 9. Data model touchpoints
 
 Migration `012_platform.sql`: `app_user.is_platform_admin`, `org.suspended`,
 `training_sample`. Migration `013_events.sql`: `system_event` (+ recent/code/org
-indexes). See `02-data-model.md`.
+indexes). Migration `020_superadmin_and_otp.sql`: `app_user.mobile`,
+`app_user.password_hash`, `org.admin_email`, and the `otp_code` table. See
+`02-data-model.md`.
