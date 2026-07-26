@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 
 /** Centralised, typed access to environment configuration. */
 export interface Config {
@@ -40,6 +41,15 @@ export interface Config {
   appleTeamId: string;
   appleKeyId: string;
   applePrivateKey: string;
+  superadminId: string;
+  superadminEmail: string;
+  superadminMobile: string;
+  superadminPassword: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPass: string;
+  smtpFrom: string;
 }
 
 function env(key: string, fallback: string): string {
@@ -91,4 +101,13 @@ export const config: Config = {
   appleTeamId: env('APPLE_TEAM_ID', ''),
   appleKeyId: env('APPLE_KEY_ID', ''),
   applePrivateKey: env('APPLE_PRIVATE_KEY', ''),
+  superadminId: env('SUPERADMIN_ID', randomUUID()),
+  superadminEmail: env('SUPERADMIN_EMAIL', 'admin@localhost'),
+  superadminMobile: env('SUPERADMIN_MOBILE', ''),
+  superadminPassword: env('SUPERADMIN_PASSWORD', 'change-me'),
+  smtpHost: env('SMTP_HOST', ''),
+  smtpPort: Number(env('SMTP_PORT', '587')),
+  smtpUser: env('SMTP_USER', ''),
+  smtpPass: env('SMTP_PASS', ''),
+  smtpFrom: env('SMTP_FROM', 'noreply@example.com'),
 };
