@@ -61,14 +61,14 @@ collaborative + governed **Context / Gateway / Governance** planes. See
 | `/login`, `/account` | any customer user | sign up with email/password, Google, Apple, or mobile; plan, usage, API key |
 | `/help` | public | searchable help centre and support ticket form |
 | `/dashboard` | customer | cost / usage / audit |
-| `/admin` | customer org admin/owner | manage **their** workspace (content, policies, keys, team, MCP, audit) |
-| `/superadmin` | **you, the operator** | cross-org control, **issue analysis**, support tickets, and a grounded **copilot** — vendor-only, gated by `is_platform_admin` and disabled by default |
+| `/activity` | customer user | personal usage, connected agents, and recent actions |
+| `/admin` | customer org admin/owner | manage **their** workspace (content, policies, keys, team, MCP, audit) and promote members to admins |
+| `/superadmin` | **you, the operator** | cross-org control, **issue analysis**, support tickets, org provisioning, and a grounded **copilot** — vendor-only, gated by `is_platform_admin` and disabled by default |
 
 The operator console (`/superadmin`) is where you run the SaaS: change any org's
-plan, suspend/resume tenants, analyze operational issues (provider errors,
-budget/limit hits, redaction blocks, slow calls) across every workspace, triage
-support tickets, and ask the copilot what's failing. See
-[`docs/specs/16-platform-admin.md`](docs/specs/16-platform-admin.md).
+plan, suspend/resume tenants, **register new workspaces**, analyze operational
+issues across every workspace, triage support tickets, and ask the copilot what's
+failing. See [`docs/specs/16-platform-admin.md`](docs/specs/16-platform-admin.md).
 
 ### User support, registration, and AI assistant policy
 
@@ -81,6 +81,14 @@ support tickets, and ask the copilot what's failing. See
 - **Registration options:** `/login` supports email/password, Google OAuth
   (`/auth/oauth/google`), Apple (`/auth/oauth/apple`), and a mobile OTP button
   that is stubbed until an SMS gateway is configured.
+- **Operator sign-in:** `/superadmin-login` uses password + email OTP. The operator
+  (`is_platform_admin`) is seeded from `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`,
+  and `SUPERADMIN_MOBILE` env vars, and receives an OTP by email (SMTP) or stdout
+  in dev/test mode.
+- **Org provisioning:** The operator registers workspaces from `/superadmin`
+  with an `admin_email`. The first user signing in with that exact email via
+  SSO/OAuth becomes the org `owner`; any other user with the same email domain
+  auto-joins as a `member`.
 - **No end-user AI chat:** The operator copilot is gated by `is_platform_admin`
   and the `ENABLE_AI_ASSISTANT` flag (default `false`). No per-org, per-team, or
   per-user assistant is exposed, so LLM costs stay under operator control.
@@ -397,6 +405,21 @@ language mode or workspace state.
   arguments, and environment keys to prevent shell injection.
 - User-defined agent configs and MCP server configs are schema-validated before
   being persisted.
+
+### Auth, Org Provisioning, and Dashboard Visibility
+
+- **Superadmin** — seeded from `SUPERADMIN_*` env vars; logs in via
+  `/superadmin-login` with password + email OTP (`/auth/superadmin/*`).
+- **Org creation** — superadmin registers an org with name, slug, plan, and an
+  `admin_email` in `/superadmin` or via `POST /api/platform/orgs`.
+- **SSO / OAuth auto-join** — users sign in via `/auth/sso/*` or
+  `/auth/oauth/:provider/*`. The workspace is resolved by explicit `org` slug,
+  then by matching the user's email domain to an org's `admin_email` domain.
+  The first exact `admin_email` match becomes `owner`; other same-domain users
+  become `member`.
+- **Role-gated dashboards** — `/admin` is visible to org `admin`/`owner` roles;
+  `/activity` is visible to any signed-in user and shows only their own usage;
+  `/superadmin` is visible only to the platform superadmin.
 
 ### Content Schema
 

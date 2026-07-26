@@ -25,8 +25,9 @@ This starts four containers:
 | `litellm` | 4000 | LLM gateway (OpenAI-compatible) |
 | `hub-server` | 8080 | the Hub (REST + MCP) |
 
-On first boot the server runs migrations and prints a **`DEV_API_KEY`** to the
-logs. Copy it.
+On first boot the server runs migrations and seeds the operator account from
+`SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD` (see `.env.example`). It also prints a
+**`DEV_API_KEY`** to the logs for the dev org.
 
 ## 3. Offline mode (no provider keys)
 
@@ -43,6 +44,25 @@ curl -s localhost:8080/health
 
 # who am I (use the DEV_API_KEY from logs)
 curl -s localhost:8080/api/me -H "Authorization: Bearer $DEV_API_KEY"
+
+# superadmin OTP login (dev/test: OTP is also printed to server stdout)
+curl -s -X POST localhost:8080/auth/superadmin/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@localhost","password":"change-me"}'
+# copy the OTP from the email/server log, then:
+curl -s -X POST localhost:8080/auth/superadmin/verify-otp \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@localhost","code":"123456"}'
+# use the returned token for /api/platform/* calls
+
+# create an org as the superadmin (use the token above)
+curl -s -X POST localhost:8080/api/platform/orgs \
+  -H "Authorization: Bearer $SUPER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Acme","slug":"acme","adminEmail":"admin@acme.com","plan":"enterprise"}'
+
+# an SSO user with that email domain can now log in via the dev provider:
+curl -s "localhost:8080/auth/sso/callback?code=dev:admin@acme.com&state=eyJ..."
 
 # write + search memory (proves the Context Plane works end-to-end)
 curl -s localhost:8080/api/memory -H "Authorization: Bearer $DEV_API_KEY" \
@@ -125,6 +145,13 @@ Keep `postgres`, `redis`, `litellm` running via
 | `EMBEDDINGS_PROVIDER` | `local` | `local` (offline) or `litellm` |
 | `EMBEDDING_DIM` | `1536` | vector dimension |
 | `DEV_SEED` | `true` | seed a dev org + API key on first boot |
+| `SUPERADMIN_EMAIL` | `admin@localhost` | operator account email |
+| `SUPERADMIN_PASSWORD` | `change-me` | operator account password (change in prod) |
+| `SUPERADMIN_MOBILE` | `''` | operator mobile number |
+| `SMTP_HOST` | `''` | SMTP server for OTP emails (optional) |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` / `SMTP_PASS` | `''` | SMTP credentials |
+| `SMTP_FROM` | `noreply@example.com` | From address for OTP emails |
 
 ## 8. Teardown
 

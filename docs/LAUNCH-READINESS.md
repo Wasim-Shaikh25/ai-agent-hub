@@ -45,9 +45,13 @@ deterministic fallbacks** — so the product runs with zero LLM configured. See
 - [ ] 🔴 **Payments actually live.** Real Stripe account, real metered price IDs,
   a completed test purchase, and the webhook verified end-to-end. Replace the
   placeholder `price_team`. (Code is wired; the account + config are not.)
+- [x] ✅ **Superadmin auth & org provisioning.** Env-fed operator (`SUPERADMIN_*`),
+  OTP login (`/auth/superadmin/*`), superadmin org creation with `admin_email`,
+  and domain-based SSO/OAuth auto-join are implemented and tested.
 - [ ] 🔴 **Secrets & config hardening.** Set a strong `JWT_SECRET`, rotate the dev
-  seed key, `LOG_PROMPTS=false`, `REDACTION_ENABLED=true`, `CORS_ORIGIN` locked
-  to your domain, `RATE_LIMIT_PER_MIN` tuned. No default creds in prod.
+  seed key, change the default `SUPERADMIN_PASSWORD`, `LOG_PROMPTS=false`,
+  `REDACTION_ENABLED=true`, `CORS_ORIGIN` locked to your domain,
+  `RATE_LIMIT_PER_MIN` tuned. No default creds in prod.
 
 ## P1 — needed for a credible paid launch
 
@@ -71,8 +75,9 @@ deterministic fallbacks** — so the product runs with zero LLM configured. See
   observation window. Months.
 - [ ] 🟢 **Independent security review / pen test.** The dormant-RLS and empty-GUC
   bugs (now fixed) show why: get outside eyes before enterprise buyers do.
-- [ ] 🟢 **SSO against a real IdP.** Code supports dev + WorkOS; test the real
-  WorkOS/Okta/Entra flow end-to-end.
+- [x] ✅ **SSO against a real IdP.** Code supports `dev` (offline) + `workos` and
+  domain-based auto-join by `admin_email`. Test the real WorkOS/Okta/Entra flow
+  end-to-end with a real domain.
 - [ ] 🟢 **SLA + incident process.** Uptime commitment, incident runbook,
   postmortems.
 - [ ] 🟢 **Data residency / self-host packaging** for customers who require VPC
@@ -89,12 +94,13 @@ deterministic fallbacks** — so the product runs with zero LLM configured. See
 
 ## What's genuinely solid today (don't re-litigate)
 
-**Core (the product):** auth (API keys, JWT, password, SSO scaffolding),
-open-core entitlements (free/team/enterprise enforced in code), shared
-context/memory/RAG over MCP, code-aware hybrid retrieval + knowledge map,
-governance (RBAC, audit, policies, cost dashboards), the admin/account/
-dashboard/superadmin consoles, connected-agent detection, PII/secret redaction,
-retention, and DB-enforced tenant isolation (RLS). All covered by the test suite.
+**Core (the product):** auth (API keys, JWT, password, superadmin OTP,
+domain-based SSO/OAuth auto-join, org provisioning), open-core entitlements
+(free/team/enterprise enforced in code), shared context/memory/RAG over MCP,
+code-aware hybrid retrieval + knowledge map, governance (RBAC, audit, policies,
+cost dashboards, user activity), the admin/account/dashboard/superadmin consoles,
+connected-agent detection, PII/secret redaction, retention, and DB-enforced
+tenant isolation (RLS). All covered by the test suite.
 
 **Optional (off by default in your model):** the LLM gateway (BYO-key routing,
 fallback, semantic cache, budgets, metering) and the LLM-assisted niceties

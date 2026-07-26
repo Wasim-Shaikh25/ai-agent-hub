@@ -20,15 +20,18 @@ Org ──< Membership >── User
 ## 2. Core tables (see `server/migrations/001_init.sql` for the DDL)
 
 ### org
-`id`, `name`, `slug`, `plan` (`free|team|enterprise`), `suspended` (bool — a
+`id`, `name`, `slug`, `plan` (`free|team|enterprise`), `admin_email` (unique,
+optional — used for SSO/OAuth domain auto-join), `suspended` (bool — a
 suspended org is blocked at auth with `403 org_suspended`), `created_at`.
 
 ### app_user
-`id`, `email`, `name`, `password_hash` (nullable; scrypt), `is_platform_admin`
-(bool — grants the vendor-only `/superadmin` console), `created_at`.
+`id`, `email`, `name`, `password_hash` (nullable; scrypt), `mobile` (optional),
+`is_platform_admin` (bool — grants the vendor-only `/superadmin` console),
+`created_at`.
 
 ### membership
 `org_id`, `user_id`, `role` (`owner|admin|member|viewer`). PK `(org_id,user_id)`.
+Admins/owners can promote or demote other members via `PUT /api/members/:userId`.
 
 ### api_key
 `id`, `org_id`, `user_id`, `name`, `hash` (sha256 of key), `prefix`,
@@ -70,6 +73,18 @@ Powers RAG over repo/docs.
 ### usage_event
 `id`, `org_id`, `user_id`, `kind` (`mcp_call|tokens|rag_query`), `qty`,
 `meta jsonb`, `created_at`. Rolls up into billing.
+
+### otp_code  (migration 020)
+`id`, `email`, `purpose` (e.g. `superadmin_login`), `code` (6-digit numeric),
+`used`, `expires_at`, `created_at`. Used for the operator OTP flow.
+
+### oauth_identity  (migration 019)
+`id`, `user_id`, `provider` (`google`/`apple`), `provider_user_id`, `created_at`.
+Links social logins to `app_user`.
+
+### support_ticket  (migration 018)
+`id`, `org_id`, `user_id`, `subject`, `body`, `category`, `status`, `created_at`,
+`updated_at`. User-submitted issues surfaced to the operator console.
 
 ### system_event  (migration 013)
 `id`, `org_id` (nullable), `level` (`error|warn|info`), `source`

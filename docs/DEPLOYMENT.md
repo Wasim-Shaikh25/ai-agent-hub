@@ -25,6 +25,8 @@ Set at minimum:
 |---|---|
 | `POSTGRES_PASSWORD` | database password |
 | `JWT_SECRET` | signs session tokens — use a long random value |
+| `SUPERADMIN_PASSWORD` | operator account for `/superadmin-login` — change from default |
+| `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | sends superadmin OTP codes (optional; falls back to stdout) |
 | `LITELLM_MASTER_KEY` | gateway ↔ LiteLLM auth |
 | `APP_BASE_URL` | public URL (SSO redirects, checkout URLs) |
 | `CORS_ORIGIN` | your dashboard origin(s), comma-separated |
@@ -74,18 +76,29 @@ docker compose up --build          # Postgres+pgvector, Redis, LiteLLM, hub-serv
 
 Then, in a browser and a terminal:
 
-1. **Web app** — open `http://localhost:8080/login`, click **Sign up**, create an
+1. **Operator console** — open `http://localhost:8080/superadmin-login`, sign in
+   with `SUPERADMIN_EMAIL` and `SUPERADMIN_PASSWORD` (OTP is sent by email or
+   printed to stdout if SMTP is not configured). You can then create workspaces
+   under **Organizations**.
+2. **SSO / domain auto-join** — register an org with `adminEmail=admin@example.com`,
+   then sign in as that user via `/auth/sso/login` or `/auth/oauth/google`. The
+   first matching email becomes `owner`; other `@example.com` users auto-join
+   as `member`.
+3. **Web app** — open `http://localhost:8080/login`, click **Sign up**, create an
    account. You land on `/account` with your plan (Free), usage, and an API key.
-2. **Dashboard** — open `http://localhost:8080/dashboard`, paste the key → live
-   cost/usage/audit.
-3. **Health** — `curl localhost:8080/health` and `curl localhost:8080/ready`.
-4. **Connect an agent** —
+4. **Dashboard / activity** — open `http://localhost:8080/dashboard` for org-level
+   cost/usage/audit, or `http://localhost:8080/activity` for the signed-in user's
+   own usage, agents, and recent actions.
+5. **Admin console** — as an org `owner`/`admin`, open `/admin` to manage team,
+   agents, content, and API keys, and to promote members to admins.
+6. **Health** — `curl localhost:8080/health` and `curl localhost:8080/ready`.
+7. **Connect an agent** —
    ```bash
    npm i -g @ai-agent-hub/cli   # or: node cli/index.mjs <cmd>
    aihub login --url http://localhost:8080 --key <your-key>
    aihub connect cursor && aihub index
    ```
-5. **Smoke test the API** — the calls in `docs/specs/04-local-dev.md §4`.
+8. **Smoke test the API** — the calls in `docs/specs/04-local-dev.md §4`.
 
 Everything above runs offline (local embeddings, dev SSO). Add provider/Stripe/
 WorkOS keys only when you want real inference / billing / enterprise SSO.
