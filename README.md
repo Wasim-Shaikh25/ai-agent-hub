@@ -58,16 +58,32 @@ collaborative + governed **Context / Gateway / Governance** planes. See
 
 | Surface | Who | What |
 |---|---|---|
-| `/login`, `/account` | any customer user | sign up, plan, usage, API key |
+| `/login`, `/account` | any customer user | sign up with email/password, Google, Apple, or mobile; plan, usage, API key |
+| `/help` | public | searchable help centre and support ticket form |
 | `/dashboard` | customer | cost / usage / audit |
 | `/admin` | customer org admin/owner | manage **their** workspace (content, policies, keys, team, MCP, audit) |
-| `/superadmin` | **you, the operator** | cross-org control, **issue analysis**, and a grounded **copilot** — vendor-only, gated by `is_platform_admin` |
+| `/superadmin` | **you, the operator** | cross-org control, **issue analysis**, support tickets, and a grounded **copilot** — vendor-only, gated by `is_platform_admin` and disabled by default |
 
 The operator console (`/superadmin`) is where you run the SaaS: change any org's
 plan, suspend/resume tenants, analyze operational issues (provider errors,
-budget/limit hits, redaction blocks, slow calls) across every workspace, and ask
-the copilot what's failing. See
+budget/limit hits, redaction blocks, slow calls) across every workspace, triage
+support tickets, and ask the copilot what's failing. See
 [`docs/specs/16-platform-admin.md`](docs/specs/16-platform-admin.md).
+
+### User support, registration, and AI assistant policy
+
+- **Self-serve help:** `/help` is a public, searchable help centre. It explains
+  sign-up, connecting an agent, API keys, model selection, billing, and how to
+  open a support ticket.
+- **Support tickets:** Authenticated users can submit tickets from `/help` or
+  `POST /api/tickets`. Operators review and close them in `/superadmin` or via
+  `GET /api/platform/tickets`.
+- **Registration options:** `/login` supports email/password, Google OAuth
+  (`/auth/oauth/google`), Apple (`/auth/oauth/apple`), and a mobile OTP button
+  that is stubbed until an SMS gateway is configured.
+- **No end-user AI chat:** The operator copilot is gated by `is_platform_admin`
+  and the `ENABLE_AI_ASSISTANT` flag (default `false`). No per-org, per-team, or
+  per-user assistant is exposed, so LLM costs stay under operator control.
 
 ## What It Does
 

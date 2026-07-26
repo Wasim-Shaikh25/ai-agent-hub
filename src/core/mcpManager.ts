@@ -1,6 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as vscode from 'vscode';
-import { McpServerConfig, McpServerState, McpServerStatus } from './types';
+import { McpServerConfig, McpServerState } from './types';
+import { validateMcpServerFields } from '../utils/mcpEnv';
 
 /**
  * Manages MCP server child processes.
@@ -27,17 +28,24 @@ export class McpManager {
 
     this.setState(config.id, { configId: config.id, status: 'starting' });
 
+    const validation = validateMcpServerFields(config.name, config.packageName, config.args || [], config.env || {});
+    if (validation.length) {
+      const msg = `Refusing to start MCP server: ${validation.join('; ')}`;
+      this.setState(config.id, { configId: config.id, status: 'error', error: msg });
+      throw new Error(msg);
+    }
+
     const url = `http://localhost:${config.port}`;
 
-    // Wrap the stdio MCP server with mcp-proxy so it exposes HTTP/SSE endpoints.
-    // Command: npx mcp-proxy --port <port> -- npx <package> [...args]
-    // NPM_CONFIG_YES=true suppresses the "Ok to proceed?" prompt from npx.
+    // Use npx directly without a shell so package/args/env are passed as a flat array.
+    // On Windows npx is `npx.cmd`; everywhere else it is `npx`.
+    const isWin = process.platform === 'win32';
+    const npx = isWin ? 'npx.cmd' : 'npx';
     const proxyArgs = [
       'mcp-proxy',
       '--port', String(config.port),
-      '--shell',          // spawn inner command via shell for cross-platform compat
       '--',
-      'npx', config.packageName,
+      npx, config.packageName,
       ...config.args,
     ];
     const env = {
@@ -47,10 +55,11 @@ export class McpManager {
     };
 
     try {
-      const child = spawn('npx', proxyArgs, {
+      const child = spawn(npx, proxyArgs, {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: true,   // required on Windows for npx to resolve correctly
+        shell: false,
+        windowsHide: true,
       });
 
       this.processes.set(config.id, child);

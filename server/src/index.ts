@@ -10,6 +10,7 @@ import { registerApiRoutes } from './routes/api.js';
 import { registerGatewayRoutes } from './routes/gateway.js';
 import { registerAdminRoutes } from './routes/admin.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerOAuthRoutes } from './routes/oauth.js';
 import { registerBillingRoutes } from './routes/billing.js';
 import { registerPrivacyRoutes } from './routes/privacy.js';
 import { registerMetricsRoutes } from './routes/metrics.js';
@@ -18,6 +19,8 @@ import { registerWebappRoutes } from './routes/webapp.js';
 import { registerAdminUiRoutes } from './routes/adminui.js';
 import { registerPlatformRoutes, registerFeedbackRoute } from './routes/platform.js';
 import { registerSuperadminUiRoutes } from './routes/superadminui.js';
+import { registerHelpRoutes } from './routes/help.js';
+import { registerTicketRoutes } from './routes/tickets.js';
 import { startRetentionScheduler } from './services/retentionScheduler.js';
 import { handleMcpRequest } from './mcp/server.js';
 
@@ -68,6 +71,7 @@ async function main(): Promise<void> {
   });
 
   await registerAuthRoutes(app);
+  await registerOAuthRoutes(app);
   await registerApiRoutes(app);
   await registerGatewayRoutes(app);
   await registerAdminRoutes(app);
@@ -80,6 +84,8 @@ async function main(): Promise<void> {
   await registerPlatformRoutes(app);
   await registerFeedbackRoute(app);
   await registerSuperadminUiRoutes(app);
+  await registerHelpRoutes(app);
+  await registerTicketRoutes(app);
 
   // Native MCP endpoint (Streamable HTTP, stateless).
   app.post('/mcp', async (req, reply) => {

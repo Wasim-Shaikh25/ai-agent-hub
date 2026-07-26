@@ -22,17 +22,28 @@ export class FileWriter {
     items: readonly HubItem[],
     target: TargetLocationConfig,
     contentType: ItemType,
+    root?: string,
   ): Promise<FileWriteResult> {
     const filesWritten: string[] = [];
     const errors: string[] = [];
 
-    if (this.pathUtils.isUnsafePath(target.path)) {
-      errors.push(`Unsafe path blocked: ${target.path}`);
+    const workspaceRoot = root ?? this.pathUtils.getWorkspaceRoot();
+    if (!workspaceRoot) {
+      errors.push('No workspace folder is open');
       return { filesWritten, errors };
     }
 
-    if (!fs.existsSync(target.path)) {
-      fs.mkdirSync(target.path, { recursive: true });
+    let targetPath: string;
+    try {
+      targetPath = this.pathUtils.resolveSafeTarget(workspaceRoot, target.path);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(msg);
+      return { filesWritten, errors };
+    }
+
+    if (!fs.existsSync(targetPath)) {
+      fs.mkdirSync(targetPath, { recursive: true });
     }
 
     for (const item of items) {
@@ -40,13 +51,13 @@ export class FileWriter {
       let filePath: string;
 
       if (target.fileLayout === 'subfolder') {
-        const dir = path.join(target.path, slug);
+        const dir = path.join(targetPath, slug);
         if (!fs.existsSync(dir)) {
           fs.mkdirSync(dir, { recursive: true });
         }
         filePath = path.join(dir, SUBFOLDER_FILENAMES[contentType]);
       } else {
-        filePath = path.join(target.path, `${slug}.md`);
+        filePath = path.join(targetPath, `${slug}.md`);
       }
 
       if (fs.existsSync(filePath) && !this.isHubGeneratedSync(filePath)) {

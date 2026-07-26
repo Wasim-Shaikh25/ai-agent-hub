@@ -14,6 +14,9 @@ const UNSAFE_SEGMENTS: readonly RegExp[] = [
 
   // node_modules — exact match, prefix, or embedded segment
   /(?:^|\/)node_modules(?:\/|$)/,
+
+  // parent-directory traversal
+  /(?:^|\/)\.\.(?:\/|$)/,
 ];
 
 /**
@@ -81,6 +84,34 @@ export class PathUtils {
     }
 
     return path.resolve(folders[0].uri.fsPath, relativePath);
+  }
+
+  /**
+   * Returns the first open workspace folder, or undefined if none.
+   */
+  getWorkspaceRoot(): string | undefined {
+    const folders = vscode.workspace.workspaceFolders;
+    return folders?.[0]?.uri.fsPath;
+  }
+
+  /**
+   * Resolves `targetPath` against `root` and returns the absolute path,
+   * but only if the resolved path is inside `root` and is not unsafe.
+   *
+   * @throws {Error} when the resolved path escapes `root` or hits unsafe segments.
+   */
+  resolveSafeTarget(root: string, targetPath: string): string {
+    const resolved = path.resolve(root, targetPath);
+    const normalizedRoot = path.normalize(root);
+    const normalizedTarget = path.normalize(resolved);
+    if (!normalizedTarget.toLowerCase().startsWith(normalizedRoot.toLowerCase() + path.sep) &&
+        normalizedTarget.toLowerCase() !== normalizedRoot.toLowerCase()) {
+      throw new Error(`Unsafe path resolves outside workspace: ${targetPath}`);
+    }
+    if (this.isUnsafePath(normalizedTarget)) {
+      throw new Error(`Unsafe path blocked: ${targetPath}`);
+    }
+    return resolved;
   }
 
   /**

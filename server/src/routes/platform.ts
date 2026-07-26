@@ -5,6 +5,7 @@ import { invalidatePlan, type Plan } from '../billing/entitlements.js';
 import { training } from '../services/trainingService.js';
 import { events } from '../services/eventService.js';
 import { assistantReply, type PlatformSnapshot } from '../services/assistant.js';
+import { config } from '../config.js';
 import { AuditService } from '../services/auditService.js';
 
 const audit = new AuditService();
@@ -106,8 +107,11 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
 
   // -- operator copilot -----------------------------------------------------
   app.post('/api/platform/assistant', guard, async (req, reply) => {
+    if (!config.enableAiAssistant) {
+      return reply.code(503).send({ error: { code: 'feature_disabled', message: 'AI assistant is disabled' } });
+    }
     const message = (req.body as { message?: string }).message?.trim();
-    if (!message) return reply.code(400).send({ error: { code: 'bad_request', message: 'message required' } });
+    if (!message) return reply.code(400).send({ error: { code: 'bad_request', message: 'Message is required' } });
     const result = await assistantReply(message, await snapshot());
     // Capture the exchange as training data (redacted at rest).
     void training.record('assistant', req.auth!.orgId, message, result.reply, { llm: result.llm });

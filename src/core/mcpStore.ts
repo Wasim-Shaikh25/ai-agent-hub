@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Storage } from './storage';
 import { McpServerConfig } from './types';
+import { validateMcpServerFields } from '../utils/mcpEnv';
 
 const STORAGE_KEY = 'mcpServers';
 
@@ -24,10 +25,12 @@ export class McpStore {
   }
 
   add(fields: Omit<McpServerConfig, 'id' | 'developerOnly' | 'createdAt' | 'updatedAt'>): McpServerConfig {
-    if (!fields.name?.trim()) throw new Error('MCP server name is required');
-    if (!fields.packageName?.trim()) throw new Error('Package name is required');
+    const errors = validateMcpServerFields(fields.name, fields.packageName, fields.args || [], fields.env || {});
     if (!fields.port || fields.port < 1024 || fields.port > 65535) {
-      throw new Error('Port must be between 1024 and 65535');
+      errors.push('Port must be between 1024 and 65535');
+    }
+    if (errors.length) {
+      throw new Error(`MCP server validation failed:\n${errors.join('\n')}`);
     }
 
     const existing = this.getAll();

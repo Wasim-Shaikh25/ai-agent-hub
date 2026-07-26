@@ -9,6 +9,7 @@ import { Storage } from './storage';
 import { HubUpdater } from './hubUpdater';
 import { McpStore } from './mcpStore';
 import { McpManager } from './mcpManager';
+import { PathUtils } from '../utils/pathUtils';
 import { ItemType, SyncResult, AgentSyncResult, RepoSyncResult } from './types';
 
 /** The three content categories processed during a sync. */
@@ -33,6 +34,7 @@ export class SyncEngine {
     private readonly registry: Registry,
     private readonly agentConfig: AgentConfigStore,
     private readonly fileWriter: FileWriter,
+    private readonly pathUtils: PathUtils,
     private readonly storage: Storage,
     private readonly hubUpdater?: HubUpdater,
     private readonly extensionPath?: string,
@@ -114,6 +116,7 @@ export class SyncEngine {
           const ruleTarget = config.targets['rule'];
           if (!ruleTarget?.enabled || !ruleTarget.path) { continue; }
 
+          const workspaceRoot = this.pathUtils.getWorkspaceRoot();
           for (const mcp of mcpServers) {
             const state = this.mcpManager.getState(mcp.id);
             if (state.status !== 'running') { continue; }
@@ -121,9 +124,10 @@ export class SyncEngine {
             const ruleContent = this.mcpManager.generateRuleMarkdown(mcp);
             const slug = mcp.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
             const fileName = `mcp-${slug}.md`;
-            const targetPath = path.join(ruleTarget.path, fileName);
 
             try {
+              if (!workspaceRoot) { throw new Error('No workspace folder is open'); }
+              const targetPath = this.pathUtils.resolveSafeTarget(workspaceRoot, path.join(ruleTarget.path, fileName));
               const dir = path.dirname(targetPath);
               if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
               fs.writeFileSync(targetPath, ruleContent, 'utf-8');
@@ -179,8 +183,7 @@ export class SyncEngine {
               continue;
             }
 
-            const repoTarget = { ...target, path: `${repo.repoPath}/${target.path}` };
-            const result = await this.fileWriter.write(items, repoTarget, type);
+            const result = await this.fileWriter.write(items, target, type, repo.repoPath);
             filesWritten.push(...result.filesWritten);
             errors.push(...result.errors);
           }

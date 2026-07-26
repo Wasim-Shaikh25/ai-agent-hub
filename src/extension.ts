@@ -51,6 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
       registry,
       agentConfig,
       fileWriter,
+      pathUtils,
       storage,
       hubUpdater,
       context.extensionPath,
