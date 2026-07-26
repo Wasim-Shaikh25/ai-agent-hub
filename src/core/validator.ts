@@ -4,13 +4,20 @@ import * as path from 'path';
 import { ValidationError } from './types';
 
 /** Schema types that the Validator can validate against. */
-export type SchemaType = 'skill' | 'rule' | 'hook' | 'tool' | 'agent-target';
+export type SchemaType =
+  | 'skill'
+  | 'rule'
+  | 'hook'
+  | 'workflow'
+  | 'persona'
+  | 'agent-target';
 
 const SCHEMA_TYPES: readonly SchemaType[] = [
   'skill',
   'rule',
   'hook',
-  'tool',
+  'workflow',
+  'persona',
   'agent-target',
 ];
 

@@ -1,0 +1,16 @@
+.vscode/**
+.github/**
+node_modules/**
+out/**/*.map
+out/**/*.d.ts
+src/**
+tests/**
+__mocks__/**
+*.vsix
+*.log
+package-lock.json
+.gitignore
+tsconfig.json
+vitest.config.ts
+DUE_DILIGENCE_REVIEW.md
+REQUIREMENTS_AND_FIX_PLAN.md

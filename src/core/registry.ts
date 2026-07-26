@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Storage } from './storage';
+import { Validator } from './validator';
 import {
   ItemType,
   HubItem,
@@ -16,7 +17,7 @@ const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'p
 /**
  * In-memory item store for all Hub content.
  *
- * Manages five collections (skills, rules, hooks, workflows, agents),
+ * Manages five collections (skills, rules, hooks, workflows, personas),
  * each containing both builtin items loaded from disk and
  * user items persisted via {@link Storage}.
  */
@@ -29,7 +30,10 @@ export class Registry {
     persona: [],
   };
 
-  constructor(private readonly storage: Storage) {}
+  constructor(
+    private readonly storage: Storage,
+    private readonly validator?: Validator,
+  ) {}
 
   /**
    * Loads builtin content from `hub-content/` and user
@@ -86,7 +90,8 @@ export class Registry {
   /**
    * Creates a new user item and persists it.
    *
-   * @throws {Error} If the name is empty or, for hooks, the trigger is invalid.
+   * @throws {Error} If the name is empty, the trigger is invalid for hooks,
+   *                 or the item fails schema validation.
    */
   addItem(
     type: ItemType,
@@ -105,6 +110,8 @@ export class Registry {
       updatedAt: now,
     } as AnyHubItem;
 
+    this.validateItem(item);
+
     this.collections[type].push(item);
     this.persist(type);
     return item;
@@ -113,16 +120,20 @@ export class Registry {
   /**
    * Updates a user item in-place and persists the change.
    *
-   * @throws {Error} If the item is not found or is builtin.
+   * @throws {Error} If the item is not found, is builtin, or fails schema validation.
    */
   updateItem(type: ItemType, id: string, fields: Partial<AnyHubItem>): AnyHubItem {
     const item = this.findOrThrow(type, id);
     if (item.source === 'builtin') {
       throw new Error('Cannot edit a built-in item');
     }
-    Object.assign(item, fields, { updatedAt: new Date().toISOString() });
+    const updated = { ...item, ...fields, updatedAt: new Date().toISOString() } as AnyHubItem;
+    this.validateItem(updated);
+
+    const idx = this.collections[type].indexOf(item);
+    this.collections[type][idx] = updated;
     this.persist(type);
-    return item;
+    return updated;
   }
 
   /**
@@ -167,6 +178,17 @@ export class Registry {
       if (!trigger || !VALID_HOOK_TRIGGERS.includes(trigger as HookTrigger)) {
         throw new Error('Trigger must be one of: before, after, always');
       }
+    }
+  }
+
+  private validateItem(item: AnyHubItem): void {
+    if (!this.validator) {
+      return;
+    }
+    const errors = this.validator.validate(item.type, item);
+    if (errors.length > 0) {
+      const messages = errors.map((e) => `${e.path}: ${e.message}`).join('; ');
+      throw new Error(`Validation failed: ${messages}`);
     }
   }
 
@@ -242,9 +264,13 @@ export class Registry {
 
     if (type === 'hook') {
       const trigger = (frontmatter['trigger'] as HookTrigger) || 'always';
-      return { ...base, type: 'hook', trigger } as AnyHubItem;
+      const item = { ...base, type: 'hook', trigger } as AnyHubItem;
+      this.validateItem(item);
+      return item;
     }
 
-    return { ...base, type } as AnyHubItem;
+    const item = { ...base, type } as AnyHubItem;
+    this.validateItem(item);
+    return item;
   }
 }

@@ -4,6 +4,7 @@
   "description": "A centralized control plane for managing AI behavior content and syncing it to configured AI agent targets",
   "version": "0.0.1",
   "publisher": "ai-agent-hub",
+  "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -11,7 +12,16 @@
     "Other"
   ],
   "main": "./out/extension.js",
-  "activationEvents": [],
+  "activationEvents": [
+    "onCommand:aiAgentHub.open",
+    "onCommand:aiAgentHub.setup",
+    "onCommand:aiAgentHub.addSkill",
+    "onCommand:aiAgentHub.addRule",
+    "onCommand:aiAgentHub.addHook",
+    "onCommand:aiAgentHub.syncToAgents",
+    "onCommand:aiAgentHub.showAgents",
+    "onStartupFinished"
+  ],
   "contributes": {
     "commands": [
       {

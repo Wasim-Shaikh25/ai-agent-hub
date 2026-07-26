@@ -1,7 +1,7 @@
 # AI Agent Hub
 
 A VS Code extension that acts as a centralized control plane for managing
-AI behavior content (skills, rules, hooks) and syncing it to any
+AI behavior content (skills, rules, hooks, workflows, personas) and syncing it to any
 configured AI agent target (Kiro, Cursor, GitHub Copilot, Amazon Q, etc.).
 
 ## What It Does
@@ -18,6 +18,8 @@ everything from a single Hub UI and sync with one click.
   (e.g., naming conventions, security practices).
 - **Hooks** — event-driven triggers that fire before or after agent
   actions.
+- **Workflows** — step-by-step processes such as code review or deploy checklists.
+- **Personas** — agent persona definitions and system prompts.
 
 ## Features
 
@@ -178,7 +180,7 @@ hub-content/
   rules/       — Rule markdown files (.rule.md)
   hooks/       — Hook markdown files (.hook.md)
   workflows/   — Workflow markdown files (.workflow.md)
-  agents/      — Agent persona files (.agent.md)
+  personas/    — Persona markdown files (.persona.md)
 ```
 
 Each content file uses YAML front matter for metadata:
@@ -206,7 +208,7 @@ Instructions for the AI agent go here.
 | **Rule**   | Guardrails, standards, and naming conventions    | `.rule.md`           |
 | **Hook**   | Event-driven triggers (before/after actions)     | `.hook.md`           |
 | **Workflow**| Step-by-step processes (review, deploy, etc.)   | `.workflow.md`       |
-| **Agent**  | Agent persona definitions and system prompts     | `.agent.md`          |
+| **Persona**| Agent persona definitions and system prompts     | `.persona.md`        |
 
 ### File Extension Formats per Agent Target
 
