@@ -19,11 +19,26 @@ resolve to the same `{org, user, role}` and work on REST and MCP.
 |---|---|---|
 | POST | `/auth/superadmin/login` | send OTP to the configured superadmin email |
 | POST | `/auth/superadmin/verify-otp` | verify OTP and return a JWT |
-| GET | `/auth/debug/otp?email=` | dev/test only — peek the latest active OTP |
+| GET | `/auth/debug/otp?email=&purpose=` | dev/test only — peek the latest active OTP |
 
 The operator is seeded from `SUPERADMIN_EMAIL` / `SUPERADMIN_PASSWORD`. OTPs are
 emailed via SMTP when `SMTP_HOST` is set; otherwise printed to stdout. Regular
 `/auth/login` rejects platform admins so the OTP flow must be used.
+
+### Password reset
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/auth/forgot-password` | send a one-time reset code to the user's email |
+| POST | `/auth/reset-password` | verify code and set a new password |
+| GET | `/forgot-password` | public page to request a reset code |
+| GET | `/reset-password?email=&code=` | public page to choose a new password |
+
+`POST /auth/forgot-password` always returns `{ sent: true }` to prevent email
+enumeration. When an account exists, an OTP is stored with `purpose='password_reset'`
+and emailed via SMTP (or logged to stdout in dev/test). The reset link points to
+`/reset-password?email=...&code=...` with the same 10-minute TTL. Codes are
+single-use and consumed on successful `POST /auth/reset-password`.
 
 ### SSO (session login)
 

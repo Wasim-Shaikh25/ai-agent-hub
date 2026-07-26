@@ -43,3 +43,11 @@ export async function sendOtp(email: string, code: string): Promise<{ messageId:
     text: `Your one-time sign-in code is: ${code}\n\nIt expires in 10 minutes.`,
   });
 }
+
+export async function sendPasswordReset(email: string, code: string, link: string): Promise<{ messageId: string }> {
+  return sendEmail({
+    to: email,
+    subject: 'Reset your AI Agent Hub password',
+    text: `Use this code to reset your password: ${code}\n\nOr open this link:\n${link}\n\nIt expires in 10 minutes. If you didn't request this, ignore this email.`,
+  });
+}

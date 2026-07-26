@@ -81,6 +81,10 @@ failing. See [`docs/specs/16-platform-admin.md`](docs/specs/16-platform-admin.md
 - **Registration options:** `/login` supports email/password, Google OAuth
   (`/auth/oauth/google`), Apple (`/auth/oauth/apple`), and a mobile OTP button
   that is stubbed until an SMS gateway is configured.
+- **Password reset:** `/forgot-password` sends a one-time code to the user's
+  email (SMTP or stdout in dev/test). `/reset-password` accepts the code and a
+  new password, updating the account. Endpoint: `POST /auth/forgot-password` and
+  `POST /auth/reset-password`.
 - **Operator sign-in:** `/superadmin-login` uses password + email OTP. The operator
   (`is_platform_admin`) is seeded from `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`,
   and `SUPERADMIN_MOBILE` env vars, and receives an OTP by email (SMTP) or stdout
@@ -417,6 +421,9 @@ language mode or workspace state.
   then by matching the user's email domain to an org's `admin_email` domain.
   The first exact `admin_email` match becomes `owner`; other same-domain users
   become `member`.
+- **Password reset** — `/forgot-password` and `/auth/forgot-password` send a
+  one-time code by email; `/reset-password` and `/auth/reset-password` verify the
+  code and update the user's password.
 - **Role-gated dashboards** — `/admin` is visible to org `admin`/`owner` roles;
   `/activity` is visible to any signed-in user and shows only their own usage;
   `/superadmin` is visible only to the platform superadmin.

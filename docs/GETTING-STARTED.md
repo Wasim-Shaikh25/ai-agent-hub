@@ -56,6 +56,8 @@ Point the agent's base URL at the Hub for fallback, routing, and cost metering:
   and recent actions.
 - Open `http://localhost:8080/admin` as an org `admin`/`owner` to manage the
   workspace, team, and agents.
+- Forgot your password? Use `http://localhost:8080/forgot-password` to receive a
+  reset code by email (or in the server logs in dev mode).
 - Open `http://localhost:8080/superadmin-login` as the operator to provision
   orgs, change plans, and triage tickets.
 

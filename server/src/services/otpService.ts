@@ -14,16 +14,22 @@ function generateCode(): string {
   return (randomBytes(4).readUInt32BE(0) % 1_000_000).toString().padStart(6, '0');
 }
 
-/** Stores an OTP and sends it to the email address. */
-export async function createOtp(email: string, purpose: string): Promise<Otp> {
+/** Generates and stores an OTP without sending it. */
+export async function storeOtp(email: string, purpose: string): Promise<Otp> {
   const code = generateCode();
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60_000);
   await query(
     `INSERT INTO otp_code (email, purpose, code, expires_at) VALUES ($1, $2, $3, $4)`,
     [email.toLowerCase().trim(), purpose, code, expiresAt],
   );
-  await sendOtpEmail(email, code);
   return { code, expiresAt };
+}
+
+/** Stores an OTP and sends it to the email address. */
+export async function createOtp(email: string, purpose: string): Promise<Otp> {
+  const otp = await storeOtp(email, purpose);
+  await sendOtpEmail(email, otp.code);
+  return otp;
 }
 
 /**
