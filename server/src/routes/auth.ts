@@ -7,7 +7,8 @@ import { getPlan, entitled } from '../billing/entitlements.js';
 import { KeyService } from '../services/keyService.js';
 import { AuditService } from '../services/auditService.js';
 import { config } from '../config.js';
-import { createOtp, verifyOtp, peekOtp } from '../services/otpService.js';
+import { createOtp, verifyOtp, peekOtp, storeOtp } from '../services/otpService.js';
+import { sendPasswordReset } from '../services/emailService.js';
 
 const audit = new AuditService();
 const keys = new KeyService();
@@ -212,5 +213,42 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     }
     const token = signSession({ orgId: row.org_id, userId: row.id, role: row.role, email });
     return reply.send({ token, org: row.org_id, email, role: row.role });
+  });
+
+  // -- Password reset (customer email/password accounts) -----------------------
+
+  app.post('/auth/forgot-password', async (req, reply) => {
+    const b = req.body as { email?: string };
+    const email = (b.email ?? '').trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return reply.code(400).send({ error: { code: 'bad_request', message: 'Valid email required' } });
+    }
+
+    const user = await queryOne<{ email: string }>('SELECT email FROM app_user WHERE email = $1 AND is_platform_admin = false', [email]);
+    if (user) {
+      const { code } = await storeOtp(email, 'password_reset');
+      const link = `${config.appBaseUrl.replace(/\/$/, '')}/reset-password?email=${encodeURIComponent(email)}&code=${encodeURIComponent(code)}`;
+      await sendPasswordReset(email, code, link);
+    }
+    // Always return success to prevent email enumeration.
+    return reply.send({ sent: true });
+  });
+
+  app.post('/auth/reset-password', async (req, reply) => {
+    const b = req.body as { email?: string; code?: string; password?: string };
+    const email = (b.email ?? '').trim().toLowerCase();
+    const code = (b.code ?? '').trim();
+    const password = b.password ?? '';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return reply.code(400).send({ error: { code: 'bad_request', message: 'Valid email required' } });
+    }
+    if (password.length < 8) {
+      return reply.code(400).send({ error: { code: 'bad_request', message: 'Password must be at least 8 characters' } });
+    }
+    if (!await verifyOtp(email, code, 'password_reset')) {
+      return reply.code(400).send({ error: { code: 'invalid_code', message: 'Invalid or expired code' } });
+    }
+    await query('UPDATE app_user SET password_hash = $1 WHERE email = $2 AND is_platform_admin = false', [hashPassword(password), email]);
+    return reply.send({ reset: true });
   });
 }

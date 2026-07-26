@@ -6,7 +6,7 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
 
 ## [Unreleased]
 
-### Added — superadmin OTP, org provisioning, and domain-based SSO/OAuth
+### Added — superadmin OTP, org provisioning, domain-based SSO/OAuth, and password reset
 
 - **Env-fed superadmin** — `SUPERADMIN_EMAIL`, `SUPERADMIN_MOBILE`, `SUPERADMIN_PASSWORD`,
   and optional `SUPERADMIN_ID` seed the platform owner on first boot.
@@ -20,12 +20,15 @@ VS Code extension is versioned separately via GitHub Releases (see `README.md`).
   first, then by matching the user's email domain to an org's `admin_email` domain.
   The first exact `admin_email` match becomes `owner`; later same-domain users
   become `member`.
+- **Password reset** — `/forgot-password` and `/auth/forgot-password` send a
+  one-time code to the user's email; `/reset-password` and `/auth/reset-password`
+  verify the code and update the password. Tested in `auth-flow.test.mjs`.
 - **User activity dashboard** — new `/activity` page and `GET /api/me/activity`
   show the signed-in user's requests, tokens, cost, model usage, connected agents,
   and recent actions.
 - **Automated auth-flow validation** — `server/test/auth-flow.test.mjs` exercises
   the superadmin OTP flow, org creation, SSO owner assignment, domain member
-  auto-join, admin promotion, and role-gated dashboard visibility.
+  auto-join, admin promotion, password reset, and role-gated dashboard visibility.
 
 ### Added — integration test suite + CI
 

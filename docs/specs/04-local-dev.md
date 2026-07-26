@@ -64,6 +64,14 @@ curl -s -X POST localhost:8080/api/platform/orgs \
 # an SSO user with that email domain can now log in via the dev provider:
 curl -s "localhost:8080/auth/sso/callback?code=dev:admin@acme.com&state=eyJ..."
 
+# password reset (dev/test: code is logged to stdout; use /auth/debug/otp?purpose=password_reset to peek)
+curl -s -X POST localhost:8080/auth/forgot-password \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@acme.com"}'
+curl -s -X POST localhost:8080/auth/reset-password \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@acme.com","code":"123456","password":"new-password"}'
+
 # write + search memory (proves the Context Plane works end-to-end)
 curl -s localhost:8080/api/memory -H "Authorization: Bearer $DEV_API_KEY" \
   -H 'Content-Type: application/json' \

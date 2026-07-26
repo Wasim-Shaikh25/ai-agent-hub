@@ -144,6 +144,42 @@ describe('auth flow and dashboards', () => {
     }
   });
 
+  it('user can reset their password via email OTP', async () => {
+    const email = `reset-${TS}@acme.com`;
+    const oldPw = 'oldpass123';
+    const newPw = 'newpass456';
+    const signup = await jfetch(server.base, '/auth/signup', { method: 'POST', body: { email, password: oldPw, orgName: 'ResetTest' } });
+    assert.equal(signup.status, 200);
+
+    const forgot = await jfetch(server.base, '/auth/forgot-password', { method: 'POST', body: { email } });
+    assert.equal(forgot.status, 200);
+    assert.equal(forgot.body.sent, true);
+
+    const otpRes = await jfetch(server.base, `/auth/debug/otp?email=${encodeURIComponent(email)}&purpose=password_reset`);
+    assert.equal(otpRes.status, 200);
+    assert.ok(otpRes.body.code);
+
+    const reset = await jfetch(server.base, '/auth/reset-password', { method: 'POST', body: { email, code: otpRes.body.code, password: newPw } });
+    assert.equal(reset.status, 200);
+    assert.equal(reset.body.reset, true);
+
+    const loginOld = await jfetch(server.base, '/auth/login', { method: 'POST', body: { email, password: oldPw } });
+    assert.equal(loginOld.status, 401);
+
+    const loginNew = await jfetch(server.base, '/auth/login', { method: 'POST', body: { email, password: newPw } });
+    assert.equal(loginNew.status, 200);
+    assert.ok(loginNew.body.token);
+  });
+
+  it('forgot and reset password pages are visible', async () => {
+    for (const path of ['/forgot-password', '/reset-password?email=foo@bar.com&code=123456']) {
+      const res = await fetch(`${server.base}${path}`);
+      const text = await res.text();
+      assert.equal(res.status, 200);
+      assert.ok(text.includes('password'), `${path} should render password page`);
+    }
+  });
+
   it('admin APIs reject non-admin members', async () => {
     const res = await jfetch(server.base, '/api/members', { token: server.memberToken });
     assert.equal(res.status, 403);

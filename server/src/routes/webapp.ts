@@ -5,6 +5,8 @@ import { TOKENS, MARK, BASE } from './theme.js';
 export async function registerWebappRoutes(app: FastifyInstance): Promise<void> {
   app.get('/login', async (_req, reply) => reply.type('text/html').send(LOGIN_HTML));
   app.get('/superadmin-login', async (_req, reply) => reply.type('text/html').send(SUPERADMIN_LOGIN_HTML));
+  app.get('/forgot-password', async (_req, reply) => reply.type('text/html').send(FORGOT_PASSWORD_HTML));
+  app.get('/reset-password', async (_req, reply) => reply.type('text/html').send(RESET_PASSWORD_HTML));
   app.get('/account', async (_req, reply) => reply.type('text/html').send(ACCOUNT_HTML));
 }
 
@@ -83,6 +85,7 @@ const LOGIN_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charse
     <div id="orgWrap"><label>Team name</label><input id="orgName" placeholder="Acme Engineering"/></div>
     <label>Work email</label><input id="email" type="email" placeholder="you@company.com"/>
     <label>Password</label><input id="password" type="password" placeholder="At least 8 characters"/>
+    <div id="forgotLink" style="text-align:right;font-size:12px;margin:-6px 0 10px;display:none"><a class="small" href="/forgot-password">Forgot password?</a></div>
     <button id="go" onclick="submit()">Create account</button>
     <div style="text-align:center;margin:18px 0 8px;color:var(--muted);font-size:13px">Or continue with</div>
     <div style="display:flex;gap:10px">
@@ -101,6 +104,7 @@ function mode(m){M=m;
   document.getElementById('title').textContent=m==='signup'?'Create your account':'Welcome back';
   document.getElementById('sub').textContent=m==='signup'?'Start free — connect your first agent in minutes.':'Log in to your account.';
   document.getElementById('orgWrap').style.display=m==='signup'?'block':'none';
+  document.getElementById('forgotLink').style.display=m==='login'?'block':'none';
   document.getElementById('go').textContent=m==='signup'?'Create account':'Log in';
   document.getElementById('msg').textContent='';
 }
@@ -121,6 +125,69 @@ function oauth(provider){
   if(provider==='mobile'){alert('Mobile OTP sign-in is not configured yet.');return;}
   if(provider==='apple'){alert('Apple sign-in is not configured yet.');return;}
   location.href='/auth/oauth/'+provider;
+}
+</script></body></html>`;
+
+const FORGOT_PASSWORD_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Reset password · AI Agent Hub</title><style>${STYLE}</style></head><body>
+<div class="wrap">
+  <div class="brand"><span class="mark">◈</span> AI Agent Hub</div>
+  <div class="card">
+    <h1>Reset your password</h1>
+    <p class="sub">Enter your email and we'll send a reset code.</p>
+    <label>Work email</label><input id="email" type="email" placeholder="you@company.com"/>
+    <button onclick="send()">Send reset code</button>
+    <div class="msg" id="msg"></div>
+    <p class="small" style="margin-top:16px"><a href="/login">Back to sign in</a></p>
+  </div>
+</div>
+<script>
+async function send(){
+  const msg=document.getElementById('msg');msg.className='msg';msg.textContent='…';
+  const email=document.getElementById('email').value.trim();
+  try{
+    const r=await fetch('/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const d=await r.json();
+    if(!r.ok){msg.className='msg err';msg.textContent=(d.error&&d.error.message)||'Something went wrong';return;}
+    msg.className='msg ok';msg.textContent='If this account exists, a reset code has been sent.';
+  }catch(e){msg.className='msg err';msg.textContent=e.message;}
+}
+</script></body></html>`;
+
+const RESET_PASSWORD_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Choose new password · AI Agent Hub</title><style>${STYLE}</style></head><body>
+<div class="wrap">
+  <div class="brand"><span class="mark">◈</span> AI Agent Hub</div>
+  <div class="card">
+    <h1>Choose a new password</h1>
+    <p class="sub">Enter the code from your email and a new password.</p>
+    <label>Work email</label><input id="email" type="email" placeholder="you@company.com"/>
+    <label>Reset code</label><input id="code" placeholder="123456"/>
+    <label>New password</label><input id="password" type="password" placeholder="At least 8 characters"/>
+    <button onclick="resetP()">Update password</button>
+    <div class="msg" id="msg"></div>
+    <p class="small" style="margin-top:16px"><a href="/login">Back to sign in</a></p>
+  </div>
+</div>
+<script>
+(function(){
+  const p=new URLSearchParams(location.search);
+  const email=p.get('email');const code=p.get('code');
+  if(email)document.getElementById('email').value=email;
+  if(code)document.getElementById('code').value=code;
+})();
+async function resetP(){
+  const msg=document.getElementById('msg');msg.className='msg';msg.textContent='…';
+  const body={
+    email:document.getElementById('email').value.trim(),
+    code:document.getElementById('code').value.trim(),
+    password:document.getElementById('password').value,
+  };
+  try{
+    const r=await fetch('/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const d=await r.json();
+    if(!r.ok){msg.className='msg err';msg.textContent=(d.error&&d.error.message)||'Something went wrong';return;}
+    msg.className='msg ok';msg.textContent='Password updated. Redirecting…';
+    setTimeout(()=>location.href='/login',1200);
+  }catch(e){msg.className='msg err';msg.textContent=e.message;}
 }
 </script></body></html>`;
 
