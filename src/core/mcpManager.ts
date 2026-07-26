@@ -1,11 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as vscode from 'vscode';
-import { McpServerConfig, McpServerState, McpServerStatus } from './types';
-import {
-  isValidNpmPackageName,
-  isValidMcpArg,
-  validateEnvRecord,
-} from '../utils/mcpEnv';
+import { McpServerConfig, McpServerState } from './types';
+import { isValidNpmPackageName, isValidMcpArg, validateEnvRecord } from '../utils/mcpEnv';
 
 /**
  * Manages MCP server child processes.
@@ -56,7 +52,8 @@ export class McpManager {
     // the validated packageName/args are not re-interpreted by a shell.
     const proxyArgs = [
       'mcp-proxy',
-      '--port', String(config.port),
+      '--port',
+      String(config.port),
       '--',
       npxBin,
       config.packageName,
@@ -82,10 +79,7 @@ export class McpManager {
       child.stdout?.on('data', (data: Buffer) => {
         const line = data.toString().trim();
         if (line) {
-          vscode.window.setStatusBarMessage(
-            `MCP [${config.name}]: ${line.slice(0, 80)}`,
-            3000,
-          );
+          vscode.window.setStatusBarMessage(`MCP [${config.name}]: ${line.slice(0, 80)}`, 3000);
         }
       });
 
@@ -104,9 +98,7 @@ export class McpManager {
           url,
           pid: child.pid,
         });
-        vscode.window.showInformationMessage(
-          `MCP server "${config.name}" started on ${url}`,
-        );
+        vscode.window.showInformationMessage(`MCP server "${config.name}" started on ${url}`);
       });
 
       child.on('error', (err) => {
@@ -116,9 +108,7 @@ export class McpManager {
           status: 'error',
           error: err.message,
         });
-        vscode.window.showErrorMessage(
-          `MCP server "${config.name}" failed: ${err.message}`,
-        );
+        vscode.window.showErrorMessage(`MCP server "${config.name}" failed: ${err.message}`);
       });
 
       child.on('exit', (code) => {
@@ -161,9 +151,7 @@ export class McpManager {
 
   /** Returns the current runtime state of an MCP server. */
   getState(configId: string): McpServerState {
-    return (
-      this.states.get(configId) ?? { configId, status: 'stopped' }
-    );
+    return this.states.get(configId) ?? { configId, status: 'stopped' };
   }
 
   /** Returns runtime states for all known servers. */

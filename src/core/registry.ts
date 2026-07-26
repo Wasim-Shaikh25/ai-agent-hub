@@ -3,13 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Storage } from './storage';
 import { Validator } from './validator';
-import {
-  ItemType,
-  HubItem,
-  AnyHubItem,
-  HookTrigger,
-  ContentFormat,
-} from './types';
+import { ItemType, HubItem, AnyHubItem, HookTrigger, ContentFormat } from './types';
 
 const VALID_HOOK_TRIGGERS: readonly HookTrigger[] = ['before', 'after', 'always'];
 const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'persona'];
@@ -212,11 +206,7 @@ export class Registry {
    * Frontmatter is delimited by `---` lines at the start of
    * the file. Only simple `key: value` pairs are supported.
    */
-  private parseBuiltinFile(
-    content: string,
-    fileName: string,
-    type: ItemType,
-  ): AnyHubItem | null {
+  private parseBuiltinFile(content: string, fileName: string, type: ItemType): AnyHubItem | null {
     const frontmatter: Record<string, string> = {};
     let body = content;
 

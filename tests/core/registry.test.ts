@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import * as fs from 'fs';
-import * as path from 'path';
 import { Registry } from '../../src/core/registry';
 import { Validator } from '../../src/core/validator';
-import { Storage } from '../../src/core/storage';
-import { AnyHubItem, ItemType } from '../../src/core/types';
 
 vi.mock('vscode', async () => import('../../__mocks__/vscode'));
 

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Registry } from '../core/registry';
 import { AnyHubItem, HookTrigger } from '../core/types';
+import { promptForContent } from '../utils/promptContent';
 
 /** Quick-pick items for hook trigger selection. */
 const TRIGGER_OPTIONS: readonly vscode.QuickPickItem[] = [
@@ -12,6 +13,9 @@ const TRIGGER_OPTIONS: readonly vscode.QuickPickItem[] = [
 /**
  * Command handler that prompts the user for hook details
  * (including trigger) and adds a new hook item to the Registry.
+ *
+ * Uses a temporary Markdown editor so the hook body can be
+ * multi-line, unlike `showInputBox`.
  */
 export async function addHook(registry: Registry): Promise<void> {
   const name = await vscode.window.showInputBox({
@@ -33,11 +37,10 @@ export async function addHook(registry: Registry): Promise<void> {
   });
   const trigger: HookTrigger = (triggerPick?.label as HookTrigger) ?? 'always';
 
-  const content =
-    (await vscode.window.showInputBox({
-      prompt: 'Content',
-      placeHolder: 'Enter hook content',
-    })) ?? '';
+  const content = await promptForContent('Add Hook');
+  if (content === undefined) {
+    return;
+  }
 
   registry.addItem('hook', {
     name,

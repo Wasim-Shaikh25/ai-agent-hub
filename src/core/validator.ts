@@ -4,13 +4,7 @@ import * as path from 'path';
 import { ValidationError } from './types';
 
 /** Schema types that the Validator can validate against. */
-export type SchemaType =
-  | 'skill'
-  | 'rule'
-  | 'hook'
-  | 'workflow'
-  | 'persona'
-  | 'agent-target';
+export type SchemaType = 'skill' | 'rule' | 'hook' | 'workflow' | 'persona' | 'agent-target';
 
 const SCHEMA_TYPES: readonly SchemaType[] = [
   'skill',
@@ -37,27 +31,17 @@ export class Validator {
     this.schemas = new Map();
 
     for (const type of SCHEMA_TYPES) {
-      const schemaPath = path.join(
-        extensionPath,
-        'schemas',
-        `${type}.schema.json`,
-      );
+      const schemaPath = path.join(extensionPath, 'schemas', `${type}.schema.json`);
       if (fs.existsSync(schemaPath)) {
         try {
-          const schema: object = JSON.parse(
-            fs.readFileSync(schemaPath, 'utf-8'),
-          );
+          const schema: object = JSON.parse(fs.readFileSync(schemaPath, 'utf-8'));
           this.ajv.addSchema(schema, type);
           this.schemas.set(type, true);
         } catch (err) {
-          console.warn(
-            `Validator: failed to load schema "${type}": ${String(err)}`,
-          );
+          console.warn(`Validator: failed to load schema "${type}": ${String(err)}`);
         }
       } else {
-        console.warn(
-          `Validator: schema file not found: ${schemaPath}`,
-        );
+        console.warn(`Validator: schema file not found: ${schemaPath}`);
       }
     }
   }
@@ -70,8 +54,7 @@ export class Validator {
    *          {@link ValidationError} objects otherwise.
    */
   validate(type: SchemaType, data: unknown): ValidationError[] {
-    const validate: ValidateFunction | undefined =
-      this.ajv.getSchema(type);
+    const validate: ValidateFunction | undefined = this.ajv.getSchema(type);
 
     if (!validate) {
       // Schema was not loaded — skip validation gracefully.

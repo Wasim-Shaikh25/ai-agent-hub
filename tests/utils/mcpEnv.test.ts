@@ -74,7 +74,12 @@ describe('mcpEnv', () => {
 
   describe('validateMcpServerFields', () => {
     it('returns no errors for a valid config', () => {
-      const errors = validateMcpServerFields('GitHub MCP', '@modelcontextprotocol/server-github', ['--verbose'], { GITHUB_TOKEN: 'abc' });
+      const errors = validateMcpServerFields(
+        'GitHub MCP',
+        '@modelcontextprotocol/server-github',
+        ['--verbose'],
+        { GITHUB_TOKEN: 'abc' },
+      );
       expect(errors).toHaveLength(0);
     });
 

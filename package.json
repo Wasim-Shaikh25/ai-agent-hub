@@ -68,6 +68,9 @@
     "build": "tsc",
     "watch": "tsc -watch",
     "test": "vitest --run",
+    "lint": "eslint src tests --ext .ts",
+    "lint:fix": "eslint src tests --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "package": "vsce package --no-dependencies",
     "vscode:prepublish": "npm run build"
   },
@@ -78,8 +81,13 @@
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
     "@vscode/vsce": "^2.32.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.1.8",
     "fast-check": "^3.15.0",
+    "prettier": "^3.9.6",
     "typescript": "^5.3.3",
     "vitest": "^3.1.0"
   },

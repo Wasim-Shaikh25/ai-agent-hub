@@ -76,9 +76,11 @@ export class SyncEngine {
     const repoResults: RepoSyncResult[] = [];
 
     try {
-      // Fetch latest hub content from remote before syncing
+      // Fetch latest hub content from remote before syncing.
+      // Cap the remote update at 5 seconds so a slow/unavailable
+      // network does not stall the local sync operation.
       if (this.hubUpdater && this.extensionPath) {
-        const updated = await this.hubUpdater.fetchLatest(this.extensionPath);
+        const updated = await this.hubUpdater.fetchLatest(this.extensionPath, 5_000);
         if (updated) {
           // Reload registry so new/changed builtin items are picked up
           this.registry.initialize(this.extensionPath);
@@ -100,12 +102,7 @@ export class SyncEngine {
             continue;
           }
 
-          const result = await this.fileWriter.write(
-            enabledItems,
-            target,
-            type,
-            workspaceRoot,
-          );
+          const result = await this.fileWriter.write(enabledItems, target, type, workspaceRoot);
           agentResults.push({
             agentName: config.displayName,
             contentType: type,
@@ -120,11 +117,15 @@ export class SyncEngine {
         const mcpServers = this.mcpStore.getAll();
         for (const config of enabledConfigs) {
           const ruleTarget = config.targets['rule'];
-          if (!ruleTarget?.enabled || !ruleTarget.path) { continue; }
+          if (!ruleTarget?.enabled || !ruleTarget.path) {
+            continue;
+          }
 
           for (const mcp of mcpServers) {
             const state = this.mcpManager.getState(mcp.id);
-            if (state.status !== 'running') { continue; }
+            if (state.status !== 'running') {
+              continue;
+            }
 
             const ruleContent = this.mcpManager.generateRuleMarkdown(mcp);
             const slug = mcp.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -145,7 +146,9 @@ export class SyncEngine {
             const targetPath = path.join(targetDir, fileName);
 
             try {
-              if (!fs.existsSync(targetDir)) { fs.mkdirSync(targetDir, { recursive: true }); }
+              if (!fs.existsSync(targetDir)) {
+                fs.mkdirSync(targetDir, { recursive: true });
+              }
               fs.writeFileSync(targetPath, ruleContent, 'utf-8');
               agentResults.push({
                 agentName: config.displayName,
@@ -158,7 +161,9 @@ export class SyncEngine {
                 agentName: config.displayName,
                 contentType: 'rule',
                 filesWritten: [],
-                errors: [`MCP rule write failed: ${err instanceof Error ? err.message : String(err)}`],
+                errors: [
+                  `MCP rule write failed: ${err instanceof Error ? err.message : String(err)}`,
+                ],
               });
             }
           }
@@ -199,12 +204,7 @@ export class SyncEngine {
               continue;
             }
 
-            const result = await this.fileWriter.write(
-              items,
-              target,
-              type,
-              repo.repoPath,
-            );
+            const result = await this.fileWriter.write(items, target, type, repo.repoPath);
             filesWritten.push(...result.filesWritten);
             errors.push(...result.errors);
           }
