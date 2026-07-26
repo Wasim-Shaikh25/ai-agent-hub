@@ -44,7 +44,7 @@ a.top{color:var(--cyan);text-decoration:none;font-size:13px}
   <aside>
     <div class="brand"><span class="mark">◈</span> Admin</div>
     <div class="nav" id="nav"></div>
-    <div style="margin-top:20px;padding:0 8px"><a class="top" href="/dashboard">Cost dashboard →</a><br/><a class="top" href="/account">Account →</a><br/><a class="top" id="logout">Log out</a></div>
+    <div style="margin-top:20px;padding:0 8px"><a class="top" href="/help">Help →</a><br/><a class="top" href="/dashboard">Cost dashboard →</a><br/><a class="top" href="/account">Account →</a><br/><a class="top" id="logout">Log out</a></div>
   </aside>
   <main id="main"></main>
 </div>
@@ -70,7 +70,7 @@ const VIEWS={
    const [me,plan,usage]=await Promise.all([api('/api/me'),api('/api/plan'),api('/api/usage')]);
    M.innerHTML='<h1>Overview</h1><p class="sub">Workspace '+esc(me.org)+' · you are '+esc(me.role)+'</p>'+
    '<div class="card"><div class="tiles">'+
-   tile(plan.plan,'plan')+tile((usage.tokens||0).toLocaleString(),'tokens/mo')+tile('$'+Number(usage.usd||0).toFixed(4),'cost/mo')+tile((plan.features||[]).length,'paid features')+
+   tile(plan.plan,'Plan')+tile((usage.tokens||0).toLocaleString(),'Tokens this month')+tile('$'+Number(usage.usd||0).toFixed(4),'Cost this month')+tile((plan.features||[]).length,'Paid features')+
    '</div></div><div class="card"><h2>Included features</h2><p class="muted">'+((plan.features||[]).join(', ')||'core (free)')+'</p></div>';
  },
  agents(){guard(async()=>{

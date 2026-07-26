@@ -30,7 +30,9 @@ export async function connectServer(hub: HubClient): Promise<void> {
     vscode.window.showInformationMessage(`Connected to Hub (org ${me.org}, role ${me.role}).`);
   } catch (err) {
     await hub.clear();
-    vscode.window.showErrorMessage(`Hub connection failed: ${err instanceof Error ? err.message : String(err)}`);
+    vscode.window.showErrorMessage(
+      `Hub connection failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
@@ -61,7 +63,9 @@ export async function connectAgentsToHub(hub: HubClient): Promise<void> {
       writeMerged(target, snippet.config as Record<string, unknown>);
       written.push(`${agent}: ${target}`);
     } catch (err) {
-      vscode.window.showErrorMessage(`${agent}: ${err instanceof Error ? err.message : String(err)}`);
+      vscode.window.showErrorMessage(
+        `${agent}: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -83,11 +87,17 @@ export async function pullFromHub(hub: HubClient): Promise<void> {
       return;
     }
     await vscode.window.showQuickPick(
-      items.map((i) => ({ label: `[${i.type}] ${i.name}`, description: i.status, detail: i.description })),
+      items.map((i) => ({
+        label: `[${i.type}] ${i.name}`,
+        description: i.status,
+        detail: i.description,
+      })),
       { title: `Hub content (${items.length})`, canPickMany: false },
     );
   } catch (err) {
-    vscode.window.showErrorMessage(`Pull failed: ${err instanceof Error ? err.message : String(err)}`);
+    vscode.window.showErrorMessage(
+      `Pull failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 

@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import { Storage } from './storage';
 import { McpServerConfig } from './types';
+import { validateMcpServerFields } from '../utils/mcpEnv';
 
 const STORAGE_KEY = 'mcpServers';
 
@@ -23,11 +24,27 @@ export class McpStore {
     return this.getAll().find((s) => s.id === id);
   }
 
-  add(fields: Omit<McpServerConfig, 'id' | 'developerOnly' | 'createdAt' | 'updatedAt'>): McpServerConfig {
-    if (!fields.name?.trim()) throw new Error('MCP server name is required');
-    if (!fields.packageName?.trim()) throw new Error('Package name is required');
+  add(
+    fields: Omit<McpServerConfig, 'id' | 'developerOnly' | 'createdAt' | 'updatedAt'>,
+  ): McpServerConfig {
+    if (!fields.name?.trim()) {
+      throw new Error('MCP server name is required');
+    }
+    if (!fields.packageName?.trim()) {
+      throw new Error('Package name is required');
+    }
     if (!fields.port || fields.port < 1024 || fields.port > 65535) {
       throw new Error('Port must be between 1024 and 65535');
+    }
+
+    const validationErrors = validateMcpServerFields(
+      fields.name,
+      fields.packageName,
+      fields.args ?? [],
+      fields.env ?? {},
+    );
+    if (validationErrors.length > 0) {
+      throw new Error(validationErrors.join('; '));
     }
 
     const existing = this.getAll();
@@ -50,11 +67,43 @@ export class McpStore {
     return config;
   }
 
-  update(id: string, fields: Partial<Omit<McpServerConfig, 'id' | 'developerOnly' | 'createdAt'>>): McpServerConfig {
+  update(
+    id: string,
+    fields: Partial<Omit<McpServerConfig, 'id' | 'developerOnly' | 'createdAt'>>,
+  ): McpServerConfig {
     const all = this.getAll();
     const idx = all.findIndex((s) => s.id === id);
-    if (idx === -1) throw new Error(`MCP server "${id}" not found`);
-    all[idx] = { ...all[idx], ...fields, updatedAt: new Date().toISOString() };
+    if (idx === -1) {
+      throw new Error(`MCP server "${id}" not found`);
+    }
+
+    const prev = all[idx];
+    const port = fields.port ?? prev.port;
+    if (port < 1024 || port > 65535) {
+      throw new Error('Port must be between 1024 and 65535');
+    }
+    if (all.some((s) => s.id !== id && s.port === port)) {
+      throw new Error(`Port ${port} is already in use by another MCP server`);
+    }
+
+    const candidate: McpServerConfig = {
+      ...prev,
+      ...fields,
+      port,
+      updatedAt: new Date().toISOString(),
+    };
+
+    const validationErrors = validateMcpServerFields(
+      candidate.name,
+      candidate.packageName,
+      candidate.args,
+      candidate.env,
+    );
+    if (validationErrors.length > 0) {
+      throw new Error(validationErrors.join('; '));
+    }
+
+    all[idx] = candidate;
     this.storage.save(STORAGE_KEY, all);
     return all[idx];
   }

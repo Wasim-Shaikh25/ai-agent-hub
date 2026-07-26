@@ -36,6 +36,7 @@ a{color:var(--cyan)}.small{font-size:13px;color:var(--muted)}
 const LOGIN_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Sign in · AI Agent Hub</title><style>${STYLE}</style></head><body>
 <div class="wrap">
   <div class="brand"><span class="mark">◈</span> AI Agent Hub</div>
+  <div style="text-align:right;margin-bottom:8px"><a class="small" href="/help">Help</a></div>
   <div class="card">
     <div class="tabs"><div class="tab on" id="tabSignup" onclick="mode('signup')">Sign up</div><div class="tab" id="tabLogin" onclick="mode('login')">Log in</div></div>
     <h1 id="title">Create your account</h1>
@@ -44,6 +45,12 @@ const LOGIN_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charse
     <label>Work email</label><input id="email" type="email" placeholder="you@company.com"/>
     <label>Password</label><input id="password" type="password" placeholder="At least 8 characters"/>
     <button id="go" onclick="submit()">Create account</button>
+    <div style="text-align:center;margin:18px 0 8px;color:var(--muted);font-size:13px">Or continue with</div>
+    <div style="display:flex;gap:10px">
+      <button class="ghost" style="flex:1" onclick="oauth('google')">Google</button>
+      <button class="ghost" style="flex:1" onclick="oauth('apple')">Apple</button>
+      <button class="ghost" style="flex:1" onclick="oauth('mobile')">Mobile</button>
+    </div>
     <div class="msg" id="msg"></div>
   </div>
 </div>
@@ -71,18 +78,23 @@ async function submit(){
     location.href='/account';
   }catch(e){msg.className='msg err';msg.textContent=e.message;}
 }
+function oauth(provider){
+  if(provider==='mobile'){alert('Mobile OTP sign-in is not configured yet.');return;}
+  if(provider==='apple'){alert('Apple sign-in is not configured yet.');return;}
+  location.href='/auth/oauth/'+provider;
+}
 </script></body></html>`;
 
 const ACCOUNT_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Account · AI Agent Hub</title><style>${STYLE}</style></head><body>
 <div class="wrap acct">
-  <div class="brand"><span class="mark">◈</span> AI Agent Hub <span style="flex:1"></span><a class="small" href="#" onclick="logout()">Log out</a></div>
+  <div class="brand"><span class="mark">◈</span> AI Agent Hub <span style="flex:1"></span><a class="small" href="/help">Help</a> · <a class="small" href="#" onclick="logout()">Log out</a></div>
   <div class="card">
     <div style="display:flex;align-items:center;gap:12px"><h1 style="margin:0">Your workspace</h1><span class="pill" id="plan">…</span></div>
     <p class="sub" id="who"></p>
     <div class="tiles">
-      <div class="tile"><div class="n" id="tokens">–</div><div class="l">tokens this month</div></div>
-      <div class="tile"><div class="n" id="usd">–</div><div class="l">cost this month</div></div>
-      <div class="tile"><div class="n" id="reqlimit">–</div><div class="l">request limit / mo</div></div>
+      <div class="tile"><div class="n" id="tokens">–</div><div class="l">Tokens this month</div></div>
+      <div class="tile"><div class="n" id="usd">–</div><div class="l">Cost this month</div></div>
+      <div class="tile"><div class="n" id="reqlimit">–</div><div class="l">Request limit per month</div></div>
     </div>
     <div id="keyBox" style="display:none"><label>Your API key (copy it into <span class="mono">aihub login</span>)</label><div class="key mono" id="apikey"></div></div>
     <button class="ghost" onclick="newKey()" style="margin-top:14px">Create a new API key</button>

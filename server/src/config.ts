@@ -33,6 +33,13 @@ export interface Config {
   memoryHalflifeDays: number;
   slowRequestMs: number;
   models: string;
+  enableAiAssistant: boolean;
+  googleClientId: string;
+  googleClientSecret: string;
+  appleClientId: string;
+  appleTeamId: string;
+  appleKeyId: string;
+  applePrivateKey: string;
 }
 
 function env(key: string, fallback: string): string {
@@ -77,4 +84,11 @@ export const config: Config = {
   memoryHalflifeDays: Number(env('MEMORY_HALFLIFE_DAYS', '30')),
   slowRequestMs: Number(env('SLOW_REQUEST_MS', '20000')),
   models: env('HUB_MODELS', ''),
+  enableAiAssistant: env('ENABLE_AI_ASSISTANT', 'false') === 'true',
+  googleClientId: env('GOOGLE_CLIENT_ID', ''),
+  googleClientSecret: env('GOOGLE_CLIENT_SECRET', ''),
+  appleClientId: env('APPLE_CLIENT_ID', ''),
+  appleTeamId: env('APPLE_TEAM_ID', ''),
+  appleKeyId: env('APPLE_KEY_ID', ''),
+  applePrivateKey: env('APPLE_PRIVATE_KEY', ''),
 };

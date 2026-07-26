@@ -40,14 +40,7 @@ export type FileExtensionFormat = 'md' | 'instructions-md' | 'mdc' | 'prompt-md'
 
 /** The tabs rendered in the main Hub webview panel. */
 export type TabType =
-  | 'skills'
-  | 'rules'
-  | 'hooks'
-  | 'workflows'
-  | 'personas'
-  | 'agents'
-  | 'mcps'
-  | 'sync';
+  'skills' | 'rules' | 'hooks' | 'workflows' | 'personas' | 'agents' | 'mcps' | 'sync';
 
 // ---------------------------------------------------------------------------
 // Hub items
@@ -64,7 +57,7 @@ export interface HubItem {
   content: string;
   format: ContentFormat;
   readonly createdAt: string; // ISO 8601
-  updatedAt: string;         // ISO 8601
+  updatedAt: string; // ISO 8601
 }
 
 /** A skill item managed by the Hub. */
@@ -127,7 +120,7 @@ export interface AgentTargetConfig {
   targets: Record<ItemType, TargetLocationConfig>;
   autoSync: boolean;
   readonly createdAt: string; // ISO 8601
-  updatedAt: string;         // ISO 8601
+  updatedAt: string; // ISO 8601
 }
 
 /** Canonical .md file names used inside subfolders per content type. */
@@ -158,7 +151,7 @@ export interface RepoSyncTarget {
   selectedItemIds: string[];
   enabled: boolean;
   readonly createdAt: string; // ISO 8601
-  updatedAt: string;         // ISO 8601
+  updatedAt: string; // ISO 8601
 }
 
 // ---------------------------------------------------------------------------
@@ -253,7 +246,7 @@ export interface McpServerConfig {
   /** Developer-only flag — only devs can add/edit MCP servers. */
   readonly developerOnly: true;
   readonly createdAt: string; // ISO 8601
-  updatedAt: string;         // ISO 8601
+  updatedAt: string; // ISO 8601
 }
 
 /** Runtime state of a running MCP server (not persisted). */

@@ -1,9 +1,14 @@
 import type { FastifyInstance } from 'fastify';
 import { TOKENS, MARK, BASE } from './theme.js';
+import { config } from '../config.js';
 
 /** Serves the platform super-admin console at /superadmin (cross-org control). */
 export async function registerSuperadminUiRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/superadmin', async (_req, reply) => reply.type('text/html').send(SUPERADMIN_HTML));
+  const html = SUPERADMIN_HTML.replace(
+    '<!--__CONFIG__-->',
+    `<script>window.ENABLE_AI_ASSISTANT=${JSON.stringify(config.enableAiAssistant)}</script>`,
+  );
+  app.get('/superadmin', async (_req, reply) => reply.type('text/html').send(html));
 }
 
 const SUPERADMIN_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Platform · AI Agent Hub</title>
@@ -48,12 +53,14 @@ a.top{color:var(--cyan);text-decoration:none;font-size:13px}
 .bub.u{align-self:flex-end;background:color-mix(in oklab,var(--violet) 22%,transparent)}
 .bub.a{align-self:flex-start;background:var(--panel2);border:1px solid var(--line)}
 .tag{font-size:11px;color:var(--muted);margin-top:3px}
-</style></head><body>
+</style>
+<!--__CONFIG__-->
+</head><body>
 <div class="app">
   <aside>
     <div class="brand"><span class="mark">▲</span> Platform</div>
     <div class="nav" id="nav"></div>
-    <div style="margin-top:20px;padding:0 8px"><a class="top" href="/admin">Org admin →</a><br/><a class="top" href="/dashboard">Cost dashboard →</a><br/><a class="top" id="logout">Log out</a></div>
+    <div style="margin-top:20px;padding:0 8px"><a class="top" href="/help">Help →</a><br/><a class="top" href="/admin">Org admin →</a><br/><a class="top" href="/dashboard">Cost dashboard →</a><br/><a class="top" id="logout">Log out</a></div>
   </aside>
   <main id="main"></main>
 </div>
@@ -67,7 +74,8 @@ const api=async(p,o={})=>{const r=await fetch(p,{headers:o.body?HJ:H,...o});cons
 const el=(h)=>{const d=document.createElement('div');d.innerHTML=h;return d};
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-const TABS=[['overview','Overview'],['orgs','Organizations'],['issues','Issues'],['assistant','Copilot']];
+let TABS=[['overview','Overview'],['orgs','Organizations'],['issues','Issues'],['tickets','Tickets']];
+if (window.ENABLE_AI_ASSISTANT) TABS.push(['assistant','Copilot']);
 const nav=document.getElementById('nav');
 TABS.forEach(([id,label])=>{const a=el('<a data-t="'+id+'">'+label+'</a>').firstChild;a.onclick=()=>show(id);nav.appendChild(a)});
 function show(id){[...nav.children].forEach(a=>a.classList.toggle('on',a.dataset.t===id));(VIEWS[id]||(()=>{}))();location.hash=id}
@@ -83,11 +91,11 @@ const VIEWS={
    const topCodes=(iss.byCode||[]).slice(0,5).map(c=>c.code+' '+c.n).join(' · ')||'none';
    M.innerHTML='<h1>Platform overview</h1><p class="sub">Everything across every workspace.</p>'+
    '<div class="card"><div class="tiles">'+
-   tile(s.orgs,'organizations')+tile(s.suspended,'suspended')+tile((s.monthTokens||0).toLocaleString(),'tokens/mo')+tile('$'+Number(s.monthUsd||0).toFixed(2),'cost/mo')+
+   tile(s.orgs,'Organizations')+tile(s.suspended,'Suspended')+tile((s.monthTokens||0).toLocaleString(),'Tokens this month')+tile('$'+Number(s.monthUsd||0).toFixed(2),'Cost this month')+
    '</div></div>'+
    '<div class="card"><h2>Plans</h2><p class="muted">'+esc(plans)+'</p></div>'+
    '<div class="card"><h2>Issues · last '+iss.windowHours+'h</h2><div class="tiles" style="grid-template-columns:repeat(3,1fr)">'+
-   tile('<span style="color:var(--bad)">'+errs+'</span>','errors')+tile('<span style="color:var(--amber)">'+warns+'</span>','warnings')+tile(iss.total,'total events')+
+   tile('<span style="color:var(--bad)">'+errs+'</span>','Errors')+tile('<span style="color:var(--amber)">'+warns+'</span>','Warnings')+tile(iss.total,'Total events')+
    '</div><p class="muted" style="margin-top:10px">Top: '+esc(topCodes)+'</p></div>';
  })},
  orgs(){guard(async()=>{
@@ -110,12 +118,28 @@ const VIEWS={
    const worst=(sum.topOrgs||[]).map(o=>esc(o.name||'unknown')+' ('+o.n+')').join(' · ')||'none';
    M.innerHTML='<div class="hdr"><h1>Issues</h1><a class="top" href="/api/platform/events?limit=500" target="_blank">Export JSON →</a></div>'+
    '<div class="card"><div class="tiles" style="grid-template-columns:repeat(3,1fr)">'+
-   tile('<span style="color:var(--bad)">'+errs+'</span>','errors · 24h')+tile('<span style="color:var(--amber)">'+warns+'</span>','warnings · 24h')+tile(sum.total,'total · 24h')+
+   tile('<span style="color:var(--bad)">'+errs+'</span>','Errors · 24h')+tile('<span style="color:var(--amber)">'+warns+'</span>','Warnings · 24h')+tile(sum.total,'Total · 24h')+
    '</div><p class="muted" style="margin-top:10px">Orgs with most errors: '+worst+'</p></div>'+
    '<div class="card"><h2>Filter by code</h2><div class="chips">'+(codeChips||'<span class="muted">No events yet — issues appear here as they occur.</span>')+
    (Object.keys(flt).length?' <a class="chip" onclick="clearIssueFilter()">clear ✕</a>':'')+'</div></div>'+
    '<div class="card"><table><tr><th>Level</th><th>Source</th><th>Code</th><th>Message</th><th>Org</th><th>When</th></tr>'+
    (list||[]).map(e=>'<tr><td>'+levelPill(e.level)+'</td><td>'+esc(e.source)+'</td><td class="mono">'+esc(e.code)+'</td><td>'+esc((e.message||'').slice(0,120))+'</td><td class="mono">'+esc((e.org_id||'').slice(0,8))+'</td><td class="muted">'+new Date(e.created_at).toLocaleString()+'</td></tr>').join('')+
+   '</table></div>';
+ })},
+ tickets(){guard(async()=>{
+   const qry=(window.__ticketsf||{});const qs=Object.entries(qry).filter(([,v])=>v).map(([k,v])=>k+'='+encodeURIComponent(v)).join('&');
+   const list=await api('/api/platform/tickets?limit=100'+(qs?'&'+qs:''));
+   const statusChips=['open','in_progress','closed'].map(s=>'<a class="chip'+(qry.status===s?' on':'')+'" onclick="setTicketFilter(\'status\',\''+s+'\')">'+esc(s)+'</a>').join('');
+   M.innerHTML='<div class="hdr"><h1>Support tickets</h1><a class="top" href="/api/platform/tickets?limit=500" target="_blank">Export JSON →</a></div>'+
+   '<div class="card"><h2>Filter by status</h2><div class="chips">'+statusChips+(Object.keys(qry).length?' <a class="chip" onclick="clearTicketFilter()">clear ✕</a>':'')+'</div></div>'+
+   '<div class="card"><table><tr><th>Subject</th><th>Category</th><th>Status</th><th>From</th><th>Org</th><th>When</th><th></th></tr>'+
+   (list||[]).map(t=>'<tr><td>'+esc(t.subject)+'<div class="muted">'+esc(t.body.slice(0,80))+'…</div></td>'+
+   '<td>'+esc(t.category)+'</td>'+
+   '<td>'+esc(t.status)+'</td>'+
+   '<td>'+esc(t.user_email||'—')+'</td>'+
+   '<td class="muted">'+esc(t.org_name||'—')+'</td>'+
+   '<td class="muted">'+new Date(t.created_at).toLocaleString()+'</td>'+
+   '<td class="right">'+(t.status!=='closed'?'<button class="ghost" onclick="closeTicket(\''+t.id+'\')">Close</button>':'')+'</td></tr>').join('')+
    '</table></div>';
  })},
  assistant(){guard(async()=>{
@@ -130,6 +154,9 @@ function tile(n,l){return '<div class="tile"><div class="n">'+n+'</div><div clas
 function levelPill(l){const c=l==='error'?'bad':(l==='warn'?'amber':'');return '<span class="pill '+c+'">'+esc(l)+'</span>'}
 function setIssueFilter(k,v){window.__issf={...(window.__issf||{}),[k]:v};VIEWS.issues()}
 function clearIssueFilter(){window.__issf={};VIEWS.issues()}
+function setTicketFilter(k,v){window.__ticketsf={...(window.__ticketsf||{}),[k]:v};VIEWS.tickets()}
+function clearTicketFilter(){window.__ticketsf={};VIEWS.tickets()}
+async function closeTicket(id){try{await api('/api/platform/tickets/'+id,{method:'PUT',body:JSON.stringify({status:'closed'})});VIEWS.tickets()}catch(e){alert(e.message)}}
 function bubble(who,text,tag){const c=document.getElementById('chat');const b=el('<div class="bub '+who+'">'+esc(text)+(tag?'<div class="tag">'+esc(tag)+'</div>':'')+'</div>').firstChild;c.appendChild(b);c.scrollTop=c.scrollHeight}
 function msg(id,t,ok){const m=document.getElementById(id);if(m){m.className='msg '+(ok?'ok':'err');m.textContent=t}}
 

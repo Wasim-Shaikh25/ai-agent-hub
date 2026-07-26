@@ -3,10 +3,15 @@ import { randomUUID } from 'crypto';
 import { AgentConfigStore } from '../core/agentConfig';
 import { RepoSyncStore } from '../core/repoSyncStore';
 import {
-  DetectedAgentCandidate, AgentTargetConfig,
-  ItemType, TargetLocationConfig, FileLayout, FileExtensionFormat,
+  DetectedAgentCandidate,
+  AgentTargetConfig,
+  ItemType,
+  TargetLocationConfig,
+  FileLayout,
+  FileExtensionFormat,
 } from '../core/types';
 import { PathUtils } from '../utils/pathUtils';
+import { Validator } from '../core/validator';
 import { getNonce, getBaseStyles, getBaseScriptSetup } from './webviewHtml';
 
 const CONTENT_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'persona'];
@@ -29,9 +34,12 @@ export class SetupPanel {
     private readonly agentConfig: AgentConfigStore,
     private readonly pathUtils: PathUtils,
     private readonly repoSyncStore?: RepoSyncStore,
+    private readonly validator?: Validator,
   ) {}
 
-  setSyncCallback(cb: () => Promise<void>): void { this.onSyncRequested = cb; }
+  setSyncCallback(cb: () => Promise<void>): void {
+    this.onSyncRequested = cb;
+  }
 
   open(candidates: DetectedAgentCandidate[]): void {
     this.lastCandidates = candidates;
@@ -46,26 +54,48 @@ export class SetupPanel {
     this.panel.webview.postMessage({ type: 'expandAgent', id: config.id });
   }
 
-  dispose(): void { this.panel?.dispose(); }
+  dispose(): void {
+    this.panel?.dispose();
+  }
 
   private ensurePanel(): void {
-    if (this.panel) { this.panel.reveal(vscode.ViewColumn.One); return; }
+    if (this.panel) {
+      this.panel.reveal(vscode.ViewColumn.One);
+      return;
+    }
     this.panel = vscode.window.createWebviewPanel(
-      'aiAgentHub.setupPanel', 'AI Agent Hub — Setup',
+      'aiAgentHub.setupPanel',
+      'AI Agent Hub — Setup',
       vscode.ViewColumn.One,
-      { enableScripts: true, retainContextWhenHidden: true,
-        localResourceRoots: [this.extensionUri] });
-    this.panel.onDidDispose(() => { this.panel = undefined; });
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [this.extensionUri],
+      },
+    );
+    this.panel.onDidDispose(() => {
+      this.panel = undefined;
+    });
     this.panel.webview.onDidReceiveMessage((msg: Msg) => this.onMsg(msg));
   }
 
   private onMsg(msg: Msg): void {
     switch (msg.type) {
-      case 'saveAgentConfig': this.onSave(msg.config); break;
-      case 'removeAgent': this.onRemove(msg.id); break;
-      case 'addManualAgent': this.onAdd(msg.displayName, msg.extensionId); break;
-      case 'addRepoToAgent': this.onAddRepo(msg.agentId, msg.repoName, msg.repoPath, msg.repoTargets); break;
-      case 'removeRepo': this.onRemoveRepo(msg.repoId); break;
+      case 'saveAgentConfig':
+        this.onSave(msg.config);
+        break;
+      case 'removeAgent':
+        this.onRemove(msg.id);
+        break;
+      case 'addManualAgent':
+        this.onAdd(msg.displayName, msg.extensionId);
+        break;
+      case 'addRepoToAgent':
+        this.onAddRepo(msg.agentId, msg.repoName, msg.repoPath, msg.repoTargets);
+        break;
+      case 'removeRepo':
+        this.onRemoveRepo(msg.repoId);
+        break;
     }
   }
 
@@ -79,18 +109,36 @@ export class SetupPanel {
         else if (this.pathUtils.isUnsafePath(t.path)) errors.push(`${ct}s: unsafe path`);
       }
     }
-    if (errors.length > 0) { this.post({ type: 'validationErrors', id: raw.id, errors }); return; }
+    if (errors.length > 0) {
+      this.post({ type: 'validationErrors', id: raw.id, errors });
+      return;
+    }
 
     const now = new Date().toISOString();
     const prev = raw.id ? this.agentConfig.get(raw.id) : undefined;
     const config: AgentTargetConfig = {
       id: prev?.id ?? raw.id ?? randomUUID(),
-      displayName: raw.displayName ?? '', extensionId: raw.extensionId ?? '',
+      displayName: raw.displayName ?? '',
+      extensionId: raw.extensionId ?? '',
       enabled: raw.enabled ?? true,
       targets: buildTargets(raw.targets),
       autoSync: raw.autoSync ?? false,
-      createdAt: prev?.createdAt ?? now, updatedAt: now,
+      createdAt: prev?.createdAt ?? now,
+      updatedAt: now,
     };
+
+    if (this.validator) {
+      const validationErrors = this.validator.validate('agent-target', config);
+      if (validationErrors.length > 0) {
+        this.post({
+          type: 'validationErrors',
+          id: config.id,
+          errors: validationErrors.map((e) => `${e.path}: ${e.message}`),
+        });
+        return;
+      }
+    }
+
     this.agentConfig.save(config);
     this.post({ type: 'saved', id: config.id });
     vscode.window.showInformationMessage(`"${config.displayName}" saved.`);
@@ -103,20 +151,50 @@ export class SetupPanel {
   }
 
   private onAdd(dn?: string, ext?: string): void {
-    if (!dn) { this.post({ type: 'validationErrors', id: '', errors: ['Agent name is required.'] }); return; }
+    if (!dn) {
+      this.post({ type: 'validationErrors', id: '', errors: ['Agent name is required.'] });
+      return;
+    }
     const now = new Date().toISOString();
     // Use the real extensionId if provided (from a detected agent card),
     // otherwise generate a manual slug so it doesn't duplicate the detected card.
-    const extensionId = ext && ext.trim() ? ext.trim()
-      : `manual.${dn.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}`;
+    const extensionId =
+      ext && ext.trim()
+        ? ext.trim()
+        : `manual.${dn
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '')}`;
     const config: AgentTargetConfig = {
-      id: randomUUID(), displayName: dn, extensionId, enabled: true,
-      targets: defaultTargets(), autoSync: false, createdAt: now, updatedAt: now,
+      id: randomUUID(),
+      displayName: dn,
+      extensionId,
+      enabled: true,
+      targets: defaultTargets(),
+      autoSync: false,
+      createdAt: now,
+      updatedAt: now,
     };
+
+    if (this.validator) {
+      const validationErrors = this.validator.validate('agent-target', config);
+      if (validationErrors.length > 0) {
+        this.post({
+          type: 'validationErrors',
+          id: '',
+          errors: validationErrors.map((e) => `${e.path}: ${e.message}`),
+        });
+        return;
+      }
+    }
+
     this.agentConfig.save(config);
     if (this.panel) {
       this.panel.webview.html = this.buildHtml(this.lastCandidates);
-      setTimeout(() => this.panel?.webview.postMessage({ type: 'expandAgent', id: config.id }), 100);
+      setTimeout(
+        () => this.panel?.webview.postMessage({ type: 'expandAgent', id: config.id }),
+        100,
+      );
     }
   }
 
@@ -127,18 +205,25 @@ export class SetupPanel {
     repoTargets?: Partial<Record<ItemType, Partial<TargetLocationConfig>>>,
   ): Promise<void> {
     if (!agentId || !repoName || !repoPath) {
-      this.post({ type: 'validationErrors', id: agentId ?? '', errors: ['Repo name and path are required.'] });
+      this.post({
+        type: 'validationErrors',
+        id: agentId ?? '',
+        errors: ['Repo name and path are required.'],
+      });
       return;
     }
     if (this.pathUtils.isUnsafePath(repoPath)) {
       this.post({ type: 'validationErrors', id: agentId, errors: ['Unsafe repo path.'] });
       return;
     }
-    if (!this.repoSyncStore) { return; }
+    if (!this.repoSyncStore) {
+      return;
+    }
 
     // Determine which content types are enabled for this repo
-    const enabledTypes: ItemType[] = (['skill', 'rule', 'hook', 'workflow', 'persona'] as ItemType[])
-      .filter((ct) => repoTargets?.[ct]?.enabled);
+    const enabledTypes: ItemType[] = (
+      ['skill', 'rule', 'hook', 'workflow', 'persona'] as ItemType[]
+    ).filter((ct) => repoTargets?.[ct]?.enabled);
 
     const target = this.repoSyncStore.addTarget(
       repoName,
@@ -152,7 +237,9 @@ export class SetupPanel {
   }
 
   private onRemoveRepo(repoId?: string): void {
-    if (!repoId || !this.repoSyncStore) { return; }
+    if (!repoId || !this.repoSyncStore) {
+      return;
+    }
     try {
       this.repoSyncStore.removeTarget(repoId);
       this.post({ type: 'repoRemoved', repoId });
@@ -161,18 +248,23 @@ export class SetupPanel {
     }
   }
 
-  private post(msg: Record<string, unknown>): void { this.panel?.webview.postMessage(msg); }
+  private post(msg: Record<string, unknown>): void {
+    this.panel?.webview.postMessage(msg);
+  }
 
   private buildHtml(candidates: DetectedAgentCandidate[]): string {
     const nonce = getNonce();
     const configs = this.agentConfig.getAll();
 
-    const cards = candidates.length > 0
-      ? candidates.map((c) => {
-          const cfg = configs.find((x) => x.extensionId === c.extensionId);
-          return this.card(c.displayName, c.extensionId, c.description, c.confidence, cfg);
-        }).join('')
-      : '<p style="opacity:0.6;">No AI agent extensions detected. Add one manually below.</p>';
+    const cards =
+      candidates.length > 0
+        ? candidates
+            .map((c) => {
+              const cfg = configs.find((x) => x.extensionId === c.extensionId);
+              return this.card(c.displayName, c.extensionId, c.description, c.confidence, cfg);
+            })
+            .join('')
+        : '<p style="opacity:0.6;">No AI agent extensions detected. Add one manually below.</p>';
 
     const extra = configs
       .filter((cfg) => !candidates.some((c) => c.extensionId === cfg.extensionId))
@@ -225,7 +317,7 @@ export class SetupPanel {
 
   <script nonce="${nonce}">
     ${getBaseScriptSetup()}
-    var meta=${JSON.stringify(Object.fromEntries(configs.map((c)=>[c.id,{id:c.id,dn:c.displayName,ext:c.extensionId}])))};
+    var meta=${JSON.stringify(Object.fromEntries(configs.map((c) => [c.id, { id: c.id, dn: c.displayName, ext: c.extensionId }])))};
 
     document.addEventListener('click',function(ev){
       var hdr=ev.target.closest('.card-hdr');
@@ -338,18 +430,24 @@ export class SetupPanel {
 </html>`;
   }
 
-  private card(dn: string, ext: string, desc: string,
-    conf: 'high'|'medium'|'low'|undefined, cfg?: AgentTargetConfig): string {
+  private card(
+    dn: string,
+    ext: string,
+    desc: string,
+    conf: 'high' | 'medium' | 'low' | undefined,
+    cfg?: AgentTargetConfig,
+  ): string {
     const id = cfg?.id ?? '';
     const cb = conf ? `<span class="badge badge-${conf}">${conf}</span>` : '';
     const cfgb = cfg ? '<span class="badge badge-user">configured</span>' : '';
-    const body = cfg ? this.configRows(cfg)
+    const body = cfg
+      ? this.configRows(cfg)
       : `<p class="dim">Not configured yet.</p>
          <button class="btn-primary" data-act="init" data-dn="${h(dn)}" data-ext="${h(ext)}">Configure</button>`;
     const extLabel = ext.startsWith('manual.') ? '' : `<span class="dim">${h(ext)}</span>`;
     return `<div class="card" data-agent-id="${id}" data-ext="${h(ext)}">
       <div class="card-hdr"><div><strong>${h(dn)}</strong> ${extLabel} ${cb} ${cfgb}</div><span>&#9660;</span></div>
-      <div class="card-body" id="body-${id||h(ext)}">${desc?`<p class="dim" style="margin-bottom:8px">${h(desc)}</p>`:''}${body}</div>
+      <div class="card-body" id="body-${id || h(ext)}">${desc ? `<p class="dim" style="margin-bottom:8px">${h(desc)}</p>` : ''}${body}</div>
     </div>`;
   }
 
@@ -361,9 +459,12 @@ export class SetupPanel {
         { value: 'instructions-md', label: '-instructions.md' },
         { value: 'prompt-md', label: '.prompt.md' },
       ];
-      return opts.map((o) =>
-        `<option value="${o.value}" ${o.value === selected ? 'selected' : ''}>${o.label}</option>`
-      ).join('');
+      return opts
+        .map(
+          (o) =>
+            `<option value="${o.value}" ${o.value === selected ? 'selected' : ''}>${o.label}</option>`,
+        )
+        .join('');
     };
 
     const rows = CONTENT_TYPES.map((ct) => {
@@ -371,7 +472,7 @@ export class SetupPanel {
       const isFlat = t.fileLayout === 'flat';
       const ext = t.fileExtension ?? 'md';
       return `<div class="ct-row">
-        <div><input type="checkbox" class="en" data-id="${cfg.id}" data-ct="${ct}" ${t.enabled?'checked':''}/> <span class="ct-label">${ct}s</span></div>
+        <div><input type="checkbox" class="en" data-id="${cfg.id}" data-ct="${ct}" ${t.enabled ? 'checked' : ''}/> <span class="ct-label">${ct}s</span></div>
         <div>
           <input type="text" class="pa" data-id="${cfg.id}" data-ct="${ct}" value="${h(t.path)}" placeholder="${PATH_HINTS[ct]}" />
           <div class="hint">${isFlat ? `→ folder/${slugExample(ct)}.md` : `→ folder/${slugExample(ct)}/SKILL.md`}</div>
@@ -381,9 +482,9 @@ export class SetupPanel {
             ${extOptions(ext)}
           </select>
           <div class="layout-toggle">
-            <input type="radio" name="layout-${cfg.id}-${ct}" id="flat-${cfg.id}-${ct}" class="layout-flat" data-id="${cfg.id}" data-ct="${ct}" ${isFlat?'checked':''}/>
+            <input type="radio" name="layout-${cfg.id}-${ct}" id="flat-${cfg.id}-${ct}" class="layout-flat" data-id="${cfg.id}" data-ct="${ct}" ${isFlat ? 'checked' : ''}/>
             <label for="flat-${cfg.id}-${ct}">Flat</label>
-            <input type="radio" name="layout-${cfg.id}-${ct}" id="sub-${cfg.id}-${ct}" class="layout-sub" data-id="${cfg.id}" data-ct="${ct}" ${!isFlat?'checked':''}/>
+            <input type="radio" name="layout-${cfg.id}-${ct}" id="sub-${cfg.id}-${ct}" class="layout-sub" data-id="${cfg.id}" data-ct="${ct}" ${!isFlat ? 'checked' : ''}/>
             <label for="sub-${cfg.id}-${ct}">Subfolder</label>
           </div>
         </div>
@@ -391,7 +492,8 @@ export class SetupPanel {
     }).join('');
 
     // Repo association section — full form with per-content-type config
-    const repoRows = CONTENT_TYPES.map((ct) => `
+    const repoRows = CONTENT_TYPES.map(
+      (ct) => `
       <div class="ct-row">
         <div>
           <input type="checkbox" class="repo-en" data-id="${cfg.id}" data-ct="${ct}" checked/>
@@ -418,7 +520,8 @@ export class SetupPanel {
             <label for="rsub-${cfg.id}-${ct}">Subfolder</label>
           </div>
         </div>
-      </div>`).join('');
+      </div>`,
+    ).join('');
 
     const repoSection = `
       <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--vscode-panel-border);">
@@ -460,10 +563,26 @@ export class SetupPanel {
   }
 }
 
-interface Msg { type:string; config?:Partial<AgentTargetConfig>; id?:string; displayName?:string; extensionId?:string; agentId?:string; repoName?:string; repoPath?:string; repoId?:string; repoTargets?:Partial<Record<ItemType,Partial<TargetLocationConfig>>>; }
+interface Msg {
+  type: string;
+  config?: Partial<AgentTargetConfig>;
+  id?: string;
+  displayName?: string;
+  extensionId?: string;
+  agentId?: string;
+  repoName?: string;
+  repoPath?: string;
+  repoId?: string;
+  repoTargets?: Partial<Record<ItemType, Partial<TargetLocationConfig>>>;
+}
 
 function h(t: string): string {
-  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  return t
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function slugExample(ct: ItemType): string {
@@ -484,17 +603,20 @@ function defaultTargets(): Record<ItemType, TargetLocationConfig> {
   };
 }
 
-function buildTargets(raw?: Partial<Record<ItemType, Partial<TargetLocationConfig>>>): Record<ItemType, TargetLocationConfig> {
+function buildTargets(
+  raw?: Partial<Record<ItemType, Partial<TargetLocationConfig>>>,
+): Record<ItemType, TargetLocationConfig> {
   const r = defaultTargets();
   if (!raw) return r;
   for (const ct of ['skill', 'rule', 'hook', 'workflow', 'persona'] as ItemType[]) {
     const s = raw[ct];
-    if (s) r[ct] = {
-      enabled: s.enabled ?? false,
-      path: s.path ?? '',
-      fileLayout: (s.fileLayout as FileLayout) ?? 'flat',
-      fileExtension: (s.fileExtension as FileExtensionFormat) ?? 'md',
-    };
+    if (s)
+      r[ct] = {
+        enabled: s.enabled ?? false,
+        path: s.path ?? '',
+        fileLayout: (s.fileLayout as FileLayout) ?? 'flat',
+        fileExtension: (s.fileExtension as FileExtensionFormat) ?? 'md',
+      };
   }
   return r;
 }

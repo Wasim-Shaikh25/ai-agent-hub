@@ -12,8 +12,7 @@ import { execFile } from 'child_process';
  * files into the extension's local hub-content folder.
  */
 export class HubUpdater {
-  private static readonly REPO_URL =
-    'https://github.com/Wasim-Shaikh25/ai-agent-hub.git';
+  private static readonly REPO_URL = 'https://github.com/Wasim-Shaikh25/ai-agent-hub.git';
 
   private static readonly HUB_CONTENT_DIR = 'hub-content';
 
@@ -33,7 +32,7 @@ export class HubUpdater {
    * @returns true if content was updated, false if skipped or
    *          failed.
    */
-  async fetchLatest(extensionPath: string): Promise<boolean> {
+  async fetchLatest(extensionPath: string, timeoutMs = 30_000): Promise<boolean> {
     try {
       await this.ensureCacheDir();
 
@@ -41,18 +40,16 @@ export class HubUpdater {
       const isCloned = fs.existsSync(path.join(repoDir, '.git'));
 
       if (isCloned) {
-        await this.gitPull(repoDir);
+        await this.gitPull(repoDir, timeoutMs);
       } else {
-        await this.gitClone(repoDir);
+        await this.gitClone(repoDir, timeoutMs);
       }
 
       const updated = this.copyHubContent(repoDir, extensionPath);
       return updated;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      vscode.window.showWarningMessage(
-        `Hub update failed (sync will use local content): ${msg}`,
-      );
+      vscode.window.showWarningMessage(`Hub update failed (sync will use local content): ${msg}`);
       return false;
     }
   }
@@ -63,24 +60,25 @@ export class HubUpdater {
     }
   }
 
-  private gitClone(targetDir: string): Promise<void> {
-    return this.runGit([
-      'clone',
-      '--depth',
-      '1',
-      '--single-branch',
-      '--branch',
-      'main',
-      HubUpdater.REPO_URL,
-      targetDir,
-    ]);
+  private gitClone(targetDir: string, timeoutMs: number): Promise<void> {
+    return this.runGit(
+      [
+        'clone',
+        '--depth',
+        '1',
+        '--single-branch',
+        '--branch',
+        'main',
+        HubUpdater.REPO_URL,
+        targetDir,
+      ],
+      undefined,
+      timeoutMs,
+    );
   }
 
-  private gitPull(repoDir: string): Promise<void> {
-    return this.runGit(
-      ['pull', '--ff-only'],
-      repoDir,
-    );
+  private gitPull(repoDir: string, timeoutMs: number): Promise<void> {
+    return this.runGit(['pull', '--ff-only'], repoDir, timeoutMs);
   }
 
   /**
@@ -90,10 +88,7 @@ export class HubUpdater {
    *
    * @returns true if any files were copied.
    */
-  private copyHubContent(
-    repoDir: string,
-    extensionPath: string,
-  ): boolean {
+  private copyHubContent(repoDir: string, extensionPath: string): boolean {
     const srcBase = path.join(repoDir, HubUpdater.HUB_CONTENT_DIR);
     const destBase = path.join(extensionPath, HubUpdater.HUB_CONTENT_DIR);
 
@@ -116,9 +111,7 @@ export class HubUpdater {
         fs.mkdirSync(destDir, { recursive: true });
       }
 
-      const files = fs.readdirSync(srcDir).filter(
-        (f) => !f.startsWith('.'),
-      );
+      const files = fs.readdirSync(srcDir).filter((f) => !f.startsWith('.'));
 
       for (const file of files) {
         const srcFile = path.join(srcDir, file);
@@ -130,9 +123,7 @@ export class HubUpdater {
 
         const srcContent = fs.readFileSync(srcFile, 'utf-8');
         const destExists = fs.existsSync(destFile);
-        const destContent = destExists
-          ? fs.readFileSync(destFile, 'utf-8')
-          : '';
+        const destContent = destExists ? fs.readFileSync(destFile, 'utf-8') : '';
 
         if (srcContent !== destContent) {
           fs.writeFileSync(destFile, srcContent, 'utf-8');
@@ -144,19 +135,12 @@ export class HubUpdater {
     return copied > 0;
   }
 
-  private runGit(
-    args: readonly string[],
-    cwd?: string,
-  ): Promise<void> {
+  private runGit(args: readonly string[], cwd?: string, timeoutMs = 30_000): Promise<void> {
     return new Promise((resolve, reject) => {
-      const options = cwd ? { cwd, timeout: 30_000 } : { timeout: 30_000 };
+      const options = cwd ? { cwd, timeout: timeoutMs } : { timeout: timeoutMs };
       execFile('git', args as string[], options, (error, _stdout, stderr) => {
         if (error) {
-          reject(
-            new Error(
-              `git ${args[0]} failed: ${stderr || error.message}`,
-            ),
-          );
+          reject(new Error(`git ${args[0]} failed: ${stderr || error.message}`));
         } else {
           resolve();
         }

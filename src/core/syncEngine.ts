@@ -9,9 +9,10 @@ import { Storage } from './storage';
 import { HubUpdater } from './hubUpdater';
 import { McpStore } from './mcpStore';
 import { McpManager } from './mcpManager';
+import { PathUtils } from '../utils/pathUtils';
 import { ItemType, SyncResult, AgentSyncResult, RepoSyncResult } from './types';
 
-/** The three content categories processed during a sync. */
+/** The five content categories processed during a sync. */
 const ITEM_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'persona'];
 
 /**
@@ -39,6 +40,7 @@ export class SyncEngine {
     private readonly repoSyncStore?: RepoSyncStore,
     private readonly mcpStore?: McpStore,
     private readonly mcpManager?: McpManager,
+    private readonly pathUtils?: PathUtils,
   ) {}
 
   /**
@@ -74,15 +76,18 @@ export class SyncEngine {
     const repoResults: RepoSyncResult[] = [];
 
     try {
-      // Fetch latest hub content from remote before syncing
+      // Fetch latest hub content from remote before syncing.
+      // Cap the remote update at 5 seconds so a slow/unavailable
+      // network does not stall the local sync operation.
       if (this.hubUpdater && this.extensionPath) {
-        const updated = await this.hubUpdater.fetchLatest(this.extensionPath);
+        const updated = await this.hubUpdater.fetchLatest(this.extensionPath, 5_000);
         if (updated) {
           // Reload registry so new/changed builtin items are picked up
           this.registry.initialize(this.extensionPath);
         }
       }
 
+      const workspaceRoot = this.getWorkspaceRoot();
       const enabledConfigs = this.agentConfig.getEnabled();
 
       for (const config of enabledConfigs) {
@@ -97,7 +102,7 @@ export class SyncEngine {
             continue;
           }
 
-          const result = await this.fileWriter.write(enabledItems, target, type);
+          const result = await this.fileWriter.write(enabledItems, target, type, workspaceRoot);
           agentResults.push({
             agentName: config.displayName,
             contentType: type,
@@ -112,20 +117,38 @@ export class SyncEngine {
         const mcpServers = this.mcpStore.getAll();
         for (const config of enabledConfigs) {
           const ruleTarget = config.targets['rule'];
-          if (!ruleTarget?.enabled || !ruleTarget.path) { continue; }
+          if (!ruleTarget?.enabled || !ruleTarget.path) {
+            continue;
+          }
 
           for (const mcp of mcpServers) {
             const state = this.mcpManager.getState(mcp.id);
-            if (state.status !== 'running') { continue; }
+            if (state.status !== 'running') {
+              continue;
+            }
 
             const ruleContent = this.mcpManager.generateRuleMarkdown(mcp);
             const slug = mcp.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
             const fileName = `mcp-${slug}.md`;
-            const targetPath = path.join(ruleTarget.path, fileName);
+
+            const resolved = this.pathUtils?.resolveSafeTarget(workspaceRoot, ruleTarget.path);
+            if (!resolved || !resolved.ok) {
+              agentResults.push({
+                agentName: config.displayName,
+                contentType: 'rule',
+                filesWritten: [],
+                errors: [`MCP rule target unsafe: ${resolved?.reason ?? 'no path utils'}`],
+              });
+              continue;
+            }
+
+            const targetDir = resolved.absolutePath;
+            const targetPath = path.join(targetDir, fileName);
 
             try {
-              const dir = path.dirname(targetPath);
-              if (!fs.existsSync(dir)) { fs.mkdirSync(dir, { recursive: true }); }
+              if (!fs.existsSync(targetDir)) {
+                fs.mkdirSync(targetDir, { recursive: true });
+              }
               fs.writeFileSync(targetPath, ruleContent, 'utf-8');
               agentResults.push({
                 agentName: config.displayName,
@@ -138,7 +161,9 @@ export class SyncEngine {
                 agentName: config.displayName,
                 contentType: 'rule',
                 filesWritten: [],
-                errors: [`MCP rule write failed: ${err instanceof Error ? err.message : String(err)}`],
+                errors: [
+                  `MCP rule write failed: ${err instanceof Error ? err.message : String(err)}`,
+                ],
               });
             }
           }
@@ -161,6 +186,20 @@ export class SyncEngine {
             continue;
           }
 
+          if (!repo.repoPath || this.pathUtils?.isUnsafePath(repo.repoPath)) {
+            repoResults.push({
+              repoName: repo.name,
+              repoPath: repo.repoPath,
+              filesWritten: [],
+              errors: ['Unsafe or missing repo path'],
+            });
+            continue;
+          }
+
+          const repoBase = workspaceRoot
+            ? path.resolve(workspaceRoot, repo.repoPath)
+            : path.resolve(repo.repoPath);
+
           const filesWritten: string[] = [];
           const errors: string[] = [];
 
@@ -179,8 +218,7 @@ export class SyncEngine {
               continue;
             }
 
-            const repoTarget = { ...target, path: `${repo.repoPath}/${target.path}` };
-            const result = await this.fileWriter.write(items, repoTarget, type);
+            const result = await this.fileWriter.write(items, target, type, repoBase);
             filesWritten.push(...result.filesWritten);
             errors.push(...result.errors);
           }
@@ -207,5 +245,13 @@ export class SyncEngine {
     this.storage.saveSingle('lastSyncResult', syncResult);
 
     return syncResult;
+  }
+
+  private getWorkspaceRoot(): string {
+    const folders = vscode.workspace.workspaceFolders;
+    if (folders && folders.length > 0) {
+      return folders[0].uri.fsPath;
+    }
+    return '';
   }
 }

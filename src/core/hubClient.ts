@@ -54,12 +54,16 @@ export class HubClient {
   }
 
   /** Returns the native MCP config snippet the server generates for an agent. */
-  mcpConfig(agent: string): Promise<{ agent: string; file: string; config: unknown; note: string }> {
+  mcpConfig(
+    agent: string,
+  ): Promise<{ agent: string; file: string; config: unknown; note: string }> {
     return this.request(`/api/mcp-config?agent=${encodeURIComponent(agent)}`);
   }
 
   /** Lists the org's content items from the server registry. */
-  listContent(): Promise<Array<{ id: string; type: string; name: string; description: string; status: string }>> {
+  listContent(): Promise<
+    Array<{ id: string; type: string; name: string; description: string; status: string }>
+  > {
     return this.request('/api/content');
   }
 }
