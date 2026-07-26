@@ -17,5 +17,9 @@ package-lock.json
 .gitignore
 tsconfig.json
 vitest.config.ts
+.eslintrc.cjs
+.prettierrc
+DUE_DILIGENCE_REVIEW.md
+REQUIREMENTS_AND_FIX_PLAN.md
 REQUIREMENTS.md
 PROGRESS.md

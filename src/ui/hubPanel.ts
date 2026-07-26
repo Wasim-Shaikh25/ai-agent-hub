@@ -16,6 +16,7 @@ import {
   McpServerConfig,
 } from '../core/types';
 import { getNonce, getBaseStyles, getBaseScriptSetup } from './webviewHtml';
+import { parseArgsString, parseEnvString } from '../utils/mcpEnv';
 
 /** Maps a TabType to the corresponding ItemType (content tabs only). */
 const TAB_TO_ITEM_TYPE: Partial<Record<TabType, ItemType>> = {
@@ -276,11 +277,19 @@ export class HubPanel {
   private handleAddMcp(msg: HubMessage): void {
     const f = msg.fields ?? {};
     try {
+      const argsResult = parseArgsString(String(f.args ?? ''));
+      if (argsResult.errors.length > 0) {
+        throw new Error(argsResult.errors.join('; '));
+      }
+      const envResult = parseEnvString(String(f.env ?? ''));
+      if (envResult.errors.length > 0) {
+        throw new Error(envResult.errors.join('; '));
+      }
       this.mcpStore.add({
         name: String(f.name ?? ''),
         packageName: String(f.packageName ?? ''),
-        args: String(f.args ?? '').split(' ').filter(Boolean),
-        env: this.parseEnvString(String(f.env ?? '')),
+        args: argsResult.args,
+        env: envResult.env,
         port: parseInt(String(f.port ?? '3100'), 10),
         autoStart: f.autoStart === 'true',
       });
@@ -291,16 +300,22 @@ export class HubPanel {
   }
 
   private handleRemoveMcp(msg: HubMessage): void {
-    if (!msg.id) { return; }
+    if (!msg.id) {
+      return;
+    }
     this.mcpManager.stop(msg.id);
     this.mcpStore.remove(msg.id);
     this.sendMcpContent();
   }
 
   private async handleStartMcp(msg: HubMessage): Promise<void> {
-    if (!msg.id) { return; }
+    if (!msg.id) {
+      return;
+    }
     const config = this.mcpStore.get(msg.id);
-    if (!config) { return; }
+    if (!config) {
+      return;
+    }
     try {
       await this.mcpManager.start(config);
       this.sendMcpContent();
@@ -310,21 +325,11 @@ export class HubPanel {
   }
 
   private handleStopMcp(msg: HubMessage): void {
-    if (!msg.id) { return; }
+    if (!msg.id) {
+      return;
+    }
     this.mcpManager.stop(msg.id);
     this.sendMcpContent();
-  }
-
-  /** Parses "KEY=VALUE KEY2=VALUE2" into a Record. */
-  private parseEnvString(raw: string): Record<string, string> {
-    const result: Record<string, string> = {};
-    for (const pair of raw.split(/\s+/).filter(Boolean)) {
-      const eq = pair.indexOf('=');
-      if (eq > 0) {
-        result[pair.slice(0, eq)] = pair.slice(eq + 1);
-      }
-    }
-    return result;
   }
 
   // -----------------------------------------------------------------
@@ -369,7 +374,9 @@ export class HubPanel {
   }
 
   private sendSyncContent(result?: SyncResult): void {
-    const html = result ? this.renderSyncResult(result) : '<p class="info-msg">No sync has been performed yet.</p>';
+    const html = result
+      ? this.renderSyncResult(result)
+      : '<p class="info-msg">No sync has been performed yet.</p>';
     this.postMessage({ type: 'updateSync', html });
   }
 
@@ -542,15 +549,17 @@ export class HubPanel {
       return addForm + '<p class="empty-state">No MCP servers registered yet.</p>';
     }
 
-    const list = servers.map((s) => {
-      const state = this.mcpManager.getState(s.id);
-      const statusColor = state.status === 'running'
-        ? 'var(--vscode-testing-iconPassed,#73c991)'
-        : state.status === 'error'
-          ? 'var(--vscode-errorForeground,#f48771)'
-          : 'var(--vscode-descriptionForeground)';
+    const list = servers
+      .map((s) => {
+        const state = this.mcpManager.getState(s.id);
+        const statusColor =
+          state.status === 'running'
+            ? 'var(--vscode-testing-iconPassed,#73c991)'
+            : state.status === 'error'
+              ? 'var(--vscode-errorForeground,#f48771)'
+              : 'var(--vscode-descriptionForeground)';
 
-      return /* html */ `
+        return /* html */ `
         <div class="agent-card" style="margin-bottom:8px;">
           <div class="agent-card-header">
             <div>
@@ -561,9 +570,11 @@ export class HubPanel {
             </div>
             <div class="item-actions">
               <span style="font-size:0.8em;opacity:0.5;">port ${s.port}</span>
-              ${state.status === 'running'
-                ? `<button class="btn-secondary" data-action="stop-mcp" data-id="${s.id}">Stop</button>`
-                : `<button class="btn-primary" data-action="start-mcp" data-id="${s.id}">Start</button>`}
+              ${
+                state.status === 'running'
+                  ? `<button class="btn-secondary" data-action="stop-mcp" data-id="${s.id}">Stop</button>`
+                  : `<button class="btn-primary" data-action="start-mcp" data-id="${s.id}">Start</button>`
+              }
               <button class="btn-icon" title="Remove" data-action="remove-mcp" data-id="${s.id}">&#128465;</button>
             </div>
           </div>
@@ -572,7 +583,8 @@ export class HubPanel {
             ${state.status === 'running' ? `Rule auto-generated and synced to agent targets on next sync.` : 'Start the server to generate its rule.'}
           </div>
         </div>`;
-    }).join('');
+      })
+      .join('');
 
     return addForm + list;
   }
@@ -592,9 +604,10 @@ export class HubPanel {
       .map((ar: AgentSyncResult) => {
         const count = ar.filesWritten.length;
         const errCount = ar.errors.length;
-        const status = errCount > 0
-          ? `<span style="color:var(--vscode-errorForeground,#f48771);">${errCount} error${errCount > 1 ? 's' : ''}</span>`
-          : `<span style="color:var(--vscode-testing-iconPassed,#73c991);">${count} item${count !== 1 ? 's' : ''} synced</span>`;
+        const status =
+          errCount > 0
+            ? `<span style="color:var(--vscode-errorForeground,#f48771);">${errCount} error${errCount > 1 ? 's' : ''}</span>`
+            : `<span style="color:var(--vscode-testing-iconPassed,#73c991);">${count} item${count !== 1 ? 's' : ''} synced</span>`;
         return /* html */ `
           <div class="sync-agent">
             <strong>${escapeHtml(ar.agentName)}</strong> — ${escapeHtml(ar.contentType)}s — ${status}
@@ -613,7 +626,7 @@ export class HubPanel {
   // Full webview HTML
   // -----------------------------------------------------------------
 
-  private getHtml(webview: vscode.Webview): string {
+  private getHtml(_webview: vscode.Webview): string {
     const nonce = getNonce();
     const styles = getBaseStyles();
     const baseScript = getBaseScriptSetup();

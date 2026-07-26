@@ -1,7 +1,7 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as vscode from 'vscode';
 import { McpServerConfig, McpServerState } from './types';
-import { validateMcpServerFields } from '../utils/mcpEnv';
+import { isValidNpmPackageName, isValidMcpArg, validateEnvRecord } from '../utils/mcpEnv';
 
 /**
  * Manages MCP server child processes.
@@ -19,6 +19,12 @@ export class McpManager {
   /**
    * Starts an MCP server process.
    *
+   * Performs a final security validation on the configuration,
+   * then spawns `npx mcp-proxy` (using `npx.cmd` on Windows) with
+   * `shell: false` to avoid shell injection. The inner MCP server
+   * is spawned directly by `mcp-proxy` using the validated package
+   * name and argument list.
+   *
    * @param config The MCP server configuration.
    */
   async start(config: McpServerConfig): Promise<McpServerState> {
@@ -26,36 +32,42 @@ export class McpManager {
       return this.getState(config.id);
     }
 
-    this.setState(config.id, { configId: config.id, status: 'starting' });
-
-    const validation = validateMcpServerFields(config.name, config.packageName, config.args || [], config.env || {});
-    if (validation.length) {
-      const msg = `Refusing to start MCP server: ${validation.join('; ')}`;
-      this.setState(config.id, { configId: config.id, status: 'error', error: msg });
-      throw new Error(msg);
+    const securityErrors = this.validateConfig(config);
+    if (securityErrors.length > 0) {
+      const message = securityErrors.join('; ');
+      this.setState(config.id, { configId: config.id, status: 'error', error: message });
+      vscode.window.showErrorMessage(`MCP server "${config.name}" rejected: ${message}`);
+      throw new Error(message);
     }
+
+    this.setState(config.id, { configId: config.id, status: 'starting' });
 
     const url = `http://localhost:${config.port}`;
 
-    // Use npx directly without a shell so package/args/env are passed as a flat array.
-    // On Windows npx is `npx.cmd`; everywhere else it is `npx`.
-    const isWin = process.platform === 'win32';
-    const npx = isWin ? 'npx.cmd' : 'npx';
+    // Use platform-specific npx command so we can keep shell: false.
+    const isWindows = process.platform === 'win32';
+    const npxBin = isWindows ? 'npx.cmd' : 'npx';
+
+    // mcp-proxy runs the inner command directly (without --shell) so that
+    // the validated packageName/args are not re-interpreted by a shell.
     const proxyArgs = [
       'mcp-proxy',
-      '--port', String(config.port),
+      '--port',
+      String(config.port),
       '--',
-      npx, config.packageName,
+      npxBin,
+      config.packageName,
       ...config.args,
     ];
+
     const env = {
       ...process.env,
       ...config.env,
-      NPM_CONFIG_YES: 'true',   // suppress npx install prompts
+      NPM_CONFIG_YES: 'true', // suppress npx install prompts
     };
 
     try {
-      const child = spawn(npx, proxyArgs, {
+      const child = spawn(npxBin, proxyArgs, {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: false,
@@ -67,10 +79,7 @@ export class McpManager {
       child.stdout?.on('data', (data: Buffer) => {
         const line = data.toString().trim();
         if (line) {
-          vscode.window.setStatusBarMessage(
-            `MCP [${config.name}]: ${line.slice(0, 80)}`,
-            3000,
-          );
+          vscode.window.setStatusBarMessage(`MCP [${config.name}]: ${line.slice(0, 80)}`, 3000);
         }
       });
 
@@ -89,9 +98,7 @@ export class McpManager {
           url,
           pid: child.pid,
         });
-        vscode.window.showInformationMessage(
-          `MCP server "${config.name}" started on ${url}`,
-        );
+        vscode.window.showInformationMessage(`MCP server "${config.name}" started on ${url}`);
       });
 
       child.on('error', (err) => {
@@ -101,9 +108,7 @@ export class McpManager {
           status: 'error',
           error: err.message,
         });
-        vscode.window.showErrorMessage(
-          `MCP server "${config.name}" failed: ${err.message}`,
-        );
+        vscode.window.showErrorMessage(`MCP server "${config.name}" failed: ${err.message}`);
       });
 
       child.on('exit', (code) => {
@@ -146,9 +151,7 @@ export class McpManager {
 
   /** Returns the current runtime state of an MCP server. */
   getState(configId: string): McpServerState {
-    return (
-      this.states.get(configId) ?? { configId, status: 'stopped' }
-    );
+    return this.states.get(configId) ?? { configId, status: 'stopped' };
   }
 
   /** Returns runtime states for all known servers. */
@@ -239,5 +242,19 @@ When asked to use this MCP server, say:
 
   private setState(id: string, state: McpServerState): void {
     this.states.set(id, state);
+  }
+
+  private validateConfig(config: McpServerConfig): string[] {
+    const errors: string[] = [];
+    if (!isValidNpmPackageName(config.packageName)) {
+      errors.push(`Invalid package name: "${config.packageName}"`);
+    }
+    for (const arg of config.args) {
+      if (!isValidMcpArg(arg)) {
+        errors.push(`Unsafe argument: "${arg}"`);
+      }
+    }
+    errors.push(...validateEnvRecord(config.env));
+    return errors;
   }
 }

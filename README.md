@@ -26,8 +26,8 @@ component underneath — the value is the brain on top.
 ---
 
 The original **VS Code extension** (below) is one client — a centralized control
-plane for AI behavior content (skills, rules, hooks) synced to any agent target
-(Kiro, Cursor, GitHub Copilot, Amazon Q, etc.).
+plane for AI behavior content (skills, rules, hooks, workflows, personas) synced to any
+configured AI agent target (Kiro, Cursor, GitHub Copilot, Amazon Q, etc.).
 
 ## Platform (server) — new
 
@@ -99,6 +99,8 @@ everything from a single Hub UI and sync with one click.
   (e.g., naming conventions, security practices).
 - **Hooks** — event-driven triggers that fire before or after agent
   actions.
+- **Workflows** — step-by-step processes such as code review or deploy checklists.
+- **Personas** — agent persona definitions and system prompts.
 
 ## Features
 
@@ -242,9 +244,11 @@ code --uninstall-extension ai-agent-hub.ai-agent-hub
 | `AI Agent Hub: Add Hook`             | Create a new hook                    |
 | `AI Agent Hub: Sync to Agents`       | Sync all enabled content to agents   |
 | `AI Agent Hub: Show Configured Agents` | View configured agent targets      |
-| `AI Agent Hub: Connect to Server`    | Store + validate Hub server URL & key |
-| `AI Agent Hub: Connect Agents to Hub` | Write native MCP config into agents  |
-| `AI Agent Hub: Pull Content from Hub` | Browse the org content registry      |
+| `AI Agent Hub: Add MCP Server`         | Register a local MCP server          |
+| `AI Agent Hub: Show MCP Servers`       | View registered MCP servers          |
+| `AI Agent Hub: Connect to Server`      | Store + validate Hub server URL & key |
+| `AI Agent Hub: Connect Agents to Hub`  | Write native MCP config into agents    |
+| `AI Agent Hub: Pull Content from Hub`  | Browse the org content registry        |
 
 ## Settings
 
@@ -262,7 +266,7 @@ hub-content/
   rules/       — Rule markdown files (.rule.md)
   hooks/       — Hook markdown files (.hook.md)
   workflows/   — Workflow markdown files (.workflow.md)
-  agents/      — Agent persona files (.agent.md)
+  personas/    — Persona markdown files (.persona.md)
 ```
 
 Each content file uses YAML front matter for metadata:
@@ -290,7 +294,7 @@ Instructions for the AI agent go here.
 | **Rule**   | Guardrails, standards, and naming conventions    | `.rule.md`           |
 | **Hook**   | Event-driven triggers (before/after actions)     | `.hook.md`           |
 | **Workflow**| Step-by-step processes (review, deploy, etc.)   | `.workflow.md`       |
-| **Agent**  | Agent persona definitions and system prompts     | `.agent.md`          |
+| **Persona**| Agent persona definitions and system prompts     | `.persona.md`        |
 
 ### File Extension Formats per Agent Target
 
@@ -318,6 +322,24 @@ config files from the workspace. Tested targets include:
 
 The setup wizard auto-detects installed agent extensions and
 configures paths automatically.
+
+## MCP Servers
+
+You can register local [Model Context Protocol](https://modelcontextprotocol.io/)
+(MCP) servers inside the Hub. The extension runs each server via `mcp-proxy`
+and generates a companion rule file so your configured AI agents can discover
+and call the exposed tools.
+
+MCP server configs are stored locally, validated before start, and never written
+to agent config folders directly. Supported fields are:
+
+- `name` — display name for the server
+- `packageName` — npm package that provides the MCP server (e.g. `@modelcontextprotocol/server-filesystem`)
+- `args` — command-line arguments passed to the package
+- `env` — environment variables injected into the process
+- `port` — local HTTP port (1024–65535) where `mcp-proxy` will listen
+
+To add an MCP server, open the Hub panel, select the **MCP** tab, and click **Add Server**.
 
 ## Repo-Level Sync
 
@@ -347,6 +369,82 @@ target is configured to use).
 
 You can add as many repos as you need. Each repo can have different
 content types and even different item selections.
+
+## Technical Specifications
+
+### Activation
+
+The extension activates automatically when VS Code starts (`onStartupFinished`)
+so the Hub panel and commands are always available without requiring a specific
+language mode or workspace state.
+
+### Sync Pipeline
+
+1. **Collect enabled content** from the in-memory `Registry` (builtin + user content).
+2. **Update builtin content** from the configured remote hub, capped at 5 seconds.
+3. **Resolve each target path** against the workspace or repo root.
+4. **Reject unsafe paths** (`../`, `.git`, `node_modules`, system directories,
+   or absolute paths outside the base).
+5. **Write files** in the agent-specific layout (flat or subfolder) and extension
+   (`.md`, `.mdc`, `-instructions.md`, etc.).
+6. **Record the sync result** and report per-agent/per-repo files and errors.
+
+### Security Model
+
+- All sync writes are resolved relative to the workspace or the declared repo
+  base path; paths that escape the base are rejected.
+- MCP servers are spawned with `shell: false` using validated package names,
+  arguments, and environment keys to prevent shell injection.
+- User-defined agent configs and MCP server configs are schema-validated before
+  being persisted.
+
+### Content Schema
+
+Each content file uses YAML front matter with the following common fields:
+
+| Field       | Required | Description                              |
+| ----------- | -------- | ---------------------------------------- |
+| `id`        | yes*     | Unique identifier (defaults to filename) |
+| `name`      | yes      | Display name                             |
+| `type`      | yes      | `skill`, `rule`, `hook`, `workflow`, `persona` |
+| `enabled`   | yes      | Whether the item is active               |
+| `format`    | yes      | `markdown`                               |
+| `trigger`   | hooks    | `before`, `after`, or `always`          |
+
+*If `id` is omitted, the file name (without extensions) is used.
+
+### File Layouts
+
+| Layout      | Output structure                                   | Typical target   |
+| ----------- | -------------------------------------------------- | ---------------- |
+| `flat`      | `<target>/<slug>.<ext>`                            | Cursor, Amazon Q |
+| `subfolder` | `<target>/<type>/<CANONICAL.md>`                   | Kiro, Copilot    |
+
+## Help & Troubleshooting
+
+### The extension commands do not appear
+
+- Make sure the extension is installed and VS Code has reloaded.
+- Open the Command Palette and type `AI Agent Hub`.
+
+### Sync runs but no files are written
+
+- Open **AI Agent Hub: Show Configured Agents** and verify at least one agent
+  target is enabled.
+- Open the Hub panel and make sure the content items you want to sync are enabled.
+- Check the **Output** panel for sync error messages about unsafe paths or
+  missing workspace folders.
+
+### MCP server fails to start
+
+- Check that `packageName` is a valid npm package.
+- Ensure the selected port is free and in the 1024–65535 range.
+- Review the MCP server logs in the **Output** panel.
+
+### Need more help?
+
+- Open an issue on the [GitHub repository](https://github.com/Wasim-Shaikh25/ai-agent-hub/issues)
+  with the exact command or sync result that failed.
 
 ## Versioning
 
@@ -398,12 +496,21 @@ the extension loaded.
 npm run package
 ```
 
+### Lint & Format
+
+```bash
+npm run lint
+npm run lint:fix
+npm run format:check
+npm run format
+```
+
 ## Contributing
 
 1. Create a feature branch from `main`.
 2. Make your changes.
 3. Open a PR against `main`.
-4. CI runs build and tests automatically.
+4. CI runs lint, format check, build, tests, and VSIX packaging automatically.
 5. On merge, the release workflow bumps the version and publishes a
    new VSIX.
 
