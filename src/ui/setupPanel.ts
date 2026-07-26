@@ -175,6 +175,19 @@ export class SetupPanel {
       createdAt: now,
       updatedAt: now,
     };
+
+    if (this.validator) {
+      const validationErrors = this.validator.validate('agent-target', config);
+      if (validationErrors.length > 0) {
+        this.post({
+          type: 'validationErrors',
+          id: '',
+          errors: validationErrors.map((e) => `${e.path}: ${e.message}`),
+        });
+        return;
+      }
+    }
+
     this.agentConfig.save(config);
     if (this.panel) {
       this.panel.webview.html = this.buildHtml(this.lastCandidates);

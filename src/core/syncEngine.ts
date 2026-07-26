@@ -186,6 +186,20 @@ export class SyncEngine {
             continue;
           }
 
+          if (!repo.repoPath || this.pathUtils?.isUnsafePath(repo.repoPath)) {
+            repoResults.push({
+              repoName: repo.name,
+              repoPath: repo.repoPath,
+              filesWritten: [],
+              errors: ['Unsafe or missing repo path'],
+            });
+            continue;
+          }
+
+          const repoBase = workspaceRoot
+            ? path.resolve(workspaceRoot, repo.repoPath)
+            : path.resolve(repo.repoPath);
+
           const filesWritten: string[] = [];
           const errors: string[] = [];
 
@@ -204,7 +218,7 @@ export class SyncEngine {
               continue;
             }
 
-            const result = await this.fileWriter.write(items, target, type, repo.repoPath);
+            const result = await this.fileWriter.write(items, target, type, repoBase);
             filesWritten.push(...result.filesWritten);
             errors.push(...result.errors);
           }
