@@ -2,7 +2,7 @@
   "name": "ai-agent-hub",
   "displayName": "AI Agent Hub",
   "description": "A centralized control plane for managing AI behavior content and syncing it to configured AI agent targets",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "ai-agent-hub",
   "license": "MIT",
   "engines": {
