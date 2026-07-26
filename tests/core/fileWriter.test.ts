@@ -30,7 +30,20 @@ describe('FileWriter', () => {
     };
 
     const result = await fileWriter.write(
-      [{ id: '1', name: 'Clean Code', type: 'skill', source: 'builtin', enabled: true, description: '', content: 'Use good names.', format: 'markdown', createdAt: '', updatedAt: '' }],
+      [
+        {
+          id: '1',
+          name: 'Clean Code',
+          type: 'skill',
+          source: 'builtin',
+          enabled: true,
+          description: '',
+          content: 'Use good names.',
+          format: 'markdown',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
       target,
       'skill',
       tmpDir,
@@ -50,7 +63,20 @@ describe('FileWriter', () => {
     };
 
     const result = await fileWriter.write(
-      [{ id: '1', name: 'Clean Code', type: 'skill', source: 'builtin', enabled: true, description: '', content: '', format: 'markdown', createdAt: '', updatedAt: '' }],
+      [
+        {
+          id: '1',
+          name: 'Clean Code',
+          type: 'skill',
+          source: 'builtin',
+          enabled: true,
+          description: '',
+          content: '',
+          format: 'markdown',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
       target,
       'skill',
       tmpDir,
@@ -70,7 +96,20 @@ describe('FileWriter', () => {
     };
 
     const result = await fileWriter.write(
-      [{ id: '1', name: 'Bad', type: 'skill', source: 'builtin', enabled: true, description: '', content: '', format: 'markdown', createdAt: '', updatedAt: '' }],
+      [
+        {
+          id: '1',
+          name: 'Bad',
+          type: 'skill',
+          source: 'builtin',
+          enabled: true,
+          description: '',
+          content: '',
+          format: 'markdown',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
       target,
       'skill',
       tmpDir,
@@ -89,7 +128,20 @@ describe('FileWriter', () => {
     };
 
     const result = await fileWriter.write(
-      [{ id: '1', name: 'Naming', type: 'rule', source: 'builtin', enabled: true, description: '', content: 'Use camelCase.', format: 'markdown', createdAt: '', updatedAt: '' }],
+      [
+        {
+          id: '1',
+          name: 'Naming',
+          type: 'rule',
+          source: 'builtin',
+          enabled: true,
+          description: '',
+          content: 'Use camelCase.',
+          format: 'markdown',
+          createdAt: '',
+          updatedAt: '',
+        },
+      ],
       target,
       'rule',
       tmpDir,

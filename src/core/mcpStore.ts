@@ -24,7 +24,9 @@ export class McpStore {
     return this.getAll().find((s) => s.id === id);
   }
 
-  add(fields: Omit<McpServerConfig, 'id' | 'developerOnly' | 'createdAt' | 'updatedAt'>): McpServerConfig {
+  add(
+    fields: Omit<McpServerConfig, 'id' | 'developerOnly' | 'createdAt' | 'updatedAt'>,
+  ): McpServerConfig {
     if (!fields.name?.trim()) {
       throw new Error('MCP server name is required');
     }
@@ -65,7 +67,10 @@ export class McpStore {
     return config;
   }
 
-  update(id: string, fields: Partial<Omit<McpServerConfig, 'id' | 'developerOnly' | 'createdAt'>>): McpServerConfig {
+  update(
+    id: string,
+    fields: Partial<Omit<McpServerConfig, 'id' | 'developerOnly' | 'createdAt'>>,
+  ): McpServerConfig {
     const all = this.getAll();
     const idx = all.findIndex((s) => s.id === id);
     if (idx === -1) {

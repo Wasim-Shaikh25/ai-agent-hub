@@ -62,13 +62,23 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Auto-start MCP servers configured for auto-start
     for (const mcpConfig of mcpStore.getAll().filter((s) => s.autoStart)) {
-      mcpManager.start(mcpConfig).catch((err) =>
-        logger.error(`Failed to auto-start MCP "${mcpConfig.name}": ${err instanceof Error ? err.message : String(err)}`),
-      );
+      mcpManager
+        .start(mcpConfig)
+        .catch((err) =>
+          logger.error(
+            `Failed to auto-start MCP "${mcpConfig.name}": ${err instanceof Error ? err.message : String(err)}`,
+          ),
+        );
     }
 
     // Create UI panels
-    const setupPanel = new SetupPanel(context.extensionUri, agentConfig, pathUtils, repoSyncStore, validator);
+    const setupPanel = new SetupPanel(
+      context.extensionUri,
+      agentConfig,
+      pathUtils,
+      repoSyncStore,
+      validator,
+    );
     setupPanel.setSyncCallback(async () => {
       await syncEngine.sync();
     });
@@ -92,9 +102,7 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.registerCommand('aiAgentHub.addSkill', () => addSkill(registry)),
       vscode.commands.registerCommand('aiAgentHub.addRule', () => addRule(registry)),
       vscode.commands.registerCommand('aiAgentHub.addHook', () => addHook(registry)),
-      vscode.commands.registerCommand('aiAgentHub.syncToAgents', () =>
-        syncToAgents(syncEngine),
-      ),
+      vscode.commands.registerCommand('aiAgentHub.syncToAgents', () => syncToAgents(syncEngine)),
       vscode.commands.registerCommand('aiAgentHub.showAgents', () =>
         showAgents(agentConfig, setupPanel),
       ),
@@ -112,9 +120,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     logger.info('AI Agent Hub activated successfully.');
   } catch (err) {
-    logger.error(
-      `Activation failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    logger.error(`Activation failed: ${err instanceof Error ? err.message : String(err)}`);
     throw err;
   }
 }

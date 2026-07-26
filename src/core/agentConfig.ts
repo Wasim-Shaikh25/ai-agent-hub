@@ -15,9 +15,7 @@ export class AgentConfigStore {
 
   /** Returns every saved agent configuration. */
   getAll(): AgentTargetConfig[] {
-    return this.storage.load<AgentTargetConfig>(
-      AgentConfigStore.STORAGE_KEY,
-    );
+    return this.storage.load<AgentTargetConfig>(AgentConfigStore.STORAGE_KEY);
   }
 
   /** Returns only the configurations whose `enabled` flag is `true`. */

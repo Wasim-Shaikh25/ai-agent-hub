@@ -20,9 +20,7 @@ export async function showAgents(
   const configs = agentConfig.getAll();
 
   if (configs.length === 0) {
-    vscode.window.showInformationMessage(
-      'No agents configured. Run "AI Agent Hub: Setup" first.',
-    );
+    vscode.window.showInformationMessage('No agents configured. Run "AI Agent Hub: Setup" first.');
     return;
   }
 

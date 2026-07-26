@@ -5,11 +5,24 @@ const mockOutputChannel = {
   dispose: vi.fn(),
 };
 
+function createMockDocument(content = '') {
+  const uri = { scheme: 'untitled', path: 'mock', toString: () => 'untitled:mock' };
+  return {
+    uri,
+    languageId: 'markdown',
+    getText: () => content,
+  };
+}
+
 export const workspace = {
   workspaceFolders: undefined as { uri: { fsPath: string }; index: number; name: string }[] | undefined,
   getConfiguration: vi.fn(() => ({
     get: vi.fn((key: string, defaultValue?: unknown) => defaultValue),
   })),
+  openTextDocument: vi.fn((options?: { content?: string; language?: string }) =>
+    Promise.resolve(createMockDocument(options?.content ?? '')),
+  ),
+  onDidCloseTextDocument: vi.fn(() => ({ dispose: vi.fn() })),
 };
 
 export const extensions = {
@@ -28,6 +41,7 @@ export const window = {
   setStatusBarMessage: vi.fn(),
   showInputBox: vi.fn(),
   showQuickPick: vi.fn(),
+  showTextDocument: vi.fn(() => Promise.resolve({})),
 };
 
 export const commands = {
@@ -44,6 +58,15 @@ export function setWorkspaceFolders(
   folders: { uri: { fsPath: string }; index: number; name: string }[] | undefined,
 ): void {
   workspace.workspaceFolders = folders;
+}
+
+export function setConfiguration(config: Record<string, unknown>): void {
+  workspace.getConfiguration.mockReturnValue({
+    get: vi.fn((key: string, defaultValue?: unknown) => {
+      if (key in config) return config[key];
+      return defaultValue;
+    }),
+  });
 }
 
 export function setAppName(name: string): void {
