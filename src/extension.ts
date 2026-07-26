@@ -35,8 +35,8 @@ export function activate(context: vscode.ExtensionContext): void {
   try {
     const storage = new Storage(context);
     const pathUtils = new PathUtils();
-    const registry = new Registry(storage);
-    const _validator = new Validator(context.extensionPath);
+    const validator = new Validator(context.extensionPath);
+    const registry = new Registry(storage, validator);
     const agentDetector = new AgentDetector();
     const agentConfig = new AgentConfigStore(storage);
     const fileWriter = new FileWriter(pathUtils);
@@ -54,6 +54,7 @@ export function activate(context: vscode.ExtensionContext): void {
       repoSyncStore,
       mcpStore,
       mcpManager,
+      pathUtils,
     );
 
     // Load builtin content from hub-content/
@@ -67,7 +68,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }
 
     // Create UI panels
-    const setupPanel = new SetupPanel(context.extensionUri, agentConfig, pathUtils, repoSyncStore);
+    const setupPanel = new SetupPanel(context.extensionUri, agentConfig, pathUtils, repoSyncStore, validator);
     setupPanel.setSyncCallback(async () => {
       await syncEngine.sync();
     });

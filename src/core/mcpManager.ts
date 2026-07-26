@@ -1,6 +1,11 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as vscode from 'vscode';
 import { McpServerConfig, McpServerState, McpServerStatus } from './types';
+import {
+  isValidNpmPackageName,
+  isValidMcpArg,
+  validateEnvRecord,
+} from '../utils/mcpEnv';
 
 /**
  * Manages MCP server child processes.
@@ -18,6 +23,12 @@ export class McpManager {
   /**
    * Starts an MCP server process.
    *
+   * Performs a final security validation on the configuration,
+   * then spawns `npx mcp-proxy` (using `npx.cmd` on Windows) with
+   * `shell: false` to avoid shell injection. The inner MCP server
+   * is spawned directly by `mcp-proxy` using the validated package
+   * name and argument list.
+   *
    * @param config The MCP server configuration.
    */
   async start(config: McpServerConfig): Promise<McpServerState> {
@@ -25,32 +36,45 @@ export class McpManager {
       return this.getState(config.id);
     }
 
+    const securityErrors = this.validateConfig(config);
+    if (securityErrors.length > 0) {
+      const message = securityErrors.join('; ');
+      this.setState(config.id, { configId: config.id, status: 'error', error: message });
+      vscode.window.showErrorMessage(`MCP server "${config.name}" rejected: ${message}`);
+      throw new Error(message);
+    }
+
     this.setState(config.id, { configId: config.id, status: 'starting' });
 
     const url = `http://localhost:${config.port}`;
 
-    // Wrap the stdio MCP server with mcp-proxy so it exposes HTTP/SSE endpoints.
-    // Command: npx mcp-proxy --port <port> -- npx <package> [...args]
-    // NPM_CONFIG_YES=true suppresses the "Ok to proceed?" prompt from npx.
+    // Use platform-specific npx command so we can keep shell: false.
+    const isWindows = process.platform === 'win32';
+    const npxBin = isWindows ? 'npx.cmd' : 'npx';
+
+    // mcp-proxy runs the inner command directly (without --shell) so that
+    // the validated packageName/args are not re-interpreted by a shell.
     const proxyArgs = [
       'mcp-proxy',
       '--port', String(config.port),
-      '--shell',          // spawn inner command via shell for cross-platform compat
       '--',
-      'npx', config.packageName,
+      npxBin,
+      config.packageName,
       ...config.args,
     ];
+
     const env = {
       ...process.env,
       ...config.env,
-      NPM_CONFIG_YES: 'true',   // suppress npx install prompts
+      NPM_CONFIG_YES: 'true', // suppress npx install prompts
     };
 
     try {
-      const child = spawn('npx', proxyArgs, {
+      const child = spawn(npxBin, proxyArgs, {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
-        shell: true,   // required on Windows for npx to resolve correctly
+        shell: false,
+        windowsHide: true,
       });
 
       this.processes.set(config.id, child);
@@ -230,5 +254,19 @@ When asked to use this MCP server, say:
 
   private setState(id: string, state: McpServerState): void {
     this.states.set(id, state);
+  }
+
+  private validateConfig(config: McpServerConfig): string[] {
+    const errors: string[] = [];
+    if (!isValidNpmPackageName(config.packageName)) {
+      errors.push(`Invalid package name: "${config.packageName}"`);
+    }
+    for (const arg of config.args) {
+      if (!isValidMcpArg(arg)) {
+        errors.push(`Unsafe argument: "${arg}"`);
+      }
+    }
+    errors.push(...validateEnvRecord(config.env));
+    return errors;
   }
 }

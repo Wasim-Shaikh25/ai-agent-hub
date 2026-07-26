@@ -16,6 +16,7 @@ import {
   McpServerConfig,
 } from '../core/types';
 import { getNonce, getBaseStyles, getBaseScriptSetup } from './webviewHtml';
+import { parseArgsString, parseEnvString } from '../utils/mcpEnv';
 
 /** Maps a TabType to the corresponding ItemType (content tabs only). */
 const TAB_TO_ITEM_TYPE: Partial<Record<TabType, ItemType>> = {
@@ -276,11 +277,19 @@ export class HubPanel {
   private handleAddMcp(msg: HubMessage): void {
     const f = msg.fields ?? {};
     try {
+      const argsResult = parseArgsString(String(f.args ?? ''));
+      if (argsResult.errors.length > 0) {
+        throw new Error(argsResult.errors.join('; '));
+      }
+      const envResult = parseEnvString(String(f.env ?? ''));
+      if (envResult.errors.length > 0) {
+        throw new Error(envResult.errors.join('; '));
+      }
       this.mcpStore.add({
         name: String(f.name ?? ''),
         packageName: String(f.packageName ?? ''),
-        args: String(f.args ?? '').split(' ').filter(Boolean),
-        env: this.parseEnvString(String(f.env ?? '')),
+        args: argsResult.args,
+        env: envResult.env,
         port: parseInt(String(f.port ?? '3100'), 10),
         autoStart: f.autoStart === 'true',
       });
@@ -315,17 +324,6 @@ export class HubPanel {
     this.sendMcpContent();
   }
 
-  /** Parses "KEY=VALUE KEY2=VALUE2" into a Record. */
-  private parseEnvString(raw: string): Record<string, string> {
-    const result: Record<string, string> = {};
-    for (const pair of raw.split(/\s+/).filter(Boolean)) {
-      const eq = pair.indexOf('=');
-      if (eq > 0) {
-        result[pair.slice(0, eq)] = pair.slice(eq + 1);
-      }
-    }
-    return result;
-  }
 
   // -----------------------------------------------------------------
   // Content rendering

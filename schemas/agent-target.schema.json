@@ -13,7 +13,7 @@
   "definitions": {
     "targetLocationConfig": {
       "type": "object",
-      "required": ["enabled", "path", "format", "mergeStrategy"],
+      "required": ["enabled", "path", "fileLayout", "fileExtension"],
       "properties": {
         "enabled": {
           "type": "boolean"
@@ -21,16 +21,13 @@
         "path": {
           "type": "string"
         },
-        "format": {
+        "fileLayout": {
           "type": "string",
-          "enum": ["markdown", "json", "yaml", "plaintext"]
+          "enum": ["flat", "subfolder"]
         },
-        "mergeStrategy": {
+        "fileExtension": {
           "type": "string",
-          "enum": ["copy-files", "single-bundle-file", "append"]
-        },
-        "bundleFileName": {
-          "type": "string"
+          "enum": ["md", "instructions-md", "mdc", "prompt-md"]
         }
       },
       "additionalProperties": false
@@ -54,12 +51,13 @@
     },
     "targets": {
       "type": "object",
-      "required": ["skill", "rule", "hook", "tool"],
+      "required": ["skill", "rule", "hook", "workflow", "persona"],
       "properties": {
         "skill": { "$ref": "#/definitions/targetLocationConfig" },
         "rule": { "$ref": "#/definitions/targetLocationConfig" },
         "hook": { "$ref": "#/definitions/targetLocationConfig" },
-        "tool": { "$ref": "#/definitions/targetLocationConfig" }
+        "workflow": { "$ref": "#/definitions/targetLocationConfig" },
+        "persona": { "$ref": "#/definitions/targetLocationConfig" }
       },
       "additionalProperties": false
     },

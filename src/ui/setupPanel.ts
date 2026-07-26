@@ -7,6 +7,7 @@ import {
   ItemType, TargetLocationConfig, FileLayout, FileExtensionFormat,
 } from '../core/types';
 import { PathUtils } from '../utils/pathUtils';
+import { Validator } from '../core/validator';
 import { getNonce, getBaseStyles, getBaseScriptSetup } from './webviewHtml';
 
 const CONTENT_TYPES: readonly ItemType[] = ['skill', 'rule', 'hook', 'workflow', 'persona'];
@@ -29,6 +30,7 @@ export class SetupPanel {
     private readonly agentConfig: AgentConfigStore,
     private readonly pathUtils: PathUtils,
     private readonly repoSyncStore?: RepoSyncStore,
+    private readonly validator?: Validator,
   ) {}
 
   setSyncCallback(cb: () => Promise<void>): void { this.onSyncRequested = cb; }
@@ -91,6 +93,19 @@ export class SetupPanel {
       autoSync: raw.autoSync ?? false,
       createdAt: prev?.createdAt ?? now, updatedAt: now,
     };
+
+    if (this.validator) {
+      const validationErrors = this.validator.validate('agent-target', config);
+      if (validationErrors.length > 0) {
+        this.post({
+          type: 'validationErrors',
+          id: config.id,
+          errors: validationErrors.map((e) => `${e.path}: ${e.message}`),
+        });
+        return;
+      }
+    }
+
     this.agentConfig.save(config);
     this.post({ type: 'saved', id: config.id });
     vscode.window.showInformationMessage(`"${config.displayName}" saved.`);
