@@ -32,10 +32,7 @@ export class HubUpdater {
    * @returns true if content was updated, false if skipped or
    *          failed.
    */
-  async fetchLatest(
-    extensionPath: string,
-    timeoutMs = 30_000,
-  ): Promise<boolean> {
+  async fetchLatest(extensionPath: string, timeoutMs = 30_000): Promise<boolean> {
     try {
       await this.ensureCacheDir();
 
@@ -138,11 +135,7 @@ export class HubUpdater {
     return copied > 0;
   }
 
-  private runGit(
-    args: readonly string[],
-    cwd?: string,
-    timeoutMs = 30_000,
-  ): Promise<void> {
+  private runGit(args: readonly string[], cwd?: string, timeoutMs = 30_000): Promise<void> {
     return new Promise((resolve, reject) => {
       const options = cwd ? { cwd, timeout: timeoutMs } : { timeout: timeoutMs };
       execFile('git', args as string[], options, (error, _stdout, stderr) => {
