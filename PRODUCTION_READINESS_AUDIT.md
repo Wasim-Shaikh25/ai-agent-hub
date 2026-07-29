@@ -210,6 +210,17 @@ There is one user role. No admin, support, or read-only roles are required for a
   unzip -l ai-agent-hub-0.0.6.vsix
   ```
   Output shows `extension/out/...` and `extension/package.json` but no `node_modules/`. The compiled `out/core/validator.js` top-level-requires `ajv`.
+
+  I also reproduced the activation failure by extracting the `.vsix` into a temp directory (with only a stub `vscode` module added to satisfy the VS Code API import) and running `node -e "require('./out/extension.js')"`. It immediately fails:
+
+  ```text
+  Error: Cannot find module 'ajv'
+  Require stack:
+  - .../extension/out/core/validator.js
+  - .../extension/out/extension.js
+  ```
+
+  This confirms that the packaged extension cannot resolve its runtime dependency `ajv` and will fail to activate.
 - **Root cause:** `vsce package --no-dependencies` intentionally omits `node_modules`, and there is no bundler (webpack/esbuild) to inline dependencies into the emitted JavaScript.
 - **Technical / user / business impact:** Extension activation crash on install. Users cannot use the product at all. Marketplace reviews would be negative.
 - **Likelihood:** Certain for any user installing the current package.
