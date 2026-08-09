@@ -49,16 +49,17 @@ export class Validator {
   /**
    * Validates `data` against the schema for `type`.
    *
-   * @returns An empty array when the data is valid or the
-   *          schema is not loaded. A non-empty array of
-   *          {@link ValidationError} objects otherwise.
+   * @returns An empty array when the data is valid. A non-empty
+   *          array of {@link ValidationError} objects when the
+   *          schema is not loaded or the data is invalid.
    */
   validate(type: SchemaType, data: unknown): ValidationError[] {
     const validate: ValidateFunction | undefined = this.ajv.getSchema(type);
 
     if (!validate) {
-      // Schema was not loaded — skip validation gracefully.
-      return [];
+      // Schema was not loaded — failing open is unsafe for content
+      // that may be forwarded to external tools.
+      return [{ path: '/', message: `Schema not loaded for type "${type}"` }];
     }
 
     const valid = validate(data);

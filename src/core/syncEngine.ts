@@ -41,6 +41,7 @@ export class SyncEngine {
     private readonly mcpStore?: McpStore,
     private readonly mcpManager?: McpManager,
     private readonly pathUtils?: PathUtils,
+    private readonly globalStoragePath?: string,
   ) {}
 
   /**
@@ -80,10 +81,10 @@ export class SyncEngine {
       // Cap the remote update at 5 seconds so a slow/unavailable
       // network does not stall the local sync operation.
       if (this.hubUpdater && this.extensionPath) {
-        const updated = await this.hubUpdater.fetchLatest(this.extensionPath, 5_000);
+        const updated = await this.hubUpdater.fetchLatest(5_000);
         if (updated) {
           // Reload registry so new/changed builtin items are picked up
-          this.registry.initialize(this.extensionPath);
+          this.registry.initialize(this.extensionPath, this.globalStoragePath);
         }
       }
 

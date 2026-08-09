@@ -58,10 +58,11 @@ export function activate(context: vscode.ExtensionContext): void {
       mcpStore,
       mcpManager,
       pathUtils,
+      context.globalStorageUri.fsPath,
     );
 
-    // Load builtin content from hub-content/
-    registry.initialize(context.extensionPath);
+    // Load builtin content from hub-content/ (bundled + global storage overrides)
+    registry.initialize(context.extensionPath, context.globalStorageUri.fsPath);
 
     // Auto-start MCP servers configured for auto-start
     for (const mcpConfig of mcpStore.getAll().filter((s) => s.autoStart)) {

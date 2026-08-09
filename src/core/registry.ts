@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import YAML from 'yaml';
 import { Storage } from './storage';
 import { Validator } from './validator';
 import { ItemType, HubItem, AnyHubItem, HookTrigger, ContentFormat } from './types';
@@ -33,15 +34,30 @@ export class Registry {
    * Loads builtin content from `hub-content/` and user
    * items from storage.
    *
+   * Builtins are loaded first from the extension's bundled
+   * `hub-content/` directory, then from an optional global storage
+   * override path (e.g. remotely updated content). Global items with
+   * the same `id` override bundled ones.
+   *
    * @param extensionPath - The root path of the extension on disk.
+   * @param globalStoragePath - Optional path to a user-writable hub-content
+   *                            directory for remote updates.
    */
-  initialize(extensionPath: string): void {
+  initialize(extensionPath: string, globalStoragePath?: string): void {
     for (const type of ITEM_TYPES) {
       // Clear existing items to avoid duplicates on re-init
       this.collections[type] = [];
 
-      const builtinDir = path.join(extensionPath, 'hub-content', `${type}s`);
-      if (fs.existsSync(builtinDir)) {
+      const byId = new Map<string, AnyHubItem>();
+      const builtinPaths = [path.join(extensionPath, 'hub-content', `${type}s`)];
+      if (globalStoragePath) {
+        builtinPaths.push(path.join(globalStoragePath, 'hub-content', `${type}s`));
+      }
+
+      for (const builtinDir of builtinPaths) {
+        if (!fs.existsSync(builtinDir)) {
+          continue;
+        }
         const files = fs
           .readdirSync(builtinDir)
           .filter(
@@ -56,10 +72,12 @@ export class Registry {
           const content = fs.readFileSync(path.join(builtinDir, file), 'utf-8');
           const item = this.parseBuiltinFile(content, file, type);
           if (item) {
-            this.collections[type].push(item);
+            byId.set(item.id, item);
           }
         }
       }
+
+      this.collections[type].push(...byId.values());
 
       const userItems = this.storage.load<AnyHubItem>(type);
       this.collections[type].push(...userItems);
@@ -223,13 +241,15 @@ export class Registry {
   }
 
   /**
-   * Parses a builtin file with optional YAML-like frontmatter.
+   * Parses a builtin file with optional YAML frontmatter.
    *
    * Frontmatter is delimited by `---` lines at the start of
-   * the file. Only simple `key: value` pairs are supported.
+   * the file and parsed with a real YAML parser so quoted
+   * values, multiline strings, and booleans are handled
+   * correctly.
    */
   private parseBuiltinFile(content: string, fileName: string, type: ItemType): AnyHubItem | null {
-    const frontmatter: Record<string, string> = {};
+    let frontmatter: Record<string, unknown> = {};
     let body = content;
 
     if (content.startsWith('---')) {
@@ -237,21 +257,19 @@ export class Registry {
       if (endIndex !== -1) {
         const fmBlock = content.substring(3, endIndex).trim();
         body = content.substring(endIndex + 3).trim();
-        for (const line of fmBlock.split('\n')) {
-          const colonIdx = line.indexOf(':');
-          if (colonIdx !== -1) {
-            const key = line.substring(0, colonIdx).trim();
-            const value = line.substring(colonIdx + 1).trim();
-            frontmatter[key] = value;
-          }
+        try {
+          frontmatter = YAML.parse(fmBlock) as Record<string, unknown>;
+        } catch {
+          // Malformed frontmatter is treated as empty so the body is preserved.
+          frontmatter = {};
         }
       }
     }
 
-    const id = frontmatter['id'] || fileName.replace(/\.[^.]+$/, '');
-    const name = frontmatter['name'] || fileName;
-    const description = frontmatter['description'] || '';
-    const enabled = frontmatter['enabled'] !== 'false';
+    const id = String(frontmatter['id'] || fileName.replace(/\.[^.]+$/, ''));
+    const name = String(frontmatter['name'] || fileName);
+    const description = String(frontmatter['description'] || '');
+    const enabled = frontmatter['enabled'] !== false;
     const format: ContentFormat = fileName.endsWith('.json')
       ? 'json'
       : fileName.endsWith('.yaml') || fileName.endsWith('.yml')
@@ -275,7 +293,12 @@ export class Registry {
     };
 
     if (type === 'hook') {
-      const trigger = (frontmatter['trigger'] as HookTrigger) || 'always';
+      const triggerValue = frontmatter['trigger'];
+      const trigger =
+        typeof triggerValue === 'string' &&
+        VALID_HOOK_TRIGGERS.includes(triggerValue as HookTrigger)
+          ? (triggerValue as HookTrigger)
+          : 'always';
       const item = { ...base, type: 'hook', trigger } as AnyHubItem;
       this.validateItem(item);
       return item;

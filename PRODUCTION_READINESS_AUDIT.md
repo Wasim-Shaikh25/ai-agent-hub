@@ -1,7 +1,7 @@
 # AI Agent Hub — Production Readiness Audit
 
 **Repository:** `Wasim-Shaikh25/ai-agent-hub`  
-**Assessed commit:** `dd15bc7` (`main` after merging PR #10 and PR #11)  
+**Assessed commit:** `main` after PR #17 + `devin/review-and-fix-3`  
 **Extension version:** `0.0.7`  
 **Server version:** `0.1.0`  
 **Audit date:** 2026-08-09  
@@ -13,13 +13,13 @@
 
 AI Agent Hub has expanded from a local VS Code: extension into a full SaaS platform: the extension (Content Plane) now connects to a `hub-server` (Context / Gateway / Governance Planes) that provides shared sessions, memory, code-aware RAG, MCP aggregation, RBAC, SSO, billing, and admin/operator consoles. PR #10 also added a CLI connector, a customer web app, a marketing landing page, Docker Compose stacks, and extensive legal/spec docs.
 
-The previous batch of release-blocker fixes (PR #16) added safe secret validation, RLS-by-default, and `.vsix` packaging. This batch (PR #17) pins the MCP runtime, patches server runtime CVEs, hardens the server Dockerfile, enables CSP, and adds CI packaging/audit gates. Root lint/build/test/format pass (42 tests), server typecheck/build/test pass (26 tests), `server/npm audit` reports zero vulnerabilities, and root `npm audit --omit=dev` reports zero production vulnerabilities.
+The previous batches of release-blocker fixes (PRs #16 and #17) added safe secret validation, RLS-by-default, `.vsix` packaging, MCP runtime pinning, server CVE patching, a hardened Dockerfile, CSP with nonces, and CI packaging/audit gates. This follow-up review fixes additional issues: remote hub content updates now write to user-writable global storage instead of the read-only extension path, the MCP manager checks OS port availability before spawning, the validator fails closed when a schema is missing, and the YAML frontmatter parser is replaced with a standard parser. Root lint/build/test/format pass (51 tests), server typecheck/build/test pass (32 tests), `server/npm audit` reports zero vulnerabilities, root `npm audit --omit=dev` reports zero production vulnerabilities, and root `npm audit --audit-level=low` reports zero vulnerabilities.
 
-The extension `.vsix` now ships `ajv` and `mcp-proxy`, the server rejects unsafe defaults in production, RLS is enabled by default, and the production Docker path uses a multi-stage non-root image. Several unvalidated areas remain: real VS Code: Extension Host activation, production Docker Compose deployment, TLS/backup/monitoring, and load/penetration testing.
+The extension `.vsix` ships `ajv`, `mcp-proxy`, and `yaml`; the server rejects unsafe defaults; RLS is enabled by default; and the production Docker path uses a multi-stage non-root image. A small number of unvalidated areas remain: inline event handlers still require `script-src-attr 'unsafe-inline'`, production Docker Compose deployment with TLS/backup/monitoring, and load/penetration testing.
 
 **Final recommendation:** **CONDITIONAL GO**
 
-The release blockers tracked in `docs/release-blockers/tracker.md` are resolved. The product may proceed to a release candidate after a real VS Code: Extension Host smoke test and a production Docker Compose deployment test.
+The release blockers tracked in `docs/release-blockers/tracker.md` are resolved. The product may proceed to a release candidate after a production Docker Compose deployment test and load/penetration testing.
 
 ### Finding summary
 
@@ -29,22 +29,22 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 |----------|-------|----------|
 | Critical | 0 | — |
 | High | 0 | — |
-| Medium | 1 | Production deployment/backup/monitoring not validated |
-| Low | 4 | YAML frontmatter parser not YAML-compliant; MCP port conflict not OS-checked; `Validator` silently skips missing schemas; remote builtin updates may overwrite installed files |
+| Medium | 2 | CSP still allows inline event handlers (`script-src-attr 'unsafe-inline'`); production Docker Compose deployment not validated |
+| Low | 0 | — |
 
 ### Major technical risks
 
 1. **No production deployment validated:** The production `Dockerfile` builds and starts with a healthy `/health` response in a local Postgres+Redis smoke test, but a real production deployment with TLS, backups, monitoring, and Stripe webhooks has not been validated.
-2. **CSP allows inline event handlers:** The web UI `<script>` and `<style>` blocks are now protected by per-request CSP nonces, but inline `onclick` and `style` attributes still rely on `script-src-attr 'unsafe-inline'` and `style-src-attr 'unsafe-inline'` until the UI is migrated to external JS/CSS and event listeners.
+2. **CSP allows inline event handlers:** The web UI `<script>` and `<style>` blocks are protected by per-request CSP nonces, but inline `onclick` and `style` attributes still rely on `script-src-attr 'unsafe-inline'` and `style-src-attr 'unsafe-inline'` until the UI is migrated to external JS/CSS and event listeners.
 3. **Extension Host activation validated:** `scripts/test-extension-host.sh` installs the `.vsix` in a clean VS Code: profile and confirms `AI Agent Hub activated successfully`.
-4. **Supply chain (extension dev tools):** Root `npm audit` now reports 0 vulnerabilities after updating `@vscode/vsce` and `vitest`; only production dependencies ship in the `.vsix`.
-5. **Remaining low-severity findings:** YAML frontmatter parser, MCP port conflict handling, `Validator` schema-missing behavior, and remote builtin content updates remain scheduled post-release (see Detailed Findings).
+4. **Supply chain:** Root `npm audit` reports 0 vulnerabilities; only production dependencies (`ajv`, `mcp-proxy`, `yaml`) ship in the `.vsix`.
+5. **Remaining low-severity findings:** Windows path / `npx.cmd` behavior has not been manually tested (see Detailed Findings).
 
 ### Scope limitations and untested areas
 
 - The extension was installed and activated in a real VS Code: Extension Host via `scripts/test-extension-host.sh`; a full functional run of every command was not performed.
 - Real file sync into Cursor/Kiro/Copilot/Amazon Q folders was not retested.
-- MCP server end-to-end startup against a real package was not retested.
+- MCP server end-to-end startup was verified against a fake server via `scripts/test-mcp-spawn.sh` and `tests/core/mcpManager.test.ts`; startup against a real remote MCP package was not retested.
 - The production `Dockerfile` was built and `/health` verified against a local Postgres+Redis stack; Docker Compose production deployment with TLS/backup/monitoring was not tested.
 - TLS termination, managed Postgres backups, Redis persistence, and Stripe webhook verification were not exercised.
 - Load, concurrency, and penetration testing were not performed.
@@ -106,9 +106,9 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 |-------|---------|--------|
 | Extension lint | `npm run lint` | Pass (exit 0) |
 | Extension build | `npm run build` | Pass (exit 0) |
-| Extension unit tests | `npm test` | Pass — 45 tests in 7 files |
+| Extension unit tests | `npm test` | Pass — 51 tests in 8 files |
 | Extension format check | `npm run format:check` | Pass |
-| Extension VSIX package | `npm run package` | Pass — `.vsix` includes `node_modules/ajv/` and `node_modules/mcp-proxy/`; dev/audit docs excluded |
+| Extension VSIX package | `npm run package` | Pass — `.vsix` includes `node_modules/ajv/`, `node_modules/mcp-proxy/`, and `node_modules/yaml/`; dev/audit docs excluded |
 | Extension production dependency audit | `npm audit --omit=dev --audit-level=moderate` | Pass — 0 vulnerabilities |
 | Extension dependency audit | `npm audit --audit-level=low` | Pass — 0 vulnerabilities |
 | Server dependency install | `(cd server && npm install)` | Pass |
@@ -124,7 +124,7 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 
 - **Assumptions:** The product is now intended to become a hosted SaaS with optional self-hosting. The extension remains the free local Content Plane.
 - **Contradictions resolved:** `activationEvents` cover all registered commands plus `onStartupFinished`; the P0 release blockers listed in `docs/LAUNCH-READINESS.md` and `docs/release-blockers/tracker.md` are addressed in PR #16 and PR #17.
-- **Contradictions remaining:** None for the tracked release blockers; remaining low-severity findings (YAML frontmatter, MCP port conflict, `Validator` missing-schema behavior, remote builtin updates) are scheduled post-release.
+- **Contradictions remaining:** None for the tracked release blockers; remaining low-severity finding is manual Windows path / `npx.cmd` validation.
 - **Exclusions:** Real VS Code: host testing, real agent sync, Docker production deploy, TLS/backup/restore, load testing, and penetration testing were not performed.
 
 ---
@@ -164,15 +164,15 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 
 1. **Extension/server integration test** — Missing. There is no test that verifies the extension can authenticate and call the server end-to-end.
 2. **Server production hardening** — Dockerfile and Compose are updated, but a real production deployment with backups, monitoring, TLS termination, and real payment/webhook integration has not been validated.
-3. **CSP hardening** — CSP is enabled but still allows `unsafe-inline` because the dashboard uses inline scripts/styles. Moving to external assets or nonces is scheduled post-release.
-4. **Extension dev/build dependency CVEs** — Root `npm audit` without `--omit=dev` still reports vulnerabilities in `@vscode/vsce` and `vitest`. These do not ship in the `.vsix` but should be patched.
-5. **Remaining low-severity findings** — YAML frontmatter parser, MCP port conflict handling, `Validator` missing-schema behavior, and remote builtin update location are scheduled post-release.
+3. **CSP hardening** — CSP is enabled with per-request nonces for `<script>` and `<style>` blocks; inline event handlers still require `script-src-attr 'unsafe-inline'` until the UI is migrated to external JS/CSS and event listeners.
+4. **Supply chain** — Root `npm audit` reports 0 vulnerabilities; only production dependencies ship in the `.vsix`.
+5. **Remaining low-severity finding** — Windows path / `npx.cmd` behavior has not been manually tested.
 
 ---
 
 ## Detailed Findings
 
-> **Status note:** The detailed findings below are the original audit observations. Items fixed in PR #16 and PR #17 are marked in `docs/release-blockers/tracker.md`. In particular, AUDIT-001, AUDIT-002, AUDIT-003, AUDIT-005, AUDIT-006, AUDIT-011, AUDIT-S001, AUDIT-S002, AUDIT-S003, AUDIT-S004, and AUDIT-S006 are now resolved; the remaining items are scheduled post-release.
+> **Status note:** The detailed findings below are the original audit observations. Items fixed in PR #16, PR #17, and the follow-up `devin/review-and-fix-3` branch are marked in `docs/release-blockers/tracker.md`. In particular, AUDIT-001, AUDIT-002, AUDIT-003, AUDIT-005, AUDIT-006, AUDIT-007, AUDIT-008, AUDIT-010, AUDIT-011, AUDIT-012, AUDIT-S001, AUDIT-S002, AUDIT-S003, AUDIT-S004, and AUDIT-S006 are now resolved; the remaining low-severity item is manual Windows path validation.
 
 ### AUDIT-001 — Packaged VS Code: extension cannot activate (runtime dependencies missing)
 
@@ -263,20 +263,20 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 - **Classification:** Probable Risk
 - **Severity:** Medium
 - **Category:** Security / Data Integrity
-- **Disposition:** Needs Product Decision
-- **Release impact:** `HubUpdater` writes fetched content into `extensionPath/hub-content/`, which may be read-only or reverted on extension update.
-- **Affected files/locations:** `src/core/hubUpdater.ts:91-136`, `src/core/syncEngine.ts:82-88`
-- **Recommended solution:** Store updated builtins in `context.globalStorageUri`/`<globalStorage>/hub-content` and load from there first, falling back to bundled files.
+- **Disposition:** Fixed
+- **Release impact:** `HubUpdater` now writes fetched content into `globalStoragePath/hub-content/` and `Registry.initialize` loads global overrides after bundled builtins. This avoids writing to the read-only extension install directory and survives extension updates.
+- **Affected files/locations:** `src/core/hubUpdater.ts`, `src/core/registry.ts`, `src/core/syncEngine.ts`, `src/extension.ts`
+- **Evidence:** `tests/core/registry.test.ts` verifies global storage overrides shadow bundled builtins.
 
 ### AUDIT-008 — Extension frontmatter parser is not YAML-compliant
 
 - **Classification:** Design Concern
 - **Severity:** Low
 - **Category:** Data Integrity / Maintainability
-- **Disposition:** Scheduled Post-Release
-- **Release impact:** Builtin files with quoted colons or multi-line values may parse incorrectly.
-- **Affected files/locations:** `src/core/registry.ts:209-227`
-- **Recommended solution:** Use a YAML parser for frontmatter or update README to describe the format as simple `key: value`.
+- **Disposition:** Fixed
+- **Release impact:** Builtin files with quoted strings, booleans, and standard YAML constructs now parse correctly.
+- **Affected files/locations:** `src/core/registry.ts`
+- **Evidence:** `yaml@^2.8.3` is used for frontmatter parsing; `tests/core/registry.test.ts` covers quoted values, booleans, and multiline content.
 
 ### AUDIT-009 — README lists commands that are not registered
 
@@ -295,31 +295,30 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 - **Classification:** Probable Risk
 - **Severity:** Low
 - **Category:** Reliability
-- **Disposition:** Scheduled Post-Release
-- **Release impact:** `McpManager` may fail if a port is already in use.
-- **Affected files/locations:** `src/core/mcpStore.ts:50-53`
-- **Recommended solution:** Add an OS bind check before spawning or handle `EADDRINUSE` with a clear error.
+- **Disposition:** Fixed
+- **Release impact:** `McpManager` now checks OS port availability before spawning and returns a clear error if the port is in use.
+- **Affected files/locations:** `src/utils/mcpEnv.ts`, `src/core/mcpManager.ts`
+- **Evidence:** `isPortAvailable` is called in `McpManager.start`; `tests/utils/mcpEnv.test.ts` covers occupied and free ports.
 
 ### AUDIT-011 — Audit report and skill files bundled into `.vsix`
 
 - **Classification:** Confirmed Defect
 - **Severity:** Medium
 - **Category:** Packaging / Privacy
-- **Disposition:** Open — Required Before Release
-- **Release impact:** `PRODUCTION_READINESS_AUDIT.md` (38.35 KB), `.agents/skills/...`, `CHANGELOG.md`, and `SECURITY.md` are shipped to every user.
-- **Affected files/locations:** `.vscodeignore`, `ai-agent-hub-0.0.7.vsix`
-- **Evidence:** `unzip -l ai-agent-hub-0.0.7.vsix` lists `extension/PRODUCTION_READINESS_AUDIT.md` and `extension/.agents/skills/ai-agent-hub-extension-testing/SKILL.md`.
-- **Recommended solution:** Add `PRODUCTION_READINESS_AUDIT.md`, `.agents/`, `CHANGELOG.md`, `SECURITY.md`, `docs/`, `server/`, `cli/`, `deploy/`, and `site/` to `.vscodeignore` (some already present; `PRODUCTION_READINESS_AUDIT.md` and `.agents/` are missing).
+- **Disposition:** Fixed
+- **Release impact:** Dev/audit docs and skill files are excluded from the packaged `.vsix`; `unzip -l` no longer lists `PRODUCTION_READINESS_AUDIT.md` or `.agents/`.
+- **Affected files/locations:** `.vscodeignore`
+- **Evidence:** `npm run package` output and `unzip -l` confirm dev/audit docs and `scripts/` are not included.
 
 ### AUDIT-012 — Validator silently skips validation when schema is missing
 
 - **Classification:** Design Concern
 - **Severity:** Low
 - **Category:** Data Integrity / Reliability
-- **Disposition:** Scheduled Post-Release
-- **Release impact:** If a schema file is missing, invalid data can be persisted without warning.
-- **Affected files/locations:** `src/core/validator.ts:56-62`
-- **Recommended solution:** Return a dedicated error when a requested schema is not loaded.
+- **Disposition:** Fixed
+- **Release impact:** If a schema file is missing, `Validator.validate` now returns a `Schema not loaded` error instead of silently passing.
+- **Affected files/locations:** `src/core/validator.ts`
+- **Evidence:** `tests/core/validator.test.ts` verifies the missing-schema error and valid-schema success.
 
 ### AUDIT-S001 — Server ships with hardcoded/default secrets and insecure defaults
 
@@ -506,7 +505,7 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 8. **AUDIT-004 — Update extension dev/build dependency CVEs.** Prioritize `@vscode/vsce` and `vitest`.
 9. **AUDIT-005 — Prevent duplicate extension item-name data loss.**
 10. **AUDIT-006 — Add extension packaging / extension-host validation to CI.**
-11. **AUDIT-S006 — Enable CSP for server web UI.** Move inline scripts/styles out or use nonces/hashes.
+11. **AUDIT-S006 — Enable CSP for server web UI.** Done: per-request nonces for `<script>` and `<style>`; moving inline event handlers to external JS/CSS remains post-release.
 12. **AUDIT-011 — Exclude dev/audit docs and `.agents/` from `.vsix`.**
 
 ### Short-term post-release improvements
@@ -514,10 +513,10 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 13. **AUDIT-S005 — Validate production deployment.** Build and run `docker-compose.prod.yml`, configure backups, monitoring, and real Stripe.
 14. **AUDIT-S007 — Remove dev seed from production path.**
 15. **AUDIT-S008 — Add server lint/format to CI.**
-16. **AUDIT-007 — Move remote builtin updates to global storage.**
-17. **AUDIT-008 — Replace frontmatter parser or update README.**
-18. **AUDIT-010 — Improve MCP port conflict handling.**
-19. **AUDIT-012 — Harden Validator schema-missing behavior.**
+16. (Resolved) **AUDIT-007 — Move remote builtin updates to global storage.**
+17. (Resolved) **AUDIT-008 — Replace frontmatter parser or update README.**
+18. (Resolved) **AUDIT-010 — Improve MCP port conflict handling.**
+19. (Resolved) **AUDIT-012 — Harden Validator schema-missing behavior.**
 
 ---
 

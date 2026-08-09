@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest';
+import * as net from 'net';
 import {
   parseEnvString,
   parseArgsString,
   isValidNpmPackageName,
   isValidMcpArg,
   validateMcpServerFields,
+  isPortAvailable,
 } from '../../src/utils/mcpEnv';
 
 describe('mcpEnv', () => {
@@ -88,6 +90,58 @@ describe('mcpEnv', () => {
       expect(errors.length).toBeGreaterThan(0);
       expect(errors.some((e) => e.includes('package'))).toBe(true);
       expect(errors.some((e) => e.includes('argument'))).toBe(true);
+    });
+  });
+
+  describe('isPortAvailable', () => {
+    it('returns false for a port already in use', async () => {
+      const server = net.createServer();
+      const port = await new Promise<number>((resolve, reject) => {
+        server.listen(0, () => {
+          const address = server.address();
+          if (address && typeof address === 'object') {
+            resolve(address.port);
+          } else {
+            reject(new Error('Could not get port'));
+          }
+        });
+        server.on('error', reject);
+      });
+
+      try {
+        const available = await isPortAvailable(port);
+        expect(available).toBe(false);
+      } finally {
+        server.close();
+      }
+    });
+
+    it('returns true for a port not in use', async () => {
+      const server = net.createServer();
+      const port = await new Promise<number>((resolve, reject) => {
+        server.listen(0, () => {
+          const address = server.address();
+          if (address && typeof address === 'object') {
+            resolve(address.port);
+          } else {
+            reject(new Error('Could not get port'));
+          }
+        });
+        server.on('error', reject);
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        server.close((err) => {
+          if (err) {
+            reject(err);
+          } else {
+            resolve();
+          }
+        });
+      });
+
+      const available = await isPortAvailable(port);
+      expect(available).toBe(true);
     });
   });
 });

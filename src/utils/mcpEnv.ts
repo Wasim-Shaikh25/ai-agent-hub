@@ -1,3 +1,5 @@
+import * as net from 'net';
+
 /**
  * Safe parser and validator for MCP server configuration values.
  *
@@ -212,4 +214,23 @@ export function validateEnvRecord(env: Record<string, string>): string[] {
     }
   }
   return errors;
+}
+
+/**
+ * Checks whether a TCP port is available on localhost.
+ *
+ * Used before spawning an MCP proxy so the process doesn't fail
+ * with EADDRINUSE at runtime.
+ */
+export function isPortAvailable(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.once('error', (err: NodeJS.ErrnoException) => {
+      resolve(err.code !== 'EADDRINUSE');
+    });
+    server.once('listening', () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port, '127.0.0.1');
+  });
 }

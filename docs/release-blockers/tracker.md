@@ -42,9 +42,12 @@
 | FR9 | T9.1 | Register Fastify CSP plugin | Done | Devin | `server/src/index.ts` enables `contentSecurityPolicy` with `default-src 'self'`, `script-src 'self' 'unsafe-inline'`, etc. |
 | FR9 | T9.2 | Nonce inline scripts and styles | Done | Devin | `@fastify/helmet` `enableCSPNonces: true` with `onSend` hook injecting nonces into `<script>` and `<style>` tags; inline event handlers still use `script-src-attr 'unsafe-inline'` until migrated |
 | FR10 | T10.1 | Align README command table with `package.json` | Done | Devin | Removed two unregistered MCP commands from README command table in PR #16 |
-| FR10 | T10.2 | Document or replace YAML frontmatter parser | Not started | TBD | Design concern; scheduled post-release |
 | TC | TC.1 | Update `PRODUCTION_READINESS_AUDIT.md` status | Done | Devin | Executive summary, finding summary, major risks, command results, and missing gaps updated to reflect PR #17 fixes |
-| TC | TC.2 | Root lint/build/test/format pass | Done | Devin | `npm run lint/build/test/format:check` all pass (45 tests) |
+| AUDIT-007 | AH.1 | Remote hub content updates must write to global storage, not read-only extension path | Done | Devin | `HubUpdater.fetchLatest` now writes to `globalStoragePath/hub-content`; `Registry.initialize` loads from bundled path then global overrides |
+| AUDIT-010 | AH.2 | MCP port availability must be checked against the OS before spawn | Done | Devin | `isPortAvailable` added to `src/utils/mcpEnv.ts` and called in `McpManager.start`; `tests/utils/mcpEnv.test.ts` covers in-use and free ports |
+| AUDIT-012 | AH.3 | Validator must not silently skip missing schemas | Done | Devin | `Validator.validate` now returns `Schema not loaded` error when a schema is missing; `tests/core/validator.test.ts` added |
+| FR10 | T10.2 | Replace YAML-like frontmatter parser with a compliant parser | Done | Devin | `src/core/registry.ts` uses `yaml@^2.8.3`; `tests/core/registry.test.ts` covers YAML booleans/quoted values |
+| TC | TC.2 | Root lint/build/test/format pass | Done | Devin | `npm run lint/build/test/format:check` all pass (51 tests) |
 | TC | TC.3 | Server typecheck/build/test pass | Done | Devin | `npm run typecheck/build/test` all pass (32 tests) |
 
 ## Status key

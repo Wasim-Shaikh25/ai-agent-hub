@@ -3,7 +3,12 @@ import { createRequire } from 'module';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { McpServerConfig, McpServerState } from './types';
-import { isValidNpmPackageName, isValidMcpArg, validateEnvRecord } from '../utils/mcpEnv';
+import {
+  isValidNpmPackageName,
+  isValidMcpArg,
+  validateEnvRecord,
+  isPortAvailable,
+} from '../utils/mcpEnv';
 
 /**
  * Resolves the absolute path to the pinned `mcp-proxy` binary bundled
@@ -48,6 +53,14 @@ export class McpManager {
     const securityErrors = this.validateConfig(config);
     if (securityErrors.length > 0) {
       const message = securityErrors.join('; ');
+      this.setState(config.id, { configId: config.id, status: 'error', error: message });
+      vscode.window.showErrorMessage(`MCP server "${config.name}" rejected: ${message}`);
+      throw new Error(message);
+    }
+
+    const portAvailable = await isPortAvailable(config.port);
+    if (!portAvailable) {
+      const message = `Port ${config.port} is already in use`;
       this.setState(config.id, { configId: config.id, status: 'error', error: message });
       vscode.window.showErrorMessage(`MCP server "${config.name}" rejected: ${message}`);
       throw new Error(message);
