@@ -1,0 +1,310 @@
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { z } from 'zod';
+import { type AuthContext, hasRole } from '../auth.js';
+import { ContextService } from '../services/contextService.js';
+import { ContentService, type ContentType } from '../services/contentService.js';
+import { aggregator } from './aggregator.js';
+import { jsonSchemaToZodShape } from './jsonSchema.js';
+import { getPlan, entitled } from '../billing/entitlements.js';
+import { agents } from '../services/agentService.js';
+import { setOrgContext } from '../db/pool.js';
+
+/**
+ * Reads `clientInfo` from an MCP `initialize` message (single or batched) and
+ * records the connecting agent. Best-effort detection — never blocks the call.
+ */
+function detectAgentFromInit(body: unknown, auth: AuthContext, project?: string): void {
+  const msgs = Array.isArray(body) ? body : [body];
+  for (const m of msgs) {
+    const msg = m as { method?: string; params?: { clientInfo?: { name?: string; version?: string } } };
+    if (msg?.method === 'initialize' && msg.params?.clientInfo?.name) {
+      void agents.record({
+        orgId: auth.orgId,
+        userId: auth.userId,
+        rawName: msg.params.clientInfo.name,
+        version: msg.params.clientInfo.version,
+        source: 'mcp',
+        project,
+      });
+    }
+  }
+}
+
+function slug(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+const context = new ContextService();
+const content = new ContentService();
+
+function text(s: string) {
+  return { content: [{ type: 'text' as const, text: s }] };
+}
+
+/**
+ * Builds a fresh MCP server scoped to one authenticated org.
+ *
+ * The Context Plane tools (sessions/memory/RAG/skills) are exposed here as
+ * native MCP tools so any agent (Cursor, Kiro, Claude Code, …) uses them with
+ * zero custom integration — replacing the old "curl a rule file" approach.
+ */
+interface McpDefaults {
+  project?: string;
+  key?: string;
+}
+
+async function buildServer(auth: AuthContext, defaults: McpDefaults = {}, canAggregate = false): Promise<McpServer> {
+  const server = new McpServer({ name: 'ai-agent-hub', version: '0.1.0' });
+  const org = auth.orgId;
+  const canWrite = hasRole(auth.role, 'member'); // viewers get read-only tools
+  // Auto-binding: project defaults to the workspace's repo, key to its branch
+  // (stamped into the MCP config by `aihub connect`), so agents don't guess.
+  const P = (p?: string): string => p ?? defaults.project ?? 'default';
+  const K = (k?: string): string => k ?? defaults.key ?? 'default';
+
+  server.registerTool(
+    'session_get_context',
+    {
+      title: 'Get assembled context',
+      description:
+        'Returns token-budgeted context for the current work: active rules/skills, session summary, recent turns, relevant memory, and RAG hits.',
+      inputSchema: {
+        project: z.string().optional(),
+        key: z.string().optional(),
+        query: z.string().optional(),
+        maxTokens: z.number().optional(),
+        diagnostics: z.array(z.string()).optional(),
+      },
+    },
+    async (args) => text(await context.assembleContext(org, {
+      project: P(args.project), key: K(args.key), query: args.query, maxTokens: args.maxTokens, authorId: auth.userId, diagnostics: args.diagnostics,
+    })),
+  );
+
+  server.registerTool(
+    'diagnostics_context',
+    {
+      title: 'Retrieve code for diagnostics',
+      description: 'Given compiler/lint error lines, returns the referenced files + related code so you can fix them accurately.',
+      inputSchema: { project: z.string().optional(), diagnostics: z.array(z.string()) },
+    },
+    async (args) => {
+      const hits = await context.diagnosticsContext(org, P(args.project), args.diagnostics, 4);
+      return text(hits.map((h) => `${h.path || h.uri}:${h.symbol || ''}\n${h.content.slice(0, 400)}`).join('\n\n') || '(no referenced code found)');
+    },
+  );
+
+  if (canWrite) {
+  server.registerTool(
+    'session_extract_memory',
+    {
+      title: 'Extract durable memory from a session',
+      description: 'Reads the session and writes durable facts/decisions/preferences to memory so future sessions (and other agents) recall them.',
+      inputSchema: { project: z.string().optional(), key: z.string().optional() },
+    },
+    async (args) => {
+      const res = await context.extractSessionMemory(org, P(args.project), K(args.key), auth.userId);
+      return text(`extracted ${res.written} memory item(s)`);
+    },
+  );
+
+  server.registerTool(
+    'session_summarize',
+    {
+      title: 'Summarize the session',
+      description: 'Regenerates the rolling session summary to keep shared context compact and cheap.',
+      inputSchema: { project: z.string().optional(), key: z.string().optional() },
+    },
+    async (args) => text(await context.summarizeSession(org, P(args.project), K(args.key))),
+  );
+
+  server.registerTool(
+    'session_append',
+    {
+      title: 'Append a session turn',
+      description: 'Records a turn in a shared session so other agents see the same history.',
+      inputSchema: {
+        project: z.string().optional(),
+        key: z.string().optional(),
+        role: z.enum(['user', 'assistant', 'tool', 'system']),
+        content: z.string(),
+        agent: z.string().optional(),
+      },
+    },
+    async (args) => {
+      const id = await context.appendTurn(org, { ...args, project: P(args.project), key: K(args.key) });
+      return text(`ok:${id}`);
+    },
+  );
+
+  server.registerTool(
+    'memory_write',
+    {
+      title: 'Write durable memory',
+      description: 'Stores a durable fact/decision/preference for semantic recall later.',
+      inputSchema: {
+        kind: z.enum(['fact', 'decision', 'preference']).optional(),
+        content: z.string(),
+        project: z.string().optional(),
+        visibility: z.enum(['org', 'project', 'private']).optional(),
+      },
+    },
+    async (args) => {
+      const id = await context.writeMemory(org, { ...args, project: P(args.project), authorId: auth.userId });
+      return text(`ok:${id}`);
+    },
+  );
+  } // end canWrite (session_append, memory_write)
+
+  server.registerTool(
+    'memory_search',
+    {
+      title: 'Search memory',
+      description: 'Semantic search over durable memory.',
+      inputSchema: { query: z.string(), project: z.string().optional(), k: z.number().optional() },
+    },
+    async (args) => {
+      const hits = await context.searchMemory(org, args.query, { project: P(args.project), k: args.k, authorId: auth.userId });
+      return text(hits.map((h) => `(${h.kind}, ${h.score.toFixed(2)}) ${h.content}`).join('\n') || '(no matches)');
+    },
+  );
+
+  server.registerTool(
+    'rag_query',
+    {
+      title: 'RAG query (hybrid code-aware)',
+      description: 'Hybrid (dense + BM25) retrieval over indexed code/docs, reranked so exact symbol/API matches surface. Returns path:symbol-cited chunks.',
+      inputSchema: {
+        project: z.string().optional(),
+        query: z.string(),
+        k: z.number().optional(),
+        mode: z.enum(['hybrid', 'dense', 'sparse']).optional(),
+        uri: z.string().optional(),
+        rerank: z.enum(['none', 'llm']).optional(),
+      },
+    },
+    async (args) => {
+      const hits = await context.ragQuery(org, P(args.project), args.query, args.k ?? 5, args.mode ?? 'hybrid', args.uri, args.rerank ?? 'none');
+      return text(
+        hits
+          .map((h) => {
+            const loc = h.symbol ? `${h.path || h.uri}:${h.symbol}` : h.path || h.uri;
+            return `[${h.score.toFixed(3)}] ${loc}\n${h.content}`;
+          })
+          .join('\n\n') || '(no matches)',
+      );
+    },
+  );
+
+  server.registerTool(
+    'knowledge_map',
+    {
+      title: 'Knowledge map',
+      description:
+        'A compact index of the project\'s indexed specs/docs/code (title, summary, sections, keywords). Call this FIRST to find WHICH document holds the knowledge you need, then rag_query with that uri to drill in.',
+      inputSchema: { project: z.string().optional() },
+    },
+    async (args) => {
+      const map = await context.knowledgeMap(org, P(args.project));
+      if (!map.length) return text('(knowledge map is empty — index some specs/docs first)');
+      return text(
+        map
+          .map((d) => {
+            const parts = [`- ${d.uri}  [${d.kind}]${d.summary ? ' — ' + d.summary : ''}`];
+            if (d.sections.length) parts.push(`    sections: ${d.sections.join(' · ')}`);
+            if (d.keywords.length) parts.push(`    keywords: ${d.keywords.join(', ')}`);
+            return parts.join('\n');
+          })
+          .join('\n'),
+      );
+    },
+  );
+
+  if (canWrite) {
+  server.registerTool(
+    'rag_index',
+    {
+      title: 'Index a document',
+      description: 'Chunks and embeds a document into the project knowledge base for RAG.',
+      inputSchema: { project: z.string().optional(), uri: z.string(), title: z.string().optional(), content: z.string() },
+    },
+    async (args) => {
+      const res = await context.indexDocument(org, { ...args, project: P(args.project) });
+      return text(`indexed ${res.chunks} chunk(s) as document ${res.documentId}`);
+    },
+  );
+  }
+
+  server.registerTool(
+    'skills_list',
+    {
+      title: 'List enabled behavior content',
+      description: 'Lists the org\'s enabled skills/rules/hooks/workflows/personas.',
+      inputSchema: { type: z.enum(['skill', 'rule', 'hook', 'workflow', 'persona']).optional() },
+    },
+    async (args) => {
+      const items = await content.listEnabled(org, args.type as ContentType | undefined);
+      return text(items.map((i) => `- [${i.type}] ${i.name}: ${i.description}`).join('\n') || '(none)');
+    },
+  );
+
+  // Aggregate downstream MCP servers: expose their tools namespaced
+  // <server>__<tool>. Gated behind member+ (may mutate) and a paid plan.
+  if (canWrite && canAggregate) {
+    try {
+      const downstream = await aggregator.listFor(org);
+      for (const d of downstream) {
+        const proxyName = `${slug(d.serverName)}__${d.name}`;
+        server.registerTool(
+          proxyName,
+          {
+            title: d.name,
+            description: `[via ${d.serverName}] ${d.description}`,
+            inputSchema: jsonSchemaToZodShape(d.inputSchema),
+          },
+          async (args) => (await aggregator.call(org, d.serverId, d.name, args as Record<string, unknown>)) as never,
+        );
+      }
+    } catch (err) {
+      console.error('[mcp] downstream aggregation skipped:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  return server;
+}
+
+/**
+ * Handles one MCP HTTP request in stateless mode. A fresh server + transport
+ * is created per request to avoid cross-request state — fine at current scale.
+ */
+export async function handleMcpRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  body: unknown,
+  auth: AuthContext,
+): Promise<void> {
+  // Auto-binding defaults stamped by `aihub connect` into the MCP config headers.
+  const hdr = (name: string): string | undefined => {
+    const v = req.headers[name];
+    return Array.isArray(v) ? v[0] : v;
+  };
+  const defaults: McpDefaults = { project: hdr('x-hub-project'), key: hdr('x-hub-session') };
+
+  // Bind this request's org for DB-layer RLS enforcement (no-op unless RLS_ENABLED).
+  setOrgContext(auth.orgId);
+
+  // Connected-agent detection from the MCP initialize handshake.
+  detectAgentFromInit(body, auth, defaults.project);
+
+  const canAggregate = entitled(await getPlan(auth.orgId), 'mcp_aggregation');
+  const server = await buildServer(auth, defaults, canAggregate);
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on('close', () => {
+    void transport.close();
+    void server.close();
+  });
+  await server.connect(transport);
+  await transport.handleRequest(req, res, body);
+}

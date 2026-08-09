@@ -1,8 +1,101 @@
 # AI Agent Hub
 
-A VS Code extension that acts as a centralized control plane for managing
-AI behavior content (skills, rules, hooks, workflows, personas) and syncing it to any
+**The shared brain and control plane for every AI coding agent your team uses.**
+
+Connect Cursor, Claude Code, Windsurf, Copilot, Codex, Cline and more to one
+place that gives them **shared context + memory**, **code-aware retrieval**, an
+**LLM gateway** (fallback, routing, cost metering), and **enterprise governance**
+(RBAC, audit, SSO, cost dashboards) — without touching the agents' internal
+prompts.
+
+- 🚀 **Get started:** [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md)
+- 🧠 **How it works / specs:** [`docs/specs/`](docs/specs/)
+- 📦 **Deploy (SaaS or self-host):** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+- 💳 **Plans & pricing:** [`docs/PRICING.md`](docs/PRICING.md)
+- 🔒 **Security:** [`SECURITY.md`](SECURITY.md)
+- 📝 **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)
+- 🚦 **Launch readiness:** [`docs/LAUNCH-READINESS.md`](docs/LAUNCH-READINESS.md) · legal drafts in [`docs/legal/`](docs/legal/)
+
+### Why it's different from an LLM router
+
+Routers (LiteLLM, 9Router) move *tokens*. AI Agent Hub adds the layer they don't:
+**shared context/memory across different agents**, **code-aware hybrid retrieval
++ a knowledge map**, and **team governance**. The gateway is one swappable
+component underneath — the value is the brain on top.
+
+---
+
+The original **VS Code extension** (below) is one client — a centralized control
+plane for AI behavior content (skills, rules, hooks, workflows, personas) synced to any
 configured AI agent target (Kiro, Cursor, GitHub Copilot, Amazon Q, etc.).
+
+## Platform (server) — new
+
+Beyond the VS Code extension, the repo now contains the **Hub server** — the
+paid, server-side control plane that adds shared **context, memory, and RAG**
+across agents (over native **MCP**) plus an embedded **LLM gateway** (LiteLLM)
+for provider fallback and model routing.
+
+- **Specs:** [`docs/specs/`](docs/specs/) — overview, architecture, data model,
+  API/MCP contract, local-dev, roadmap.
+- **Run the full stack locally:**
+  [`docs/specs/04-local-dev.md`](docs/specs/04-local-dev.md) —
+  `cd deploy && cp .env.example .env && docker compose up --build`.
+- **Server code:** [`server/`](server/) (Fastify + Postgres/pgvector + MCP).
+- **CLI connector:** [`cli/`](cli/) — `aihub connect <agent>` points any agent
+  (Cursor, Claude Code, Kiro, Windsurf…) at the Hub in one command; `aihub detect`
+  reports which agents are installed/running on the machine.
+- **Agents & Models:** the Hub detects which agents are actually connected (from
+  the MCP handshake + gateway traffic) and lets you pick the default model — see
+  the `/admin` **Agents & Models** tab and
+  [`docs/specs/17-agents-models-console.md`](docs/specs/17-agents-models-console.md).
+
+The extension is the free, local **Content Plane**; the server is the
+collaborative + governed **Context / Gateway / Governance** planes. See
+[`docs/specs/00-overview.md`](docs/specs/00-overview.md) for the open-core split.
+
+### Customer & operator consoles
+
+| Surface | Who | What |
+|---|---|---|
+| `/login`, `/account` | any customer user | sign up with email/password, Google, Apple, or mobile; plan, usage, API key |
+| `/help` | public | searchable help centre and support ticket form |
+| `/dashboard` | customer | cost / usage / audit |
+| `/activity` | customer user | personal usage, connected agents, and recent actions |
+| `/admin` | customer org admin/owner | manage **their** workspace (content, policies, keys, team, MCP, audit) and promote members to admins |
+| `/superadmin` | **you, the operator** | cross-org control, **issue analysis**, support tickets, org provisioning, and a grounded **copilot** — vendor-only, gated by `is_platform_admin` and disabled by default |
+
+The operator console (`/superadmin`) is where you run the SaaS: change any org's
+plan, suspend/resume tenants, **register new workspaces**, analyze operational
+issues across every workspace, triage support tickets, and ask the copilot what's
+failing. See [`docs/specs/16-platform-admin.md`](docs/specs/16-platform-admin.md).
+
+### User support, registration, and AI assistant policy
+
+- **Self-serve help:** `/help` is a public, searchable help centre. It explains
+  sign-up, connecting an agent, API keys, model selection, billing, and how to
+  open a support ticket.
+- **Support tickets:** Authenticated users can submit tickets from `/help` or
+  `POST /api/tickets`. Operators review and close them in `/superadmin` or via
+  `GET /api/platform/tickets`.
+- **Registration options:** `/login` supports email/password, Google OAuth
+  (`/auth/oauth/google`), Apple (`/auth/oauth/apple`), and a mobile OTP button
+  that is stubbed until an SMS gateway is configured.
+- **Password reset:** `/forgot-password` sends a one-time code to the user's
+  email (SMTP or stdout in dev/test). `/reset-password` accepts the code and a
+  new password, updating the account. Endpoint: `POST /auth/forgot-password` and
+  `POST /auth/reset-password`.
+- **Operator sign-in:** `/superadmin-login` uses password + email OTP. The operator
+  (`is_platform_admin`) is seeded from `SUPERADMIN_EMAIL`, `SUPERADMIN_PASSWORD`,
+  and `SUPERADMIN_MOBILE` env vars, and receives an OTP by email (SMTP) or stdout
+  in dev/test mode.
+- **Org provisioning:** The operator registers workspaces from `/superadmin`
+  with an `admin_email`. The first user signing in with that exact email via
+  SSO/OAuth becomes the org `owner`; any other user with the same email domain
+  auto-joins as a `member`.
+- **No end-user AI chat:** The operator copilot is gated by `is_platform_admin`
+  and the `ENABLE_AI_ASSISTANT` flag (default `false`). No per-org, per-team, or
+  per-user assistant is exposed, so LLM costs stay under operator control.
 
 ## What It Does
 
@@ -164,7 +257,10 @@ code --uninstall-extension ai-agent-hub.ai-agent-hub
 | `AI Agent Hub: Sync to Agents`       | Sync all enabled content to agents   |
 | `AI Agent Hub: Show Configured Agents` | View configured agent targets      |
 | `AI Agent Hub: Add MCP Server`         | Register a local MCP server          |
-| `AI Agent Hub: Show MCP Servers`         | View registered MCP servers          |
+| `AI Agent Hub: Show MCP Servers`       | View registered MCP servers          |
+| `AI Agent Hub: Connect to Server`      | Store + validate Hub server URL & key |
+| `AI Agent Hub: Connect Agents to Hub`  | Write native MCP config into agents    |
+| `AI Agent Hub: Pull Content from Hub`  | Browse the org content registry        |
 
 ## Settings
 
@@ -313,6 +409,24 @@ language mode or workspace state.
   arguments, and environment keys to prevent shell injection.
 - User-defined agent configs and MCP server configs are schema-validated before
   being persisted.
+
+### Auth, Org Provisioning, and Dashboard Visibility
+
+- **Superadmin** — seeded from `SUPERADMIN_*` env vars; logs in via
+  `/superadmin-login` with password + email OTP (`/auth/superadmin/*`).
+- **Org creation** — superadmin registers an org with name, slug, plan, and an
+  `admin_email` in `/superadmin` or via `POST /api/platform/orgs`.
+- **SSO / OAuth auto-join** — users sign in via `/auth/sso/*` or
+  `/auth/oauth/:provider/*`. The workspace is resolved by explicit `org` slug,
+  then by matching the user's email domain to an org's `admin_email` domain.
+  The first exact `admin_email` match becomes `owner`; other same-domain users
+  become `member`.
+- **Password reset** — `/forgot-password` and `/auth/forgot-password` send a
+  one-time code by email; `/reset-password` and `/auth/reset-password` verify the
+  code and update the user's password.
+- **Role-gated dashboards** — `/admin` is visible to org `admin`/`owner` roles;
+  `/activity` is visible to any signed-in user and shows only their own usage;
+  `/superadmin` is visible only to the platform superadmin.
 
 ### Content Schema
 

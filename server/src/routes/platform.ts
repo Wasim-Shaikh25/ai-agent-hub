@@ -1,0 +1,166 @@
+import type { FastifyInstance } from 'fastify';
+import { requireAuth, requireSuperadmin } from '../auth.js';
+import { query, queryOne } from '../db/pool.js';
+import { invalidatePlan, type Plan } from '../billing/entitlements.js';
+import { training } from '../services/trainingService.js';
+import { events } from '../services/eventService.js';
+import { assistantReply, type PlatformSnapshot } from '../services/assistant.js';
+import { config } from '../config.js';
+import { AuditService } from '../services/auditService.js';
+
+const audit = new AuditService();
+const PLANS: Plan[] = ['free', 'team', 'enterprise'];
+
+/** Gathers a platform-wide snapshot for the copilot + overview tab. */
+async function snapshot(): Promise<PlatformSnapshot> {
+  const orgs = await queryOne<{ n: string; suspended: string }>(
+    'SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE suspended) AS suspended FROM org',
+  );
+  const byPlanRows = await query<{ plan: string; n: string }>('SELECT plan, COUNT(*) AS n FROM org GROUP BY plan');
+  const usage = await queryOne<{ tokens: string; usd: string }>(
+    `SELECT COALESCE(SUM(qty),0) AS tokens, COALESCE(SUM((meta->>'usd')::numeric),0) AS usd
+       FROM usage_event WHERE kind = 'tokens' AND created_at >= date_trunc('month', now())`,
+  );
+  const byPlan: Record<string, number> = {};
+  for (const r of byPlanRows) byPlan[r.plan] = Number(r.n);
+  const iss = await events.summary(24);
+  return {
+    orgs: Number(orgs?.n ?? 0),
+    suspended: Number(orgs?.suspended ?? 0),
+    byPlan,
+    monthTokens: Number(usage?.tokens ?? 0),
+    monthUsd: Number(usage?.usd ?? 0),
+    issues: {
+      windowHours: iss.windowHours,
+      total: iss.total,
+      byLevel: iss.byLevel,
+      byCode: iss.byCode.map((c) => ({ code: c.code, level: c.level, n: c.n })),
+      topOrgs: iss.topOrgs.map((o) => ({ name: o.name, n: o.n })),
+    },
+  };
+}
+
+/**
+ * Platform super-admin plane: cross-org control, training data, and the
+ * operator copilot. Every route is gated by {@link requireSuperadmin}.
+ */
+export async function registerPlatformRoutes(app: FastifyInstance): Promise<void> {
+  const guard = { preHandler: [requireAuth, requireSuperadmin] };
+
+  // -- overview -------------------------------------------------------------
+  app.get('/api/platform/stats', guard, async () => snapshot());
+
+  // -- orgs: list + control -------------------------------------------------
+  app.get('/api/platform/orgs', guard, async () => {
+    return query(
+      `SELECT o.id, o.name, o.slug, o.plan, o.admin_email, o.suspended, o.created_at,
+              (SELECT COUNT(*) FROM membership m WHERE m.org_id = o.id) AS seats,
+              (SELECT COALESCE(SUM(qty),0) FROM usage_event u
+                 WHERE u.org_id = o.id AND u.kind = 'tokens'
+                   AND u.created_at >= date_trunc('month', now())) AS month_tokens
+         FROM org o ORDER BY o.created_at DESC`,
+    );
+  });
+
+  app.post('/api/platform/orgs', guard, async (req, reply) => {
+    const b = req.body as { name?: string; slug?: string; adminEmail?: string; plan?: string };
+    const name = (b.name ?? '').trim();
+    const slug = (b.slug ?? '').trim().toLowerCase();
+    const adminEmail = (b.adminEmail ?? '').trim().toLowerCase();
+    const plan = PLANS.includes(b.plan as Plan) ? (b.plan as Plan) : 'enterprise';
+    if (!name || !slug) return reply.code(400).send({ error: { code: 'bad_request', message: 'name and slug are required' } });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+      return reply.code(400).send({ error: { code: 'bad_request', message: 'Valid admin email required' } });
+    }
+    const existing = await queryOne<{ id: string }>('SELECT id FROM org WHERE slug = $1', [slug]);
+    if (existing) return reply.code(409).send({ error: { code: 'exists', message: 'An org with this slug already exists' } });
+
+    const org = await queryOne<{ id: string }>(
+      `INSERT INTO org (name, slug, plan, admin_email) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [name, slug, plan, adminEmail],
+    );
+
+    // Pre-provision the admin user so the first SSO login from that email becomes owner.
+    const user = await queryOne<{ id: string }>(
+      `INSERT INTO app_user (email, name, is_platform_admin) VALUES ($1, $2, false)
+       ON CONFLICT (email) DO NOTHING RETURNING id`,
+      [adminEmail, adminEmail.split('@')[0]],
+    );
+    if (user) {
+      await query(`INSERT INTO membership (org_id, user_id, role) VALUES ($1,$2,'owner') ON CONFLICT DO NOTHING`, [org!.id, user.id]);
+    }
+
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'platform.org_create', org!.id, { name, slug, adminEmail, plan });
+    return reply.code(201).send({ id: org!.id, name, slug, adminEmail, plan });
+  });
+
+  app.put('/api/platform/orgs/:id', guard, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const b = req.body as { plan?: string; suspended?: boolean };
+    const sets: string[] = [];
+    const vals: unknown[] = [id];
+    if (b.plan !== undefined) {
+      if (!PLANS.includes(b.plan as Plan)) {
+        return reply.code(400).send({ error: { code: 'bad_request', message: 'plan must be free|team|enterprise' } });
+      }
+      vals.push(b.plan);
+      sets.push(`plan = $${vals.length}`);
+    }
+    if (b.suspended !== undefined) {
+      vals.push(Boolean(b.suspended));
+      sets.push(`suspended = $${vals.length}`);
+    }
+    if (!sets.length) return reply.code(400).send({ error: { code: 'bad_request', message: 'nothing to update' } });
+
+    const row = await queryOne(`UPDATE org SET ${sets.join(', ')} WHERE id = $1 RETURNING id, name, plan, suspended`, vals);
+    if (!row) return reply.code(404).send({ error: { code: 'not_found', message: 'org not found' } });
+    invalidatePlan(id);
+    await audit.log(req.auth!.orgId, req.auth!.userId, 'platform.org_update', id, { plan: b.plan, suspended: b.suspended });
+    return row;
+  });
+
+  // -- issue analysis (operational event log) -------------------------------
+  app.get('/api/platform/events/summary', guard, async (req) => {
+    const hours = Number((req.query as { hours?: string }).hours ?? '24');
+    return events.summary(hours);
+  });
+
+  app.get('/api/platform/events', guard, async (req) => {
+    const q = req.query as { level?: string; source?: string; code?: string; orgId?: string; limit?: string };
+    return events.list({ level: q.level, source: q.source, code: q.code, orgId: q.orgId, limit: Number(q.limit ?? '100') });
+  });
+
+  // -- feedback labels (👍/👎 from users) -----------------------------------
+  app.get('/api/platform/training', guard, async (req) => {
+    const q = req.query as { kind?: string; limit?: string };
+    const [samples, stats] = await Promise.all([training.list(q.kind, Number(q.limit ?? '50')), training.stats()]);
+    return { stats, samples };
+  });
+
+  // -- operator copilot -----------------------------------------------------
+  app.post('/api/platform/assistant', guard, async (req, reply) => {
+    if (!config.enableAiAssistant) {
+      return reply.code(503).send({ error: { code: 'feature_disabled', message: 'AI assistant is disabled' } });
+    }
+    const message = (req.body as { message?: string }).message?.trim();
+    if (!message) return reply.code(400).send({ error: { code: 'bad_request', message: 'Message is required' } });
+    const result = await assistantReply(message, await snapshot());
+    // Capture the exchange as training data (redacted at rest).
+    void training.record('assistant', req.auth!.orgId, message, result.reply, { llm: result.llm });
+    return result;
+  });
+}
+
+/**
+ * User-facing feedback endpoint (any authenticated caller). Ratings feed the
+ * training pipeline so admins can curate good/bad completions.
+ */
+export async function registerFeedbackRoute(app: FastifyInstance): Promise<void> {
+  app.post('/api/feedback', { preHandler: requireAuth }, async (req, reply) => {
+    const b = req.body as { input?: string; output?: string; rating?: number; meta?: Record<string, unknown> };
+    const rating = b.rating === 1 || b.rating === -1 ? b.rating : null;
+    if (!b.output) return reply.code(400).send({ error: { code: 'bad_request', message: 'output required' } });
+    await training.record('feedback', req.auth!.orgId, b.input ?? '', b.output, b.meta ?? {}, rating);
+    return { ok: true };
+  });
+}

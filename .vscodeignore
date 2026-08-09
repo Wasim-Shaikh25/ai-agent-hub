@@ -4,6 +4,11 @@ node_modules/**
 out/**/*.map
 out/**/*.d.ts
 src/**
+server/**
+cli/**
+deploy/**
+docs/**
+site/**
 tests/**
 __mocks__/**
 *.vsix
@@ -16,3 +21,5 @@ vitest.config.ts
 .prettierrc
 DUE_DILIGENCE_REVIEW.md
 REQUIREMENTS_AND_FIX_PLAN.md
+REQUIREMENTS.md
+PROGRESS.md

@@ -1,7 +1,7 @@
 {
   "name": "ai-agent-hub",
   "displayName": "AI Agent Hub",
-  "description": "A centralized control plane for managing AI behavior content and syncing it to configured AI agent targets",
+  "description": "A centralized control plane for managing AI agent behavior content and syncing it to configured AI agent targets",
   "version": "0.0.7",
   "publisher": "ai-agent-hub",
   "license": "MIT",
@@ -20,6 +20,9 @@
     "onCommand:aiAgentHub.addHook",
     "onCommand:aiAgentHub.syncToAgents",
     "onCommand:aiAgentHub.showAgents",
+    "onCommand:aiAgentHub.connectServer",
+    "onCommand:aiAgentHub.connectAgentsToHub",
+    "onCommand:aiAgentHub.pullFromHub",
     "onStartupFinished"
   ],
   "contributes": {
@@ -51,6 +54,18 @@
       {
         "command": "aiAgentHub.showAgents",
         "title": "AI Agent Hub: Show Configured Agents"
+      },
+      {
+        "command": "aiAgentHub.connectServer",
+        "title": "AI Agent Hub: Connect to Server"
+      },
+      {
+        "command": "aiAgentHub.connectAgentsToHub",
+        "title": "AI Agent Hub: Connect Agents to Hub (write MCP config)"
+      },
+      {
+        "command": "aiAgentHub.pullFromHub",
+        "title": "AI Agent Hub: Pull Content from Hub"
       }
     ],
     "configuration": {
