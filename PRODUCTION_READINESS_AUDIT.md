@@ -1,8 +1,8 @@
 # AI Agent Hub — Production Readiness Audit
 
 **Repository:** `Wasim-Shaikh25/ai-agent-hub`  
-**Assessed commit:** `c94323f` (`v0.0.6`) on `main`  
-**Audit date:** 2026-07-29  
+**Assessed commit:** `4fd6bc8` (`v0.0.7`) on `main`  
+**Audit date:** 2026-08-09  
 **Auditor:** Devin (cross-functional review)  
 
 ---
@@ -11,16 +11,17 @@
 
 AI Agent Hub is a VS Code extension that centralizes AI behavior content (skills, rules, hooks, workflows, personas) and syncs it to multiple AI agent target folders (Cursor, Kiro, GitHub Copilot, Amazon Q, etc.). It also supports running local MCP servers via `mcp-proxy` and generating rule files so agents can call them.
 
-The codebase has progressed significantly since the earlier `DUE_DILIGENCE_REVIEW.md` (`7c14395`). The previously identified P0 launch blockers have largely been addressed:
+Since the previous audit (`v0.0.6`, `c94323f`), several `REQUIREMENTS_AND_FIX_PLAN.md` P0/P1 items have been addressed:
 
-- `activationEvents` are now declared for all commands plus `onStartupFinished`.
+- `activationEvents` are declared for all commands plus `onStartupFinished`.
 - MCP server spawning uses `shell: false` and validates package names / arguments.
 - Path traversal is mitigated by `PathUtils.resolveSafeTarget` and `isUnsafePath`.
 - A test suite (38 tests) now passes.
 - Lint, TypeScript build, and Prettier formatting all pass.
-- A `.vscodeignore` and `LICENSE` are in place, and `vsce package` completes without warnings.
+- A `.vscodeignore` and `LICENSE` are in place.
+- The Validator is wired into `Registry` and `SetupPanel`.
 
-However, the **produced `.vsix` is missing runtime dependencies** (`ajv` is declared as a dependency but is not bundled, and `mcp-proxy` is not declared at all). An end user installing the current package would see an activation failure and a non-functional MCP feature. In addition, `npm audit` reports vulnerable transitive dependencies, including a runtime-reachable `fast-uri` issue via `ajv`.
+However, the **packaged `.vsix` is still missing runtime dependencies**, `npm audit` still reports vulnerable transitive dependencies, and the extension has not been exercised in a real VS Code Extension Host. These are release-blocking for a public Marketplace publish.
 
 **Final recommendation:** **STOP — CONDITIONAL GO**
 
@@ -32,16 +33,17 @@ Do not publish the extension publicly until the packaging / runtime-dependency a
 |----------|-------|----------|
 | Critical | 1 | Packaged `.vsix` lacks runtime dependencies (`ajv`) |
 | High | 2 | MCP runtime not packaged / pinned; vulnerable `fast-uri` via `ajv` |
-| Medium | 4 | Dev dependency CVEs; duplicate item names overwrite files; no E2E smoke; remote hub update overwrites bundled files |
-| Low | 3 | README/command mismatch; non-YAML frontmatter parser; MCP port conflict detection is config-only |
+| Medium | 3 | Dev dependency CVEs; duplicate item names overwrite files; no E2E smoke; remote hub update overwrites bundled files |
+| Low | 3 | README/command mismatch; non-YAML frontmatter parser; audit report bundled in `.vsix` |
 
 ### Major technical risks
 
-1. **Packaging defect:** `npx vsce package --no-dependencies` creates a `.vsix` with no `node_modules`, but `out/core/validator.js` requires `ajv` at activation.
+1. **Packaging defect:** `npx vsce package --no-dependencies` creates a `.vsix` with no `node_modules`, but `out/core/validator.js` requires `ajv` at activation. This is a release blocker.
 2. **MCP supply chain / runtime:** `mcp-proxy` and target MCP packages are fetched on demand by `npx` with no version pinning, no offline support, and no runtime dependency lockfile.
 3. **Vulnerable transitive dependencies:** `fast-uri@3.1.0` (via `ajv@8.20.0`) and multiple dev-dependency CVEs are present.
 4. **No runtime validation:** All checks are static/unit; the packaged extension and real VS Code host were not exercised in this audit.
 5. **Data integrity during sync:** Two enabled items with the same name generate the same file slug; the second overwrites the first without warning.
+6. **Remote builtin updates write to the install directory:** `HubUpdater` still copies fetched content into `extensionPath/hub-content/`, which may be read-only or be reverted on extension update.
 
 ### Scope limitations and untested areas
 
@@ -59,6 +61,7 @@ Do not publish the extension publicly until the packaging / runtime-dependency a
 3. Update `ajv` / transitive `fast-uri` to patched versions and run `npm audit` until runtime-reachable CVEs are clean.
 4. Add a CI packaging-validation step (e.g., extract `.vsix` and confirm `node_modules/ajv` exists, or verify a single bundled `extension.js` includes `ajv`).
 5. Perform at least one manual VS Code Extension Host smoke test: install the `.vsix`, activate the extension, open the Hub panel, add a skill, and sync to a test workspace.
+6. Move `HubUpdater` destination to a user-writable global storage cache rather than the extension install directory, or decide to disable remote builtin updates for the public release.
 
 ---
 
@@ -81,7 +84,7 @@ Do not publish the extension publicly until the packaging / runtime-dependency a
 ### Architecture and trust boundaries
 
 - **Applications / services:** One VS Code extension (`main: out/extension.js`).
-- **Entry points:** `activate()` in `src/extension.ts`; eight registered commands.
+- **Entry points:** `activate()` in `src/extension.ts`; seven registered commands (README lists two additional MCP commands that are not registered).
 - **Pages / UI:** `HubPanel` webview (`src/ui/hubPanel.ts`) and `SetupPanel` webview (`src/ui/setupPanel.ts`).
 - **State management:** VS Code `Memento` (`workspaceState`/`globalState`) wrapped by `Storage`; in-memory `Registry`; file-system writes via `FileWriter`; child processes via `McpManager`.
 - **Trust boundaries:**
@@ -112,14 +115,14 @@ Do not publish the extension publicly until the packaging / runtime-dependency a
 | Unit tests | `npm test` | Pass — 38 tests in 6 files |
 | Format check | `npm run format:check` | Pass |
 | VSIX package | `npx vsce package --no-dependencies` | Pass but `.vsix` lacks `node_modules` |
-| Dependency audit | `npm audit --audit-level=moderate` | 12 vulnerabilities (1 critical, 9 high, 2 moderate) |
-| VSIX contents | `unzip -l ai-agent-hub-0.0.6.vsix` | `out/`, `hub-content/`, `schemas/`, `package.json`, `README.md`, `LICENSE.txt`; no `node_modules` |
-| Runtime require check | `grep -n 'require("ajv")' out/core/validator.js` | Confirms compiled code requires `ajv` |
+| Dependency audit | `npm audit --audit-level=moderate` | 14 vulnerabilities (1 critical, 11 high, 2 moderate) |
+| VSIX contents | `unzip -l ai-agent-hub-0.0.7.vsix` | `out/`, `hub-content/`, `schemas/`, `package.json`, `README.md`, `LICENSE.txt`, `PRODUCTION_READINESS_AUDIT.md`; no `node_modules` |
+| Runtime require check | `node -e "require('./out/extension.js')"` with stub `vscode` module | Confirms compiled code fails with `Cannot find module 'ajv'` |
 
 ### Assumptions, contradictions, exclusions, and limitations
 
 - **Assumptions:** The product is intended as a single-user local tool; enterprise features (SSO, RBAC, team sharing) are out of scope.
-- **Contradictions resolved:** Earlier `README` referred to an `agents/` folder; current code and README now use `persona`/`personas/`. The `REQUIREMENTS_AND_FIX_PLAN.md` P0 items are mostly addressed.
+- **Contradictions resolved:** Earlier `README` referred to an `agents/` folder; current code and README now use `persona`/`personas/`. The `REQUIREMENTS_AND_FIX_PLAN.md` P0 items (activation, MCP injection, path traversal, testing, packaging hygiene) are largely addressed.
 - **Contradictions remaining:** README lists commands `AI Agent Hub: Add MCP Server` and `AI Agent Hub: Show MCP Servers` that are not registered in `package.json` (low).
 - **Exclusions:** Real VS Code host testing, marketplace publishing, Windows-specific behavior, performance/load testing, and penetration testing were not performed.
 
@@ -207,17 +210,17 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Evidence and reproduction:**
   ```bash
   npm run package
-  unzip -l ai-agent-hub-0.0.6.vsix
+  unzip -l ai-agent-hub-0.0.7.vsix
   ```
   Output shows `extension/out/...` and `extension/package.json` but no `node_modules/`. The compiled `out/core/validator.js` top-level-requires `ajv`.
 
-  I also reproduced the activation failure by extracting the `.vsix` into a temp directory (with only a stub `vscode` module added to satisfy the VS Code API import) and running `node -e "require('./out/extension.js')"`. It immediately fails:
+  Reproduced by extracting the `.vsix` into a temp directory, adding a stub `vscode` module, and running `node -e "require('./out/extension.js')"`. It fails:
 
   ```text
   Error: Cannot find module 'ajv'
   Require stack:
-  - .../extension/out/core/validator.js
-  - .../extension/out/extension.js
+  - /tmp/vsix-check/extension/out/core/validator.js
+  - /tmp/vsix-check/extension/out/extension.js
   ```
 
   This confirms that the packaged extension cannot resolve its runtime dependency `ajv` and will fail to activate.
@@ -286,12 +289,11 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Evidence:**
   ```bash
   npm ls fast-uri
-  # ai-agent-hub@0.0.6
+  # ai-agent-hub@0.0.7
   # └─┬ ajv@8.20.0
   #   └── fast-uri@3.1.0
   ```
-  `npm audit` reports:
-  - `fast-uri <=3.1.3` — path traversal via percent-encoded dot segments, host confusion via percent-encoded authority delimiters.
+  `npm audit` reports `fast-uri <=3.1.4` — path traversal via percent-encoded dot segments, host confusion via percent-encoded authority delimiters.
 - **Root cause:** `ajv@8.20.0` depends on a vulnerable `fast-uri` version. The `package-lock.json` locks the vulnerable version.
 - **Impact:** `ajv` uses `fast-uri` for URI resolution when compiling/validating schemas. The Validator only loads trusted local schemas, so direct exploitation through user data is unlikely, but the dependency is still vulnerable and may be flagged by security scanners.
 - **Likelihood:** Low for active exploit (trusted schemas only), but high for compliance / scanner failure.
@@ -300,7 +302,7 @@ There is one user role. No admin, support, or read-only roles are required for a
   2. If `ajv` cannot be updated quickly, add an `overrides` entry in `package.json`:
      ```json
      "overrides": {
-       "fast-uri": ">=3.1.4"
+       "fast-uri": ">=3.1.5"
      }
      ```
   3. Re-run `npm audit` and `npm test`.
@@ -319,18 +321,19 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Disposition:** Open — Required Before Release
 - **Release impact:** Compromised build tools could affect the generated `.vsix`.
 - **Affected roles:** Developers and CI.
-- **Affected files/locations:** `package-lock.json`; `node_modules/{vitest,postcss,undici,tmp,brace-expansion,form-data,qs,linkify-it,markdown-it}/`
-- **Evidence:** `npm audit` reports 12 total vulnerabilities, including:
+- **Affected files/locations:** `package-lock.json`; `node_modules/{vitest,postcss,undici,tmp,brace-expansion,form-data,qs,linkify-it,markdown-it,nanoid,vite}/`
+- **Evidence:** `npm audit --audit-level=moderate` reports 14 total vulnerabilities, including:
   - `vitest <3.2.6` — critical arbitrary file read/execute when UI server is listening.
-  - `postcss <=8.5.17` — path traversal in source-map auto-loading.
-  - `undici 7.0.0-7.27.2` — multiple HTTP/TLS/COOP issues.
-  - `linkify-it / markdown-it` via `@vscode/vsce <=3.0.0`.
+  - `postcss <=8.5.22` — path traversal in source-map auto-loading.
+  - `undici 7.0.0-7.28.0` — multiple HTTP/TLS/COOP issues.
+  - `linkify-it / markdown-it / @vscode/vsce` — DoS via scan loops.
+  - `fast-uri` — runtime-reachable via `ajv`.
 - **Root cause:** Outdated transitive dev dependencies.
 - **Impact:**
   - `vitest` critical is mitigated because CI uses `vitest --run` (no UI server), but it still poses a risk to local development.
   - `vsce` (via `markdown-it/linkify-it`) runs in CI and could be affected by malicious README content if the README were attacker-controlled.
-  - Other packages are transitive of build/test tools.
-- **Likelihood:** Medium for dev environment; low for runtime because these are not shipped to end users.
+  - `fast-uri` is a runtime-reachable transitive dependency.
+- **Likelihood:** Medium for dev environment; low for runtime except `fast-uri`.
 - **Recommended solution:**
   1. Update `@vscode/vsce` to a patched version (>=3.9.2) to fix `markdown-it`/`linkify-it`.
   2. Update `vitest` to >=3.2.6.
@@ -402,7 +405,7 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Affected files/locations:**
   - `src/core/syncEngine.ts:82-88`
   - `src/core/hubUpdater.ts:91-136`
-- **Evidence:** `HubUpdater.copyHubContent` writes to `extensionPath/hub-content/...`.
+- **Evidence:** `HubUpdater.copyHubContent` writes to `extensionPath/hub-content/...` after cloning to a cache directory under global storage.
 - **Root cause:** Builtin content updates are written to the extension install directory rather than user-writable global storage.
 - **Impact:**
   - In some environments the extension directory is read-only; writes will silently fail and sync falls back to old content.
@@ -443,7 +446,6 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Category:** Documentation / Consistency
 - **Disposition:** Scheduled Post-Release
 - **Release impact:** Users may look for commands that do not exist.
-- **Affected roles:** Users.
 - **Affected files/locations:** `README.md` (commands table), `package.json` (`contributes.commands`)
 - **Evidence:** README lists `AI Agent Hub: Add MCP Server` and `AI Agent Hub: Show MCP Servers`; `package.json` registers only seven commands and neither is MCP-related.
 - **Recommended solution:** Either register the two MCP commands in `package.json` and `src/extension.ts` or remove them from the README.
@@ -460,6 +462,41 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Evidence:** Port uniqueness is checked only against other stored MCP configs, not the OS.
 - **Recommended solution:** Add a bind check before spawning, or handle `EADDRINUSE` with a clearer error message.
 - **Regression risks:** Minor.
+
+### AUDIT-011 — Audit report bundled into `.vsix`
+
+- **Classification:** Design Concern
+- **Severity:** Low
+- **Category:** Packaging / Privacy
+- **Disposition:** Scheduled Post-Release
+- **Release impact:** `PRODUCTION_READINESS_AUDIT.md` is shipped to every user in the `.vsix` because `.vscodeignore` does not exclude it.
+- **Affected files/locations:**
+  - `.vscodeignore`
+  - `ai-agent-hub-0.0.7.vsix` contents
+- **Evidence:** `unzip -l ai-agent-hub-0.0.7.vsix` lists `extension/PRODUCTION_READINESS_AUDIT.md` (35.37 KB). `.vscodeignore` excludes `DUE_DILIGENCE_REVIEW.md` and `REQUIREMENTS_AND_FIX_PLAN.md` but not `PRODUCTION_READINESS_AUDIT.md`.
+- **Root cause:** Missing entry in `.vscodeignore`.
+- **Impact:** Slightly larger package; internal audit details exposed to end users. No security impact, but unnecessary and inconsistent with other dev docs.
+- **Likelihood:** Certain for current package.
+- **Recommended solution:** Add `PRODUCTION_READINESS_AUDIT.md` to `.vscodeignore`.
+- **Regression risks:** None.
+- **Tests to add:** CI packaging-validation step could also assert that no `*.md` audit docs are in the `.vsix`.
+- **Verification steps:** Package the extension and confirm `PRODUCTION_READINESS_AUDIT.md` is not in the `.vsix`.
+
+### AUDIT-012 — Validator silently skips validation when schema is missing
+
+- **Classification:** Design Concern
+- **Severity:** Low
+- **Category:** Data Integrity / Reliability
+- **Disposition:** Scheduled Post-Release
+- **Release impact:** If a schema file is missing or fails to load, invalid data can be persisted and synced without warning.
+- **Affected files/locations:** `src/core/validator.ts:56-62`
+- **Evidence:** `validate()` returns an empty array when `this.ajv.getSchema(type)` is undefined.
+- **Root cause:** Graceful fallback treats "schema not loaded" as "valid".
+- **Impact:** In a packaged `.vsix` where schemas might be excluded by an `.vscodeignore` mistake, invalid content could bypass validation. Currently schemas are bundled, so the risk is low.
+- **Likelihood:** Low.
+- **Recommended solution:** Distinguish "schema missing" from "valid": return a dedicated error or throw when a requested schema is not loaded, and let callers decide whether to block.
+- **Regression risks:** Could cause tests to fail if schemas are not set up correctly.
+- **Tests to add:** Test that `Validator.validate` with an unknown schema returns a non-empty error list.
 
 ---
 
@@ -483,6 +520,8 @@ There is one user role. No admin, support, or read-only roles are required for a
 8. **AUDIT-008 — Replace frontmatter parser or update README.**
 9. **AUDIT-009 — Align README command list with `package.json`.**
 10. **AUDIT-010 — Improve MCP port conflict handling.**
+11. **AUDIT-011 — Exclude `PRODUCTION_READINESS_AUDIT.md` from `.vsix`.**
+12. **AUDIT-012 — Harden Validator schema-missing behavior.**
 
 ### Long-term architectural improvements
 
