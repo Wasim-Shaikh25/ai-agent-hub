@@ -13,21 +13,26 @@ import { setOrgContext } from '../db/pool.js';
 
 /**
  * Reads `clientInfo` from an MCP `initialize` message (single or batched) and
- * records the connecting agent. Best-effort detection — never blocks the call.
+ * records the connecting agent. Best-effort detection — errors are swallowed so
+ * the handshake is never blocked.
  */
-function detectAgentFromInit(body: unknown, auth: AuthContext, project?: string): void {
+async function detectAgentFromInit(body: unknown, auth: AuthContext, project?: string): Promise<void> {
   const msgs = Array.isArray(body) ? body : [body];
   for (const m of msgs) {
     const msg = m as { method?: string; params?: { clientInfo?: { name?: string; version?: string } } };
     if (msg?.method === 'initialize' && msg.params?.clientInfo?.name) {
-      void agents.record({
-        orgId: auth.orgId,
-        userId: auth.userId,
-        rawName: msg.params.clientInfo.name,
-        version: msg.params.clientInfo.version,
-        source: 'mcp',
-        project,
-      });
+      try {
+        await agents.record({
+          orgId: auth.orgId,
+          userId: auth.userId,
+          rawName: msg.params.clientInfo.name,
+          version: msg.params.clientInfo.version,
+          source: 'mcp',
+          project,
+        });
+      } catch {
+        /* detection must never break the request it observes */
+      }
     }
   }
 }
@@ -296,7 +301,7 @@ export async function handleMcpRequest(
   setOrgContext(auth.orgId);
 
   // Connected-agent detection from the MCP initialize handshake.
-  detectAgentFromInit(body, auth, defaults.project);
+  await detectAgentFromInit(body, auth, defaults.project);
 
   const canAggregate = entitled(await getPlan(auth.orgId), 'mcp_aggregation');
   const server = await buildServer(auth, defaults, canAggregate);

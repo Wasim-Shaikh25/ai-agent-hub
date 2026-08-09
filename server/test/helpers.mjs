@@ -43,10 +43,13 @@ export function startMockLLM(port) {
 export async function startServer(port, envOverrides = {}) {
   const env = {
     ...process.env,
+    NODE_ENV: 'test',
     PORT: String(port),
     DATABASE_URL: process.env.DATABASE_URL || 'postgres://hub:hub@localhost:5432/hub',
     DEV_SEED: 'true',
     DEV_API_KEY: 'hub_test_key',
+    JWT_SECRET: 'test-jwt-secret-must-be-at-least-thirty-two-characters-long',
+    SUPERADMIN_PASSWORD: 'test-superadmin-password-long',
     EMBEDDINGS_PROVIDER: 'local',
     LOG_LEVEL: 'silent',
     ...envOverrides,

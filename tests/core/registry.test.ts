@@ -72,6 +72,66 @@ describe('Registry', () => {
     ).toThrow('Name must not be empty');
   });
 
+  it('rejects duplicate names when adding', () => {
+    registry.addItem('skill', {
+      name: 'My Skill',
+      type: 'skill',
+      enabled: true,
+      description: 'test',
+      content: 'Do this.',
+      format: 'markdown',
+    });
+
+    expect(() =>
+      registry.addItem('skill', {
+        name: 'My Skill',
+        type: 'skill',
+        enabled: true,
+        description: 'test',
+        content: 'Do that.',
+        format: 'markdown',
+      }),
+    ).toThrow('A skill named "My Skill" already exists');
+  });
+
+  it('rejects duplicate names when updating', () => {
+    const first = registry.addItem('skill', {
+      name: 'First Skill',
+      type: 'skill',
+      enabled: true,
+      description: 'test',
+      content: 'Do this.',
+      format: 'markdown',
+    });
+
+    registry.addItem('skill', {
+      name: 'Second Skill',
+      type: 'skill',
+      enabled: true,
+      description: 'test',
+      content: 'Do that.',
+      format: 'markdown',
+    });
+
+    expect(() => registry.updateItem('skill', first.id, { name: 'Second Skill' })).toThrow(
+      'A skill named "Second Skill" already exists',
+    );
+  });
+
+  it('allows updating an item to its own current name', () => {
+    const item = registry.addItem('skill', {
+      name: 'My Skill',
+      type: 'skill',
+      enabled: true,
+      description: 'test',
+      content: 'Do this.',
+      format: 'markdown',
+    });
+
+    const updated = registry.updateItem('skill', item.id, { name: 'My Skill' });
+    expect(updated.name).toBe('My Skill');
+  });
+
   it('validates hook triggers', () => {
     expect(() =>
       registry.addItem('hook', {

@@ -45,6 +45,7 @@ export interface Config {
   superadminEmail: string;
   superadminMobile: string;
   superadminPassword: string;
+  allowInsecureDefaults: boolean;
   smtpHost: string;
   smtpPort: number;
   smtpUser: string;
@@ -70,14 +71,14 @@ export const config: Config = {
     return p === 'litellm' ? 'litellm' : p === 'local' ? 'local' : 'minilm';
   })(),
   embeddingDim: Number(env('EMBEDDING_DIM', '1536')),
-  devSeed: env('DEV_SEED', 'true') === 'true',
-  devApiKey: env('DEV_API_KEY', 'hub_dev_localkey'),
-  jwtSecret: env('JWT_SECRET', 'dev-secret-change-me'),
+  devSeed: env('DEV_SEED', 'false') === 'true',
+  devApiKey: env('DEV_API_KEY', ''),
+  jwtSecret: env('JWT_SECRET', ''),
   appBaseUrl: env('APP_BASE_URL', 'http://localhost:8080'),
   ssoProvider: env('SSO_PROVIDER', 'dev') === 'workos' ? 'workos' : 'dev',
   workosApiKey: env('WORKOS_API_KEY', ''),
   workosClientId: env('WORKOS_CLIENT_ID', ''),
-  rlsEnabled: env('RLS_ENABLED', 'false') === 'true',
+  rlsEnabled: env('RLS_ENABLED', 'true') === 'true',
   stripeSecretKey: env('STRIPE_SECRET_KEY', ''),
   stripeWebhookSecret: env('STRIPE_WEBHOOK_SECRET', ''),
   redactionEnabled: env('REDACTION_ENABLED', 'true') === 'true',
@@ -104,10 +105,41 @@ export const config: Config = {
   superadminId: env('SUPERADMIN_ID', randomUUID()),
   superadminEmail: env('SUPERADMIN_EMAIL', 'admin@localhost'),
   superadminMobile: env('SUPERADMIN_MOBILE', ''),
-  superadminPassword: env('SUPERADMIN_PASSWORD', 'change-me'),
+  superadminPassword: env('SUPERADMIN_PASSWORD', ''),
+  allowInsecureDefaults: env('ALLOW_INSECURE_DEFAULTS', 'false') === 'true',
   smtpHost: env('SMTP_HOST', ''),
   smtpPort: Number(env('SMTP_PORT', '587')),
   smtpUser: env('SMTP_USER', ''),
   smtpPass: env('SMTP_PASS', ''),
   smtpFrom: env('SMTP_FROM', 'noreply@example.com'),
 };
+
+function assertSafeConfiguration(c: Config): void {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isTest = process.env.NODE_ENV === 'test';
+
+  if (!isProduction && (isTest || c.allowInsecureDefaults)) {
+    return;
+  }
+
+  const errors: string[] = [];
+  if (!c.jwtSecret || c.jwtSecret.length < 32) {
+    errors.push('JWT_SECRET must be at least 32 characters');
+  }
+  if (!c.superadminPassword || c.superadminPassword.length < 12 || c.superadminPassword === 'change-me') {
+    errors.push('SUPERADMIN_PASSWORD must be at least 12 characters and not a known default');
+  }
+  if (c.devApiKey && (c.devApiKey === 'hub_dev_localkey' || c.devApiKey.length < 16)) {
+    errors.push('DEV_API_KEY must be at least 16 characters and not a known default');
+  }
+
+  if (errors.length === 0) {
+    return;
+  }
+
+  if (isProduction || !c.allowInsecureDefaults) {
+    throw new Error(`Unsafe server configuration: ${errors.join('; ')}. Set strong values or ALLOW_INSECURE_DEFAULTS=true for local dev only.`);
+  }
+}
+
+assertSafeConfiguration(config);
