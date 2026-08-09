@@ -67,7 +67,7 @@ Derived from `docs/release-blockers/requirements.md` and `PRODUCTION_READINESS_A
 ## FR10 — Documentation and schemas must be consistent
 
 - [x] [T10.1] Remove README commands `AI Agent Hub: Add MCP Server` and `AI Agent Hub: Show MCP Servers` to match `package.json` `contributes.commands`.
-- [ ] [T10.2] Document the YAML frontmatter parsing behavior or replace it with a compliant parser.
+- [x] [T10.2] Replace the YAML-like frontmatter parser in `src/core/registry.ts` with the `yaml` package.
 
 ## Cross-cutting
 

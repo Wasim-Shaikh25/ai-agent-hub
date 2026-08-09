@@ -9,16 +9,21 @@ import { execFile } from 'child_process';
  *
  * Clones or pulls the repo into a temp directory inside the
  * extension's global storage, then copies updated hub-content
- * files into the extension's local hub-content folder.
+ * files into the extension's global storage hub-content folder.
+ * Using global storage keeps the install read-only for packaged
+ * extensions and survives extension updates.
  */
 export class HubUpdater {
   private static readonly REPO_URL = 'https://github.com/Wasim-Shaikh25/ai-agent-hub.git';
 
   private static readonly HUB_CONTENT_DIR = 'hub-content';
 
+  private readonly globalStoragePath: string;
+
   private readonly cacheDir: string;
 
   constructor(globalStoragePath: string) {
+    this.globalStoragePath = globalStoragePath;
     this.cacheDir = path.join(globalStoragePath, 'repo-cache');
   }
 
@@ -28,11 +33,10 @@ export class HubUpdater {
    * If the repo has already been cloned, it pulls the latest
    * changes. Otherwise it performs a fresh shallow clone.
    *
-   * @param extensionPath Root path of the installed extension.
    * @returns true if content was updated, false if skipped or
    *          failed.
    */
-  async fetchLatest(extensionPath: string, timeoutMs = 30_000): Promise<boolean> {
+  async fetchLatest(timeoutMs = 30_000): Promise<boolean> {
     try {
       await this.ensureCacheDir();
 
@@ -45,7 +49,7 @@ export class HubUpdater {
         await this.gitClone(repoDir, timeoutMs);
       }
 
-      const updated = this.copyHubContent(repoDir, extensionPath);
+      const updated = this.copyHubContent(repoDir);
       return updated;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -83,14 +87,14 @@ export class HubUpdater {
 
   /**
    * Copies hub-content files from the cloned repo into the
-   * extension's local hub-content directory, overwriting
-   * existing builtin files.
+   * extension's global storage hub-content directory, overwriting
+   * existing builtin files there.
    *
    * @returns true if any files were copied.
    */
-  private copyHubContent(repoDir: string, extensionPath: string): boolean {
+  private copyHubContent(repoDir: string): boolean {
     const srcBase = path.join(repoDir, HubUpdater.HUB_CONTENT_DIR);
-    const destBase = path.join(extensionPath, HubUpdater.HUB_CONTENT_DIR);
+    const destBase = path.join(this.globalStoragePath, HubUpdater.HUB_CONTENT_DIR);
 
     if (!fs.existsSync(srcBase)) {
       return false;

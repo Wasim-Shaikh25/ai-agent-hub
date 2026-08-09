@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { Registry } from '../../src/core/registry';
 import { Validator } from '../../src/core/validator';
 
@@ -166,5 +169,67 @@ describe('Registry', () => {
         trigger: 'invalid' as any,
       }),
     ).toThrow('Trigger must be one of');
+  });
+
+  it('parses YAML frontmatter including booleans and quoted values', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-agent-hub-registry-'));
+    try {
+      const skillsDir = path.join(tmpDir, 'hub-content', 'skills');
+      fs.mkdirSync(skillsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(skillsDir, 'yaml-skill.md'),
+        '---\n' +
+          'id: yaml-skill\n' +
+          'name: "YAML Skill"\n' +
+          'description: "A quoted description"\n' +
+          'enabled: false\n' +
+          '---\n' +
+          'Skill body.',
+        'utf-8',
+      );
+
+      registry.initialize(tmpDir);
+      const items = registry.getItems('skill');
+      const item = items.find((i) => i.id === 'yaml-skill');
+      expect(item).toBeDefined();
+      expect(item?.name).toBe('YAML Skill');
+      expect(item?.description).toBe('A quoted description');
+      expect(item?.enabled).toBe(false);
+      expect(item?.content).toBe('Skill body.');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('lets global storage overrides shadow bundled builtins with the same id', () => {
+    const bundledDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-agent-hub-bundled-'));
+    const globalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-agent-hub-global-'));
+
+    try {
+      const bundledSkills = path.join(bundledDir, 'hub-content', 'skills');
+      const globalSkills = path.join(globalDir, 'hub-content', 'skills');
+      fs.mkdirSync(bundledSkills, { recursive: true });
+      fs.mkdirSync(globalSkills, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(bundledSkills, 'shared.md'),
+        '---\nid: shared\nname: Bundled Shared\n---\nBundled body.',
+        'utf-8',
+      );
+      fs.writeFileSync(
+        path.join(globalSkills, 'shared.md'),
+        '---\nid: shared\nname: Global Shared\n---\nGlobal body.',
+        'utf-8',
+      );
+
+      registry.initialize(bundledDir, globalDir);
+      const item = registry.getItems('skill').find((i) => i.id === 'shared');
+      expect(item).toBeDefined();
+      expect(item?.name).toBe('Global Shared');
+      expect(item?.content).toBe('Global body.');
+    } finally {
+      fs.rmSync(bundledDir, { recursive: true, force: true });
+      fs.rmSync(globalDir, { recursive: true, force: true });
+    }
   });
 });
