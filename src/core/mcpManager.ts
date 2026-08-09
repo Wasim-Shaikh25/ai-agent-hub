@@ -1,13 +1,26 @@
 import { spawn, ChildProcess } from 'child_process';
+import { createRequire } from 'module';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { McpServerConfig, McpServerState } from './types';
 import { isValidNpmPackageName, isValidMcpArg, validateEnvRecord } from '../utils/mcpEnv';
 
 /**
+ * Resolves the absolute path to the pinned `mcp-proxy` binary bundled
+ * with the extension. This avoids unpinned `npx mcp-proxy` at runtime.
+ */
+function resolveMcpProxyBin(): string {
+  const require = createRequire(__filename);
+  const pkg = require('mcp-proxy/package.json');
+  const bin = typeof pkg.bin === 'string' ? pkg.bin : pkg.bin['mcp-proxy'];
+  return require.resolve(path.posix.join('mcp-proxy', bin));
+}
+
+/**
  * Manages MCP server child processes.
  *
- * Each registered MCP server is started via `npx <packageName>`
- * and kept alive as a child process for the lifetime of the
+ * Each registered MCP server is started via the bundled `mcp-proxy`
+ * binary and kept alive as a child process for the lifetime of the
  * extension. The manager tracks runtime state and generates
  * rule markdown that AI agents can use to discover and call
  * MCP tools over HTTP.
@@ -20,7 +33,7 @@ export class McpManager {
    * Starts an MCP server process.
    *
    * Performs a final security validation on the configuration,
-   * then spawns `npx mcp-proxy` (using `npx.cmd` on Windows) with
+   * then spawns the bundled `mcp-proxy` binary via `node` with
    * `shell: false` to avoid shell injection. The inner MCP server
    * is spawned directly by `mcp-proxy` using the validated package
    * name and argument list.
@@ -44,18 +57,29 @@ export class McpManager {
 
     const url = `http://localhost:${config.port}`;
 
+    // Resolve the pinned mcp-proxy binary bundled with the extension.
+    let mcpProxyBin: string;
+    try {
+      mcpProxyBin = resolveMcpProxyBin();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.setState(config.id, { configId: config.id, status: 'error', error: message });
+      vscode.window.showErrorMessage(`MCP server "${config.name}" rejected: ${message}`);
+      throw new Error(message);
+    }
+
     // Use platform-specific npx command so we can keep shell: false.
-    const isWindows = process.platform === 'win32';
-    const npxBin = isWindows ? 'npx.cmd' : 'npx';
+    const npxBin = process.platform === 'win32' ? 'npx.cmd' : 'npx';
 
     // mcp-proxy runs the inner command directly (without --shell) so that
     // the validated packageName/args are not re-interpreted by a shell.
     const proxyArgs = [
-      'mcp-proxy',
+      mcpProxyBin,
       '--port',
       String(config.port),
       '--',
       npxBin,
+      '-y',
       config.packageName,
       ...config.args,
     ];
@@ -67,7 +91,9 @@ export class McpManager {
     };
 
     try {
-      const child = spawn(npxBin, proxyArgs, {
+      // Always invoke the mcp-proxy .mjs entrypoint through `node` so the
+      // same command line works on Unix (shebang) and Windows.
+      const child = spawn('node', proxyArgs, {
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
         shell: false,

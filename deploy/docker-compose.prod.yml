@@ -2,7 +2,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 #
 # Set real secrets in the environment (or a .env next to this file):
-#   DEV_API_KEY(off), JWT_SECRET, LITELLM_MASTER_KEY, OPENAI_API_KEY,
+#   JWT_SECRET, SUPERADMIN_PASSWORD, LITELLM_MASTER_KEY, OPENAI_API_KEY,
 #   ANTHROPIC_API_KEY, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, WORKOS_* etc.
 
 services:
@@ -20,10 +20,13 @@ services:
   hub-server:
     restart: unless-stopped
     environment:
+      NODE_ENV: production
       DATABASE_URL: postgres://hub:${POSTGRES_PASSWORD}@postgres:5432/hub
       DEV_SEED: "false"
+      DEV_API_KEY: ${DEV_API_KEY:-}
       LOG_PROMPTS: "false"
       JWT_SECRET: ${JWT_SECRET:?set a strong JWT_SECRET}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:?set a strong SUPERADMIN_PASSWORD}
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:8080}
       CORS_ORIGIN: ${CORS_ORIGIN:-*}
       RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-600}

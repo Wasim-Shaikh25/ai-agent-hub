@@ -29,11 +29,11 @@ jobs:
         working-directory: server
 
     env:
+      NODE_ENV: test
       DATABASE_URL: postgres://hub:hub@localhost:5432/hub
       EMBEDDINGS_PROVIDER: local
       DEV_API_KEY: hub_ci_key
       PORT: '8080'
-      ALLOW_INSECURE_DEFAULTS: 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +44,8 @@ jobs:
           cache-dependency-path: server/package-lock.json
 
       - run: npm ci
+      - name: Audit dependencies
+        run: npm audit --audit-level=moderate
       - name: Typecheck
         run: npm run typecheck
       - name: Build

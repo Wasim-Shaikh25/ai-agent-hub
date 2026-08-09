@@ -92,11 +92,13 @@ export class Registry {
     fields: Omit<AnyHubItem, 'id' | 'source' | 'createdAt' | 'updatedAt'>,
   ): AnyHubItem {
     this.validateFields(type, fields);
-    this.assertUniqueName(type, String(fields.name).trim());
+    const name = String(fields.name).trim();
+    this.assertUniqueName(type, name);
 
     const now = new Date().toISOString();
     const item = {
       ...fields,
+      name,
       id: randomUUID(),
       source: 'user' as const,
       type,
@@ -122,10 +124,16 @@ export class Registry {
     if (item.source === 'builtin') {
       throw new Error('Cannot edit a built-in item');
     }
-    if (fields.name && fields.name !== item.name) {
-      this.assertUniqueName(type, String(fields.name).trim(), id);
+    const newName = fields.name ? String(fields.name).trim() : item.name;
+    if (newName !== item.name) {
+      this.assertUniqueName(type, newName, id);
     }
-    const updated = { ...item, ...fields, updatedAt: new Date().toISOString() } as AnyHubItem;
+    const updated = {
+      ...item,
+      ...fields,
+      name: newName,
+      updatedAt: new Date().toISOString(),
+    } as AnyHubItem;
     this.validateItem(updated);
 
     const idx = this.collections[type].indexOf(item);
@@ -199,7 +207,10 @@ export class Registry {
   }
 
   private assertUniqueName(type: ItemType, name: string, excludeId?: string): void {
-    const existing = this.collections[type].find((i) => i.name === name && i.id !== excludeId);
+    const target = name.trim().toLowerCase();
+    const existing = this.collections[type].find(
+      (i) => String(i.name).trim().toLowerCase() === target && i.id !== excludeId,
+    );
     if (existing) {
       throw new Error(`A ${type} named "${name}" already exists`);
     }

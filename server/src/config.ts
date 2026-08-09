@@ -65,10 +65,10 @@ export const config: Config = {
   litellmUrl: env('LITELLM_URL', 'http://localhost:4000'),
   litellmMasterKey: env('LITELLM_MASTER_KEY', 'sk-local-master'),
   embeddingsProvider: ((): 'local' | 'litellm' | 'minilm' => {
-    // Default to in-process MiniLM (real semantic vectors, no API key). Falls
-    // back to the local hash automatically if the optional model dep is absent.
-    const p = env('EMBEDDINGS_PROVIDER', 'minilm');
-    return p === 'litellm' ? 'litellm' : p === 'local' ? 'local' : 'minilm';
+    // Default to the offline hash embedding (no deps). MiniLM is available
+    // by setting EMBEDDINGS_PROVIDER=minilm and installing the optional dep.
+    const p = env('EMBEDDINGS_PROVIDER', 'local');
+    return p === 'litellm' ? 'litellm' : p === 'minilm' ? 'minilm' : 'local';
   })(),
   embeddingDim: Number(env('EMBEDDING_DIM', '1536')),
   devSeed: env('DEV_SEED', 'false') === 'true',

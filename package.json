@@ -87,7 +87,7 @@
     "lint:fix": "eslint src tests --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "package": "vsce package",
+    "package": "vsce package --dependencies",
     "vscode:prepublish": "npm run build"
   },
   "repository": {
@@ -99,7 +99,7 @@
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^8.65.0",
     "@typescript-eslint/parser": "^8.65.0",
-    "@vscode/vsce": "^2.32.0",
+    "@vscode/vsce": "^3.9.2",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^10.1.8",
     "fast-check": "^3.15.0",
@@ -108,6 +108,10 @@
     "vitest": "^3.1.0"
   },
   "dependencies": {
-    "ajv": "^8.12.0"
+    "ajv": "^8.12.0",
+    "mcp-proxy": "6.7.0"
+  },
+  "overrides": {
+    "fast-uri": "^3.1.5"
   }
 }

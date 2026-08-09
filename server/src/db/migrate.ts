@@ -78,6 +78,10 @@ export async function seedDev(): Promise<void> {
 /** Seeds the platform superadmin from env variables (idempotent). */
 export async function seedSuperadmin(): Promise<void> {
   if (!config.superadminEmail) return;
+  if (!config.superadminPassword || config.superadminPassword.length < 12) {
+    console.warn('[seed] SUPERADMIN_PASSWORD is missing or too short; superadmin account not created');
+    return;
+  }
 
   const user = await queryOne<{ id: string }>(
     `INSERT INTO app_user (id, email, name, mobile, password_hash, is_platform_admin)

@@ -54,10 +54,12 @@ services:
       REDIS_URL: redis://redis:6379
       LITELLM_URL: http://litellm:4000
       LITELLM_MASTER_KEY: sk-local-master
-      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-minilm}
+      EMBEDDINGS_PROVIDER: ${EMBEDDINGS_PROVIDER:-local}
       EMBEDDING_DIM: "1536"
       DEV_SEED: "true"
-      DEV_API_KEY: ${DEV_API_KEY:-hub_dev_localkey}
+      DEV_API_KEY: ${DEV_API_KEY:-hub_dev_localkey_longer_than_sixteen}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-must-be-at-least-thirty-two-characters-long}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-dev-superadmin-password-long}
     ports:
       - "8080:8080"
 

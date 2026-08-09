@@ -72,6 +72,28 @@ describe('Registry', () => {
     ).toThrow('Name must not be empty');
   });
 
+  it('trims names and rejects whitespace-only duplicates', () => {
+    registry.addItem('skill', {
+      name: '  My Skill  ',
+      type: 'skill',
+      enabled: true,
+      description: 'test',
+      content: 'Do this.',
+      format: 'markdown',
+    });
+
+    expect(() =>
+      registry.addItem('skill', {
+        name: 'my skill',
+        type: 'skill',
+        enabled: true,
+        description: 'test',
+        content: 'Do that.',
+        format: 'markdown',
+      }),
+    ).toThrow('A skill named "my skill" already exists');
+  });
+
   it('rejects duplicate names when adding', () => {
     registry.addItem('skill', {
       name: 'My Skill',

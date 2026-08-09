@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
+import { randomBytes } from 'node:crypto';
 import { config } from './config.js';
 import { migrate, seedDev, seedSuperadmin } from './db/migrate.js';
 import { pool } from './db/pool.js';
@@ -33,8 +34,47 @@ async function main(): Promise<void> {
 
   const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024, trustProxy: true });
 
-  // Security headers. CSP is relaxed for the dashboard's inline CSS/JS.
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // Security headers. CSP protects the dashboard. Per-request nonces are
+  // generated for inline <script> and <style> blocks; inline event handlers
+  // and style attributes still require 'unsafe-inline' for script-src-attr
+  // and style-src-attr until the UI is moved to external JS/CSS.
+  await app.register(helmet, {
+    enableCSPNonces: true,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        scriptSrcAttr: ["'unsafe-inline'"],
+        styleSrc: ["'self'"],
+        styleSrcAttr: ["'unsafe-inline'"],
+        connectSrc: ["'self'"],
+        imgSrc: ["'self'", "data:"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'self'"],
+      },
+    },
+  });
+
+  // Inject the helmet-generated nonces into server-rendered HTML before it
+  // is sent, so the inline <script> and <style> blocks match the CSP header.
+  app.addHook('onSend', async (_request, reply, payload) => {
+    const contentType = reply.getHeader('content-type');
+    if (
+      typeof contentType === 'string' &&
+      contentType.includes('text/html') &&
+      typeof payload === 'string' &&
+      reply.cspNonce
+    ) {
+      const { script: scriptNonce, style: styleNonce } = reply.cspNonce as { script: string; style: string };
+      return payload
+        .replace(/<script\b/g, `<script nonce="${scriptNonce}"`)
+        .replace(/<style\b/g, `<style nonce="${styleNonce}"`);
+    }
+    return payload;
+  });
   await app.register(cors, { origin: config.corsOrigin === '*' ? true : config.corsOrigin.split(','), credentials: true });
 
   // Rate limit per API key / IP so a noisy client can't overwhelm the server.
@@ -56,7 +96,8 @@ async function main(): Promise<void> {
   });
 
   // Don't leak internals; log the real error, return a clean envelope.
-  app.setErrorHandler((err, req, reply) => {
+  app.setErrorHandler((rawErr, req, reply) => {
+    const err = rawErr as Error & { statusCode?: number };
     const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
     if (status >= 500) req.log.error(err);
     reply.code(status).send({ error: { code: status === 429 ? 'rate_limited' : 'server_error', message: status >= 500 ? 'Internal server error' : err.message } });
