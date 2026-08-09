@@ -1,67 +1,54 @@
 # AI Agent Hub — Production Readiness Audit
 
 **Repository:** `Wasim-Shaikh25/ai-agent-hub`  
-**Assessed commit:** `4fd6bc8` (`v0.0.7`) on `main`  
+**Assessed commit:** `dd15bc7` (`main` after merging PR #10 and PR #11)  
+**Extension version:** `0.0.7`  
+**Server version:** `0.1.0`  
 **Audit date:** 2026-08-09  
-**Auditor:** Devin (cross-functional review)  
+**Auditor:** Devin (cross-functional review)
 
 ---
 
 ## Executive Summary
 
-AI Agent Hub is a VS Code extension that centralizes AI behavior content (skills, rules, hooks, workflows, personas) and syncs it to multiple AI agent target folders (Cursor, Kiro, GitHub Copilot, Amazon Q, etc.). It also supports running local MCP servers via `mcp-proxy` and generating rule files so agents can call them.
+AI Agent Hub has expanded from a local VS Code: extension into a full SaaS platform: the extension (Content Plane) now connects to a `hub-server` (Context / Gateway / Governance Planes) that provides shared sessions, memory, code-aware RAG, MCP aggregation, RBAC, SSO, billing, and admin/operator consoles. PR #10 also added a CLI connector, a customer web app, a marketing landing page, Docker Compose stacks, and extensive legal/spec docs.
 
-Since the previous audit (`v0.0.6`, `c94323f`), several `REQUIREMENTS_AND_FIX_PLAN.md` P0/P1 items have been addressed:
+The good news: both the extension unit tests (38 pass) and the server integration tests (26 pass) are green, and the server builds and typechecks cleanly. The architecture is well documented and the test suite covers auth, RLS, entitlements, RAG, gateway fallback, and MCP aggregation.
 
-- `activationEvents` are declared for all commands plus `onStartupFinished`.
-- MCP server spawning uses `shell: false` and validates package names / arguments.
-- Path traversal is mitigated by `PathUtils.resolveSafeTarget` and `isUnsafePath`.
-- A test suite (38 tests) now passes.
-- Lint, TypeScript build, and Prettier formatting all pass.
-- A `.vscodeignore` and `LICENSE` are in place.
-- The Validator is wired into `Registry` and `SetupPanel`.
+The bad news: **the product is not ready for production or public release.** The packaged VS Code: extension still cannot activate because runtime dependencies are omitted, and the server ships with hardcoded/default secrets, Row-Level Security disabled by default, a long list of runtime dependency CVEs, and no validated production deployment path.
 
-However, the **packaged `.vsix` is still missing runtime dependencies**, `npm audit` still reports vulnerable transitive dependencies, and the extension has not been exercised in a real VS Code Extension Host. These are release-blocking for a public Marketplace publish.
+**Final recommendation:** **STOP — DO NOT GO**
 
-**Final recommendation:** **STOP — CONDITIONAL GO**
-
-Do not publish the extension publicly until the packaging / runtime-dependency and vulnerable-dependency issues are resolved and a clean extension-host smoke test has been performed.
+Do not publish the extension, deploy the server, or onboard paying customers until the packaging/runtime-dependency issue, the server's default security posture, and its runtime dependency CVEs are resolved.
 
 ### Finding summary
 
 | Severity | Count | Examples |
 |----------|-------|----------|
-| Critical | 1 | Packaged `.vsix` lacks runtime dependencies (`ajv`) |
-| High | 2 | MCP runtime not packaged / pinned; vulnerable `fast-uri` via `ajv` |
-| Medium | 3 | Dev dependency CVEs; duplicate item names overwrite files; no E2E smoke; remote hub update overwrites bundled files |
-| Low | 3 | README/command mismatch; non-YAML frontmatter parser; audit report bundled in `.vsix` |
+| Critical | 3 | Packaged `.vsix` cannot activate; server defaults to hardcoded `JWT_SECRET` / `SUPERADMIN_PASSWORD`; `protobufjs` critical CVE in server runtime path |
+| High | 6 | `fast-uri` via `ajv`; `mcp-proxy` unpinned; server `RLS_ENABLED=false` by default; server `Dockerfile` runs as root with `npm install`; `nodemailer`, `hono`, `ip-address` runtime CVEs |
+| Medium | 6 | No packaging validation in CI; missing production deploy/backup/monitoring; dev seed enabled by default; `PRODUCTION_READINESS_AUDIT.md` and `.agents/` leak into `.vsix`; duplicate item names can overwrite files; CSP disabled for web UI |
+| Low | 5 | YAML frontmatter parser not YAML-compliant; README command mismatch; MCP port conflict not OS-checked; `Validator` silently skips missing schemas; `CHANGELOG.md`/`SECURITY.md` bundled in `.vsix` |
 
 ### Major technical risks
 
-1. **Packaging defect:** `npx vsce package --no-dependencies` creates a `.vsix` with no `node_modules`, but `out/core/validator.js` requires `ajv` at activation. This is a release blocker.
-2. **MCP supply chain / runtime:** `mcp-proxy` and target MCP packages are fetched on demand by `npx` with no version pinning, no offline support, and no runtime dependency lockfile.
-3. **Vulnerable transitive dependencies:** `fast-uri@3.1.0` (via `ajv@8.20.0`) and multiple dev-dependency CVEs are present.
-4. **No runtime validation:** All checks are static/unit; the packaged extension and real VS Code host were not exercised in this audit.
-5. **Data integrity during sync:** Two enabled items with the same name generate the same file slug; the second overwrites the first without warning.
-6. **Remote builtin updates write to the install directory:** `HubUpdater` still copies fetched content into `extensionPath/hub-content/`, which may be read-only or be reverted on extension update.
+1. **Extension packaging defect:** `npx vsce package --no-dependencies` creates a `.vsix` with no `node_modules`, but `out/core/validator.js` requires `ajv`. The package activates with `Error: Cannot find module 'ajv'`.
+2. **Server default secrets:** `JWT_SECRET`, `SUPERADMIN_PASSWORD`, `DEV_API_KEY`, `DEV_SEED`, and `CORS_ORIGIN='*'` all have unsafe defaults. A deployment that does not override every value is trivially compromised.
+3. **Row-Level Security disabled by default:** Migration 005 installs RLS policies, but `config.ts` defaults `RLS_ENABLED=false`, so tenant isolation relies entirely on application-level `org_id` filtering.
+4. **Server runtime dependency CVEs:** `protobufjs` (critical, via optional `@xenova/transformers`), `sharp`, `hono`, `ip-address`, and `nodemailer` all have high-severity advisories reachable at runtime.
+5. **No production hardening validated:** Docker Compose and the `Dockerfile` have only been exercised on `localhost`; backups, monitoring, TLS termination, secret injection, and real Stripe webhooks are documented but not validated.
+6. **MCP runtime unpinned:** `mcp-proxy` is still fetched via `npx` with no declared, version-locked dependency.
+7. **Supply chain (extension):** Root `npm audit` reports 14 vulnerabilities, including a critical `vitest` issue and multiple high-severity transitive deps.
 
 ### Scope limitations and untested areas
 
-- The extension was **not installed or run in a real VS Code Extension Host**.
-- **Real file sync to Cursor, Kiro, Copilot, or Amazon Q folders** was not tested.
-- **MCP server end-to-end startup** (against `@modelcontextprotocol/server-filesystem` or similar) was not tested.
-- Marketplace packaging, publishing, and upgrade scenarios were not tested.
-- Windows path handling and network-failure paths were inferred from code rather than observed.
-- Accessibility, performance, and load testing were not performed (local dev tool with small data sets).
-
-### Conditions required for release
-
-1. Fix `.vsix` packaging so that runtime dependencies are either bundled (webpack/esbuild) or shipped via `vsce` dependencies.
-2. Decide whether MCP ships in v1. If yes, add and pin `mcp-proxy` (and any required MCP server packages) as dependencies and test startup.
-3. Update `ajv` / transitive `fast-uri` to patched versions and run `npm audit` until runtime-reachable CVEs are clean.
-4. Add a CI packaging-validation step (e.g., extract `.vsix` and confirm `node_modules/ajv` exists, or verify a single bundled `extension.js` includes `ajv`).
-5. Perform at least one manual VS Code Extension Host smoke test: install the `.vsix`, activate the extension, open the Hub panel, add a skill, and sync to a test workspace.
-6. Move `HubUpdater` destination to a user-writable global storage cache rather than the extension install directory, or decide to disable remote builtin updates for the public release.
+- The extension was not installed or run in a real VS Code: Extension Host in this audit (only the stub-activation reproduction was rerun).
+- Real file sync into Cursor/Kiro/Copilot/Amazon Q folders was not retested.
+- MCP server end-to-end startup against a real package was not retested.
+- The Docker Compose production stack was not built or deployed.
+- TLS termination, managed Postgres backups, Redis persistence, and Stripe webhook verification were not exercised.
+- Load, concurrency, and penetration testing were not performed.
+- Windows path handling and `npx.cmd` behavior were inferred from code.
 
 ---
 
@@ -69,139 +56,130 @@ Do not publish the extension publicly until the packaging / runtime-dependency a
 
 ### Discovered product purpose and requirements
 
-- **Purpose:** A local, single-user "CMS" for AI behavior content. Users author skills, rules, hooks, workflows, and personas once and push them to the configuration folders used by their AI coding assistants.
-- **Target users:** Individual developers and small teams who use more than one AI editor/assistant.
-- **Roles:** There is one user role. The extension runs with the user's OS privileges; there is no authentication, RBAC, multi-tenancy, or SaaS backend.
-- **Critical workflows:**
-  1. Install extension → activate.
-  2. Run setup → detect or manually add agent targets.
-  3. Create/edit/toggle content items.
-  4. Sync enabled content to agent target folders.
-  5. (Optional) Register and start an MCP server; sync generated rule files.
-- **Sensitive data handled:** Local workspace paths, user-authored prompt content, MCP environment variables (stored in VS Code Memento as plaintext), and remote git credentials for the builtin content update.
-- **External integrations:** `git` CLI for updating builtin content from GitHub; `npx` for MCP server packages; the VS Code Extension API.
+- **Extension (Content Plane):** A VS Code: extension for authoring skills, rules, hooks, workflows, and personas, then syncing them to local agent target folders.
+- **Server (Context / Gateway / Governance Planes):** A Fastify + Postgres (pgvector) + Redis service that provides shared sessions, memory, code-aware RAG, native MCP, LiteLLM gateway proxying, RBAC, API keys, audit logging, Stripe billing, SSO, and customer/operator web consoles.
+- **CLI:** `aihub connect <agent>` / `aihub detect` for non-VS-Code: agents.
+- **Web surfaces:** Marketing landing page (`site/index.html`) and server-rendered customer/operator HTML at `/login`, `/account`, `/admin`, `/superadmin`, `/dashboard`, `/activity`, `/help`, etc.
+- **Target users:** Individuals, teams, and enterprises using multiple AI coding agents.
+- **Roles:** Local developer (extension only), org `owner`/`admin`/`member`/`viewer`, platform `superadmin`.
+- **Sensitive data handled:** User workspace paths, authored prompt content, MCP environment variables (extension), customer source code context/memory (server), API keys, JWT sessions, billing/usage records, audit logs.
+- **External integrations:** Git CLI for builtin content updates; `npx` for MCP packages; VS Code: Extension API; Postgres; Redis; LiteLLM; Stripe; WorkOS/OAuth providers; email/SMTP.
 
 ### Architecture and trust boundaries
 
-- **Applications / services:** One VS Code extension (`main: out/extension.js`).
-- **Entry points:** `activate()` in `src/extension.ts`; seven registered commands (README lists two additional MCP commands that are not registered).
-- **Pages / UI:** `HubPanel` webview (`src/ui/hubPanel.ts`) and `SetupPanel` webview (`src/ui/setupPanel.ts`).
-- **State management:** VS Code `Memento` (`workspaceState`/`globalState`) wrapped by `Storage`; in-memory `Registry`; file-system writes via `FileWriter`; child processes via `McpManager`.
+- **Applications / services:**
+  - VS Code: extension (`main: out/extension.js`).
+  - `hub-server` (`server/src/index.ts` → `dist/index.js`).
+  - `aihub` CLI (`cli/index.mjs`).
+  - Marketing site (`site/index.html`).
+- **Entry points:**
+  - Extension: `activate()` in `src/extension.ts`; 10 registered commands.
+  - Server: HTTP on `:8080`, `/health`, `/ready`, `/api/*`, `/mcp`, `/v1/*` gateway routes, and web UI routes.
+- **State management:**
+  - Extension: VS Code: `Memento`, in-memory `Registry`, file-system writes, child processes.
+  - Server: Postgres with per-org RLS (when enabled), Redis for cache/rate-limit, `AsyncLocalStorage` for org context.
 - **Trust boundaries:**
-  - The extension has full local file-system access, so the primary trust assumption is that the user controls the workspace and the content they sync.
-  - Sync writes are constrained to a base path (`workspaceRoot` for agent targets, `repo.repoPath` for repo-level sync) by `PathUtils`.
-  - MCP servers run as child processes; the extension validates package names and arguments but still executes arbitrary npm packages selected by the user.
+  - Extension runs with the user's OS privileges; sync writes are constrained by `PathUtils`.
+  - Server is multi-tenant; tenant isolation relies on app-layer `org_id` filtering plus (opt-in) Postgres RLS.
+  - MCP servers run as child processes locally; the extension validates package names and arguments.
+  - Server gateway proxies to LiteLLM with API-key auth and budget enforcement.
 
 ### Files, routes, APIs, and modules reviewed
 
 - `package.json`, `tsconfig.json`, `vitest.config.ts`, `.eslintrc.cjs`, `.prettierrc`, `.vscodeignore`
-- `src/extension.ts`
-- `src/core/{syncEngine,registry,validator,fileWriter,agentConfig,agentDetector,mcpManager,mcpStore,repoSyncStore,storage,hubUpdater,types}.ts`
-- `src/ui/{hubPanel,setupPanel,webviewHtml}.ts`
-- `src/commands/{addSkill,addRule,addHook,openHub,setupAgents,syncToAgents,showAgents}.ts`
-- `src/utils/{pathUtils,mcpEnv,promptContent,logger}.ts`
+- `src/extension.ts`, `src/core/*.ts`, `src/ui/*.ts`, `src/commands/*.ts`, `src/utils/*.ts`
 - `tests/**/*.test.ts`, `__mocks__/vscode.ts`
-- `schemas/*.schema.json`
-- `hub-content/` demo content
-- `.github/workflows/ci.yml`, `.github/workflows/release.yml`
-- `README.md`, `DUE_DILIGENCE_REVIEW.md`, `REQUIREMENTS_AND_FIX_PLAN.md`
+- `server/package.json`, `server/tsconfig.json`, `server/Dockerfile`
+- `server/src/index.ts`, `server/src/config.ts`, `server/src/auth.ts`, `server/src/db/{pool,migrate}.ts`
+- `server/src/routes/{api,auth,admin,adminui,activity,billing,dashboard,gateway,help,metrics,oauth,platform,privacy,superadminui,tickets,webapp}.ts`
+- `server/migrations/001_init.sql` through `020_superadmin_and_otp.sql`
+- `server/test/*.test.mjs`
+- `deploy/docker-compose.yml`, `deploy/docker-compose.prod.yml`, `deploy/.env.example`, `deploy/litellm.config.yaml`
+- `cli/package.json`, `cli/index.mjs`
+- `site/index.html`
+- `docs/LAUNCH-READINESS.md`, `docs/REMAINING.md`, `docs/DEPLOYMENT.md`
+- `.github/workflows/ci.yml`, `.github/workflows/server-ci.yml`, `.github/workflows/release.yml`
 
 ### Commands and tests executed
 
 | Check | Command | Result |
 |-------|---------|--------|
-| Lint | `npm run lint` | Pass (exit 0) |
-| TypeScript build | `npm run build` | Pass (exit 0) |
-| Unit tests | `npm test` | Pass — 38 tests in 6 files |
-| Format check | `npm run format:check` | Pass |
-| VSIX package | `npx vsce package --no-dependencies` | Pass but `.vsix` lacks `node_modules` |
-| Dependency audit | `npm audit --audit-level=moderate` | 14 vulnerabilities (1 critical, 11 high, 2 moderate) |
-| VSIX contents | `unzip -l ai-agent-hub-0.0.7.vsix` | `out/`, `hub-content/`, `schemas/`, `package.json`, `README.md`, `LICENSE.txt`, `PRODUCTION_READINESS_AUDIT.md`; no `node_modules` |
-| Runtime require check | `node -e "require('./out/extension.js')"` with stub `vscode` module | Confirms compiled code fails with `Cannot find module 'ajv'` |
+| Extension lint | `npm run lint` | Pass (exit 0) |
+| Extension build | `npm run build` | Pass (exit 0) |
+| Extension unit tests | `npm test` | Pass — 38 tests in 6 files |
+| Extension format check | `npm run format:check` | Pass |
+| Extension VSIX package | `npx vsce package --no-dependencies` | Pass, but `.vsix` lacks `node_modules` |
+| Extension VSIX stub activation | `node -e "require('./out/extension.js')"` with stub `vscode` | **Fail** — `Cannot find module 'ajv'` |
+| Extension dependency audit | `npm audit --audit-level=low` | **14 vulnerabilities** (2 moderate, 11 high, 1 critical) |
+| Server dependency install | `(cd server && npm install)` | Pass |
+| Server typecheck | `(cd server && npm run typecheck)` | Pass |
+| Server build | `(cd server && npm run build)` | Pass |
+| Server migrations + seed | `(cd server && env DATABASE_URL=... npm run migrate)` | Pass — 20 migrations applied |
+| Server integration tests | `(cd server && env DATABASE_URL=... npm test)` | Pass — 26 tests |
+| Server dependency audit | `(cd server && npm audit --audit-level=low)` | **13 vulnerabilities** (3 moderate, 9 high, 1 critical) |
 
 ### Assumptions, contradictions, exclusions, and limitations
 
-- **Assumptions:** The product is intended as a single-user local tool; enterprise features (SSO, RBAC, team sharing) are out of scope.
-- **Contradictions resolved:** Earlier `README` referred to an `agents/` folder; current code and README now use `persona`/`personas/`. The `REQUIREMENTS_AND_FIX_PLAN.md` P0 items (activation, MCP injection, path traversal, testing, packaging hygiene) are largely addressed.
-- **Contradictions remaining:** README lists commands `AI Agent Hub: Add MCP Server` and `AI Agent Hub: Show MCP Servers` that are not registered in `package.json` (low).
-- **Exclusions:** Real VS Code host testing, marketplace publishing, Windows-specific behavior, performance/load testing, and penetration testing were not performed.
+- **Assumptions:** The product is now intended to become a hosted SaaS with optional self-hosting. The extension remains the free local Content Plane.
+- **Contradictions resolved:** `package.json` and `README.md` now list the same 10 extension commands; `activationEvents` cover all of them plus `onStartupFinished`.
+- **Contradictions remaining:** `docs/LAUNCH-READINESS.md` correctly flags P0 blockers, but those blockers are still open in code/config.
+- **Exclusions:** Real VS Code: host testing, real agent sync, Docker production deploy, TLS/backup/restore, load testing, and penetration testing were not performed.
 
 ---
 
 ## Product Completeness Assessment
 
-### Role-to-Capability Matrix
+### Role-to-Capability Matrix (extension)
 
 | Role | Create Content | Manage Agents | Sync | Manage MCP | View Results |
 |------|---------------|---------------|------|------------|--------------|
-| Local Developer | Implemented | Implemented | Implemented | Implemented | Implemented (Hub panel + Output) |
+| Local Developer | Implemented | Implemented | Implemented | Implemented (runtime packaging broken) | Implemented |
 
-There is one user role. No admin, support, or read-only roles are required for a local dev tool.
+### Role-to-Capability Matrix (server)
 
-### Entity-to-Operation Matrix
+| Role | Create Org | Manage Team | Create API Keys | View Usage | Manage Content | Admin Console | Superadmin Console |
+|------|-----------|-------------|-----------------|------------|----------------|---------------|-------------------|
+| Unauthenticated | Sign up / login | — | — | — | — | — | — |
+| Member (org) | — | — | — | Own activity | Read | — | — |
+| Admin/Owner | — | Yes | Yes | Org dashboard | Yes | Yes | — |
+| Superadmin | Yes (org provisioning) | — | — | — | — | — | Yes |
 
-| Entity | Create | View | List | Update | Delete | Toggle | Search/Filter | Import/Export | Notes |
-|--------|--------|------|------|--------|--------|--------|---------------|---------------|-------|
-| Skill | Implemented | Implemented | Implemented | Implemented | Implemented | Implemented | Missing | Missing | |
-| Rule | Implemented | Implemented | Implemented | Implemented | Implemented | Implemented | Missing | Missing | |
-| Hook | Implemented | Implemented | Implemented | Implemented | Implemented | Implemented | Missing | Missing | Trigger metadata only |
-| Workflow | Implemented | Implemented | Implemented | Implemented | Implemented | Implemented | Missing | Missing | |
-| Persona | Implemented | Implemented | Implemented | Implemented | Implemented | Implemented | Missing | Missing | |
-| Agent Target Config | Implemented | Implemented | Implemented | Implemented | Implemented | Implemented | Missing | Missing | |
-| Repo Sync Target | Implemented | Implemented | Implemented | Implemented | Implemented | Implemented | Missing | Missing | |
-| MCP Server Config | Implemented | Implemented | Implemented | Missing* | Implemented | N/A | Missing | Missing | *No update UI/command |
+### Workflow Completeness Matrix (server — high level)
 
-*Improvement opportunities:* search/filter, import/export, and duplicate-name prevention would improve usability but are not release blockers for an MVP.
-
-### Workflow Completeness Matrix
-
-| Workflow | Start | Input Validation | Happy Path | Status Visibility | Failure Handling | Cancellation | Retry | Notifications | History/Audit | Admin | Verdict |
-|----------|-------|------------------|------------|---------------------|------------------|--------------|-------|---------------|---------------|-------|---------|
-| Setup agent targets | Command palette / Hub panel | PathUtils validation + schema validation | Save config | Config list updated | Validation errors posted back to webview | Cancel button | Re-run setup | Toast + inline status | Config persisted | N/A | Implemented |
-| Create/edit content | Hub panel + commands | Non-empty name, hook trigger, schema validation | Item saved to Registry | Item list refreshed | Error toast | Cancel form | Re-add/edit | Toast | Stored in Memento | N/A | Implemented |
-| Sync to agents | Hub panel + command | Confirmation modal (optional), safe path resolution | Files written | Sync tab result | Per-agent errors collected | Decline modal | Re-sync | Toast | `lastSyncResult` persisted | N/A | Implemented |
-| Register/start MCP | Hub panel | Package/arg/env validation | Process spawned, status updated | MCP list status | Error state in UI | Stop button | Re-start | Toast + status bar | State map in memory | N/A | Implemented (runtime packaging broken) |
-| Update builtin content | Automatic on sync | N/A | `hub-content/` overwritten from remote | No UI feedback beyond warning on failure | Warning message, falls back to local | N/A | Next sync | Warning | N/A | N/A | Implemented |
-
-### Dashboard and Reporting Matrix
-
-| Dashboard | Exists? | Notes |
-|-----------|---------|-------|
-| Main Hub panel (skills/rules/hooks/workflows/personas/agents/mcp/sync tabs) | Yes | Serves as the primary user dashboard |
-| Setup wizard/panel | Yes | Agent and repo target configuration |
-| Sync result view | Yes | Per-agent/per-repo results in the Sync tab |
-| MCP status panel | Yes | List of registered MCP servers with status |
-| User/admin reports or exports | No | Not required for local single-user tool |
+| Workflow | Start | Input Validation | Happy Path | Status Visibility | Failure Handling | Auth/RLS | Verdict |
+|----------|-------|------------------|------------|-------------------|------------------|----------|---------|
+| Sign up / login | `/login` | Zod + password length | Token issued | Account page | Error toast | Password hash + JWT | Implemented |
+| Org creation | `/superadmin` | Email/org/slug/plan | Org created | Superadmin list | 403/400 | Superadmin JWT | Implemented |
+| API key management | `/account` | Name required | Key created | Key displayed once | Error toast | Authenticated + org | Implemented |
+| Memory write/search | `/api/memory` | Body validation | Stored/returned | API response | 500 envelope | API key + org | Implemented |
+| RAG index/query | `/api/rag/*` | Body validation | Results returned | API response | 500 envelope | API key + org | Implemented |
+| Gateway proxy | `/v1/*` | Header/body validation | Proxied to LiteLLM | Streaming response | 429/402 | API key + org + budget | Implemented |
+| MCP aggregation | `/mcp` | JSON-RPC + auth | Tools namespaced | Tools list | 401/500 | API key + org | Implemented |
+| Billing upgrade | `/account` | `priceId` | Stripe checkout | Redirect | Error message | Authenticated + org | Implemented (uses placeholder `price_team`) |
+| Operator issue analysis | `/superadmin` | — | Events/summary | Issues tab | Offline fallback | Superadmin + feature flag | Implemented |
 
 ### Missing requirements and discovery gaps
 
-1. **E2E / smoke validation in CI** — Missing. The unit-test suite does not verify that a packaged `.vsix` can actually activate in VS Code.
-2. **Duplicate item-name guard** — Missing. Two enabled items with the same name overwrite each other on sync.
-3. **Search / filter / bulk operations** — Not implemented; nice-to-have for users with many items.
-4. **Import / export of Hub content** — Not implemented. Would help backup/team sharing.
-5. **MCP server update** — No UI to edit an existing MCP server config.
-6. **YAML-compliant frontmatter parser** — `Registry` uses a simple line split, which does not match the README's "YAML front matter" description.
-
-### Product decisions required
-
-1. **Packaging strategy:** Should runtime dependencies be bundled into `out/extension.js` (recommended for size/reliability) or shipped as `node_modules` in the `.vsix`?
-2. **MCP in MVP:** Should MCP server hosting be part of the initial public release, or removed/disabled until it is fully packaged and tested?
-3. **Remote builtin updates:** Should the extension overwrite its own installed `hub-content/` from GitHub on every sync, or store updated builtins in `globalStorage` and leave bundled files untouched?
-4. **Duplicate names:** Should the extension reject duplicate item names, or disambiguate file names automatically?
-5. **Telemetry / crash reporting:** Should the extension collect anonymous activation/crash data, or remain telemetry-free?
+1. **Extension packaging validation in CI** — Missing. CI packages the `.vsix` but does not verify its contents or activation.
+2. **Duplicate item-name guard** — Missing in extension. Two enabled items with the same name overwrite each other on sync.
+3. **Server production hardening** — Missing validated production deployment, backups, monitoring, and real payment/webhook integration.
+4. **Server security defaults** — Missing safe defaults for `JWT_SECRET`, `SUPERADMIN_PASSWORD`, `RLS_ENABLED`, `DEV_SEED`, `CORS_ORIGIN`.
+5. **Runtime dependency CVE remediation** — Missing. Both extension and server have high/critical CVEs in runtime-reachable packages.
+6. **Extension/server integration test** — Missing. There is no test that verifies the extension can authenticate and call the server end-to-end.
+7. **CSP for web UI** — `helmet` CSP is disabled; the web UI uses inline scripts and `style` attributes.
 
 ---
 
 ## Detailed Findings
 
-### AUDIT-001 — Packaged `.vsix` is missing runtime dependencies
+### AUDIT-001 — Packaged VS Code: extension cannot activate (runtime dependencies missing)
 
 - **Classification:** Confirmed Defect
 - **Severity:** Critical
 - **Category:** Packaging / Deployment
 - **Disposition:** Open — Release Blocker
-- **Release impact:** A public `.vsix` built with the current script will fail to activate because `require("ajv")` cannot be resolved.
-- **Affected roles:** All end users installing the published extension.
+- **Release impact:** Any user installing the published `.vsix` will get `Cannot find module 'ajv'` on activation.
+- **Affected roles:** All end users.
 - **Affected files/locations:**
   - `package.json` (`"dependencies": { "ajv": "^8.12.0" }`)
   - `package.json` (`"scripts": { "package": "vsce package --no-dependencies" }`)
@@ -210,69 +188,29 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Evidence and reproduction:**
   ```bash
   npm run package
-  unzip -l ai-agent-hub-0.0.7.vsix
+  # ... no extension/node_modules entries
   ```
-  Output shows `extension/out/...` and `extension/package.json` but no `node_modules/`. The compiled `out/core/validator.js` top-level-requires `ajv`.
-
-  Reproduced by extracting the `.vsix` into a temp directory, adding a stub `vscode` module, and running `node -e "require('./out/extension.js')"`. It fails:
-
+  Extracted `.vsix` with a stub `vscode` module and ran `node -e "require('./out/extension.js')"`:
   ```text
   Error: Cannot find module 'ajv'
   Require stack:
-  - /tmp/vsix-check/extension/out/core/validator.js
-  - /tmp/vsix-check/extension/out/extension.js
+  - /tmp/vsix-check-merged/extension/out/core/validator.js
+  - /tmp/vsix-check-merged/extension/out/extension.js
   ```
+- **Root cause:** `vsce package --no-dependencies` intentionally omits `node_modules`, and there is no bundler inlining dependencies into `out/extension.js`.
+- **Recommended solution:** Remove `--no-dependencies` from `package.json` and `release.yml`, or add a bundler (esbuild/webpack) to produce a self-contained `out/extension.js`.
+- **Tests to add:** CI step that extracts the `.vsix` and verifies `node_modules/ajv` exists or that `out/extension.js` has no external `require` calls.
 
-  This confirms that the packaged extension cannot resolve its runtime dependency `ajv` and will fail to activate.
-- **Root cause:** `vsce package --no-dependencies` intentionally omits `node_modules`, and there is no bundler (webpack/esbuild) to inline dependencies into the emitted JavaScript.
-- **Technical / user / business impact:** Extension activation crash on install. Users cannot use the product at all. Marketplace reviews would be negative.
-- **Likelihood:** Certain for any user installing the current package.
-- **Recommended solution:**
-  - Option A (simpler): remove `--no-dependencies` from `package.json` and `release.yml` so that `vsce` installs and ships production `dependencies` in the `.vsix`. Ensure `mcp-proxy` is added to `dependencies` if MCP is to ship.
-  - Option B (cleaner): add a bundler (e.g., `esbuild`) to produce a single `out/extension.js` with all runtime dependencies inlined. Update `.vscodeignore` and `package.json` `main` accordingly.
-- **Regression risks:** Bundled output is harder to debug; shipping `node_modules` increases `.vsix` size.
-- **Tests to add:** CI step that extracts the packaged `.vsix` and verifies `node_modules/ajv` exists **or** that `out/extension.js` contains no external `require` calls for missing packages.
-- **Verification steps:**
-  1. Run `npm run package`.
-  2. Unzip `.vsix` and confirm `extension/node_modules/ajv` (or a self-contained `out/extension.js`).
-  3. Install the `.vsix` in a clean VS Code profile and confirm the extension activates without `Cannot find module 'ajv'`.
-- **Similar locations to inspect:** Any other runtime `dependencies` added in the future must be included in the packaged output.
-
-### AUDIT-002 — MCP server runtime is not packaged or pinned
+### AUDIT-002 — MCP runtime is not packaged or pinned
 
 - **Classification:** Confirmed Defect
 - **Severity:** High
 - **Category:** Security / Reliability / Deployment
 - **Disposition:** Open — Release Blocker (if MCP ships in MVP)
-- **Release impact:** The MCP feature is non-functional in the packaged extension and reaches out to npm at runtime with no version pinning.
-- **Affected roles:** Users who try to register an MCP server.
-- **Affected files/locations:**
-  - `src/core/mcpManager.ts:45-74`
-  - `package.json` (no `mcp-proxy` dependency)
-  - `src/ui/hubPanel.ts:277-295` (MCP add form)
-- **Evidence:**
-  - `grep -i "mcp-proxy" package.json package-lock.json` returns no results.
-  - `McpManager.start` executes `npx mcp-proxy --port <port> -- npx <packageName> ...args`.
-- **Root cause:** `mcp-proxy` and the target MCP packages are treated as external runtime utilities rather than declared, version-pinned dependencies.
-- **Impact:**
-  - **Security:** `npx` installs the latest `mcp-proxy` and the selected MCP package at runtime, bypassing the `package-lock.json` supply-chain guarantees.
-  - **Reliability:** No offline support; version drift; possible breaking changes in `mcp-proxy`.
-  - **Functionality:** Packaged extension cannot start MCP servers unless the user has network access and `npx` can install packages.
-- **Likelihood:** Certain for packaged users; high for any user without network.
-- **Recommended solution:**
-  1. Add `mcp-proxy` to `dependencies` with an exact version (e.g., `"mcp-proxy": "<pinned>"`).
-  2. Change `McpManager.start` to invoke the resolved `mcp-proxy` binary from `node_modules/.bin/mcp-proxy` (or via a bundled executable) instead of `npx`.
-  3. If inner MCP packages must be user-selectable, document that they are downloaded on demand and require network; or pre-declare supported packages.
-  4. If MCP is not ready for v1, remove its UI/commands and defer it.
-- **Regression risks:** Adding `mcp-proxy` may significantly increase `.vsix` size; bundle it if size is a concern.
-- **Tests to add:**
-  - Add an integration test that starts a tiny mock MCP server through `McpManager` and verifies the proxy port responds.
-  - Add a packaging test that confirms `mcp-proxy` is present in the `.vsix` if MCP is enabled.
-- **Verification steps:**
-  1. Add `mcp-proxy` as a dependency and package the extension.
-  2. Install `.vsix` offline and register `@modelcontextprotocol/server-filesystem`.
-  3. Click Start and verify `http://localhost:<port>/mcp` responds.
-- **Similar locations to inspect:** Any future subprocess spawning should use resolved, version-locked binaries.
+- **Release impact:** `mcp-proxy` is fetched by `npx` at runtime with no declared/pinned version and no offline support.
+- **Affected files/locations:** `src/core/mcpManager.ts:45-74`, `package.json`
+- **Evidence:** `package.json` has no `mcp-proxy` dependency. `McpManager.start` executes `npx mcp-proxy --port <port> -- npx <packageName> ...args`.
+- **Recommended solution:** Add `mcp-proxy` to `dependencies` with an exact version and invoke the resolved binary from `node_modules/.bin/mcp-proxy`; or remove MCP features from v1.
 
 ### AUDIT-003 — Vulnerable transitive runtime dependency `fast-uri` via `ajv`
 
@@ -280,119 +218,43 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Severity:** High
 - **Category:** Security / Dependencies
 - **Disposition:** Open — Required Before Release
-- **Release impact:** A runtime dependency with known path-traversal and host-confusion CVEs is shipped to end users.
-- **Affected roles:** All users.
-- **Affected files/locations:**
-  - `package.json` (`"ajv": "^8.12.0"` resolves to `ajv@8.20.0`)
-  - `node_modules/fast-uri@3.1.0`
-  - `src/core/validator.ts` (uses `ajv`)
-- **Evidence:**
-  ```bash
-  npm ls fast-uri
-  # ai-agent-hub@0.0.7
-  # └─┬ ajv@8.20.0
-  #   └── fast-uri@3.1.0
-  ```
-  `npm audit` reports `fast-uri <=3.1.4` — path traversal via percent-encoded dot segments, host confusion via percent-encoded authority delimiters.
-- **Root cause:** `ajv@8.20.0` depends on a vulnerable `fast-uri` version. The `package-lock.json` locks the vulnerable version.
-- **Impact:** `ajv` uses `fast-uri` for URI resolution when compiling/validating schemas. The Validator only loads trusted local schemas, so direct exploitation through user data is unlikely, but the dependency is still vulnerable and may be flagged by security scanners.
-- **Likelihood:** Low for active exploit (trusted schemas only), but high for compliance / scanner failure.
-- **Recommended solution:**
-  1. Run `npm update ajv` to get the latest patched `fast-uri` transitive.
-  2. If `ajv` cannot be updated quickly, add an `overrides` entry in `package.json`:
-     ```json
-     "overrides": {
-       "fast-uri": ">=3.1.5"
-     }
-     ```
-  3. Re-run `npm audit` and `npm test`.
-- **Regression risks:** Updating `ajv` may change validation error messages; tests should be re-run.
-- **Tests to add:** None specific, but run the existing `registry.test.ts` and `syncEngine.test.ts` after updating.
-- **Verification steps:**
-  1. `npm update ajv` (or add override).
-  2. `npm audit` should no longer flag `fast-uri`.
-  3. `npm test` and `npm run build` pass.
+- **Release impact:** `ajv@8.20.0` → `fast-uri@3.1.0` has known path-traversal and host-confusion CVEs.
+- **Affected files/locations:** `package.json`, `src/core/validator.ts`, `node_modules/fast-uri@3.1.0`
+- **Evidence:** `npm ls fast-uri` shows `ajv@8.20.0` → `fast-uri@3.1.0`. `npm audit` flags `fast-uri <=3.1.4`.
+- **Recommended solution:** `npm update ajv` or add an `overrides` entry for `fast-uri >=3.1.5`, then re-run `npm audit` and tests.
 
-### AUDIT-004 — Dev and build dependency vulnerabilities
+### AUDIT-004 — Dev and build dependency vulnerabilities (extension)
 
 - **Classification:** Probable Risk
 - **Severity:** Medium
 - **Category:** Supply Chain / DevOps
 - **Disposition:** Open — Required Before Release
 - **Release impact:** Compromised build tools could affect the generated `.vsix`.
-- **Affected roles:** Developers and CI.
-- **Affected files/locations:** `package-lock.json`; `node_modules/{vitest,postcss,undici,tmp,brace-expansion,form-data,qs,linkify-it,markdown-it,nanoid,vite}/`
-- **Evidence:** `npm audit --audit-level=moderate` reports 14 total vulnerabilities, including:
-  - `vitest <3.2.6` — critical arbitrary file read/execute when UI server is listening.
-  - `postcss <=8.5.22` — path traversal in source-map auto-loading.
-  - `undici 7.0.0-7.28.0` — multiple HTTP/TLS/COOP issues.
-  - `linkify-it / markdown-it / @vscode/vsce` — DoS via scan loops.
-  - `fast-uri` — runtime-reachable via `ajv`.
-- **Root cause:** Outdated transitive dev dependencies.
-- **Impact:**
-  - `vitest` critical is mitigated because CI uses `vitest --run` (no UI server), but it still poses a risk to local development.
-  - `vsce` (via `markdown-it/linkify-it`) runs in CI and could be affected by malicious README content if the README were attacker-controlled.
-  - `fast-uri` is a runtime-reachable transitive dependency.
-- **Likelihood:** Medium for dev environment; low for runtime except `fast-uri`.
-- **Recommended solution:**
-  1. Update `@vscode/vsce` to a patched version (>=3.9.2) to fix `markdown-it`/`linkify-it`.
-  2. Update `vitest` to >=3.2.6.
-  3. Run `npm audit fix` and review each change; rerun `npm test`, `npm run build`, and `npm run package`.
-- **Regression risks:** Updated build tools may change lint/format behavior or package output; test all gates.
-- **Tests to add:** Add a CI packaging-validation step.
-- **Verification steps:**
-  1. `npm audit` returns zero moderate+ vulnerabilities or only clearly non-runtime ones.
-  2. All existing checks pass.
+- **Affected files/locations:** `package-lock.json`, `node_modules/{vitest,postcss,undici,tmp,linkify-it,markdown-it,nanoid,vite,qs}`
+- **Evidence:** `npm audit --audit-level=low` reports 14 vulnerabilities: `vitest` critical, `undici`/`vite`/`postcss`/`tmp`/`linkify-it`/`nanoid` high, `qs` moderate, plus `fast-uri`.
+- **Recommended solution:** Update `@vscode/vsce` to >=3.9.2, `vitest` to >=3.2.6, and run `npm audit fix`; verify build/package/test still pass.
 
-### AUDIT-005 — Duplicate item names can overwrite each other on sync
+### AUDIT-005 — Duplicate extension item names can overwrite each other on sync
 
 - **Classification:** Confirmed Defect
 - **Severity:** Medium
 - **Category:** Data Integrity
 - **Disposition:** Open — Required Before Release
-- **Release impact:** A user can silently lose content when two enabled items share the same name.
-- **Affected roles:** Content authors.
-- **Affected files/locations:**
-  - `src/core/registry.ts:90-112` (`addItem`)
-  - `src/core/registry.ts:119-131` (`updateItem`)
-  - `src/core/fileWriter.ts:49-71` (slugify + write)
-- **Evidence:** `FileWriter` computes `slug = slugify(item.name)` and writes `path.join(targetDir, `${slug}.${ext}`)`. The Registry does not enforce unique `name` within a type.
-- **Root cause:** No uniqueness check and no file-name disambiguation.
-- **Impact:** Two enabled skills named "Clean Code" both write `clean-code.md`; the second write clobbers the first. The user sees only one file and may believe content was deleted.
-- **Likelihood:** Medium. Users may reuse common names.
-- **Recommended solution:**
-  - In `Registry.addItem` and `updateItem`, reject a name if an existing item of the same type already has that name (case-insensitive, after slugify).
-  - Or, in `FileWriter`, append a short id/hash to the slug when a collision is detected.
-- **Regression risks:** Backward compatibility for existing duplicate names if any.
-- **Tests to add:**
-  - `registry.test.ts`: adding two skills with the same name throws.
-  - `fileWriter.test.ts`: two items with the same slug produce distinct file paths.
-- **Verification steps:**
-  1. Add two skills both named "Test".
-  2. Sync and verify two distinct files are written or an error is shown.
+- **Release impact:** Two enabled items with the same name write the same slug file; the second clobbers the first.
+- **Affected files/locations:** `src/core/registry.ts:90-112`, `src/core/fileWriter.ts:49-71`
+- **Evidence:** `FileWriter` computes `slug = slugify(item.name)` and writes `path.join(targetDir, `${slug}.${ext}`)`. Registry does not enforce unique names per type.
+- **Recommended solution:** Enforce unique names in `Registry.addItem`/`updateItem` or disambiguate file names in `FileWriter`.
 
-### AUDIT-006 — No end-to-end or extension-host validation
+### AUDIT-006 — No end-to-end extension-host or packaging validation
 
 - **Classification:** Confirmed Missing Requirement
 - **Severity:** Medium
 - **Category:** Testing / Release Operations
 - **Disposition:** Open — Required Before Release
-- **Release impact:** The current packaging defect demonstrates that unit tests alone are insufficient to catch release-blocking runtime issues.
-- **Affected roles:** All users.
+- **Release impact:** Unit tests do not catch packaging or activation failures.
 - **Affected files/locations:** `.github/workflows/ci.yml`, `.github/workflows/release.yml`
-- **Evidence:** CI runs `npm test` but does not install the `.vsix` in VS Code or verify package contents.
-- **Root cause:** The project lacks E2E / packaging validation gates.
-- **Impact:** High-impact bugs (missing dependencies) can pass CI and be released.
-- **Likelihood:** High if not addressed.
-- **Recommended solution:**
-  1. Add a CI step after `vsce package` that extracts the `.vsix` and fails if `node_modules/<runtime-dep>` is missing (or confirms a bundled `extension.js`).
-  2. Add a lightweight VS Code Extension Host test using `@vscode/test-cli` that opens the command palette and runs `AI Agent Hub: Open`.
-  3. If full E2E is too heavy, at least run `node -e "require('./out/extension.js')"` with a minimal `vscode` stub to catch missing modules.
-- **Regression risks:** E2E tests can be flaky; keep them focused on activation and one sync flow.
-- **Tests to add:** packaging validation and one extension-host smoke test.
-- **Verification steps:**
-  1. Push the updated CI and confirm it catches the current missing-dependency issue.
-  2. After fixing packaging, confirm CI is green.
+- **Evidence:** CI packages the `.vsix` but never extracts it or installs it in VS Code:.
+- **Recommended solution:** Add a CI step that extracts the `.vsix` and fails if runtime deps are missing; add a lightweight Extension Host smoke test with `@vscode/test-cli`.
 
 ### AUDIT-007 — Remote builtin content update overwrites installed extension files
 
@@ -400,56 +262,28 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Severity:** Medium
 - **Category:** Security / Data Integrity
 - **Disposition:** Needs Product Decision
-- **Release impact:** The extension modifies its own install directory, which may fail on read-only installs or be reverted on update; remote content could in theory be tampered if HTTPS/GitHub credentials are compromised.
-- **Affected roles:** All users.
-- **Affected files/locations:**
-  - `src/core/syncEngine.ts:82-88`
-  - `src/core/hubUpdater.ts:91-136`
-- **Evidence:** `HubUpdater.copyHubContent` writes to `extensionPath/hub-content/...` after cloning to a cache directory under global storage.
-- **Root cause:** Builtin content updates are written to the extension install directory rather than user-writable global storage.
-- **Impact:**
-  - In some environments the extension directory is read-only; writes will silently fail and sync falls back to old content.
-  - A compromised remote branch could overwrite prompt content that agents will consume.
-  - Extension updates will overwrite locally updated builtins.
-- **Likelihood:** Low for exploit (requires GitHub branch compromise), medium for reliability issues.
-- **Recommended solution:**
-  1. Store updated builtins in `context.globalStorageUri`/`<globalStorage>/hub-content` and load from there first, falling back to the bundled `extensionPath/hub-content`.
-  2. Verify the remote clone uses the `main` branch of the same repo and consider pinning to a known-good commit/tag.
-- **Regression risks:** Changes to content lookup order; ensure tests cover both bundled and updated content.
-- **Tests to add:** Test that `HubUpdater` writes to global storage, not extension path.
-- **Verification steps:**
-  1. Trigger a sync with network.
-  2. Verify updated files land in a user-writable cache directory, not `<install>/hub-content/`.
+- **Release impact:** `HubUpdater` writes fetched content into `extensionPath/hub-content/`, which may be read-only or reverted on extension update.
+- **Affected files/locations:** `src/core/hubUpdater.ts:91-136`, `src/core/syncEngine.ts:82-88`
+- **Recommended solution:** Store updated builtins in `context.globalStorageUri`/`<globalStorage>/hub-content` and load from there first, falling back to bundled files.
 
-### AUDIT-008 — Frontmatter parser is not YAML-compliant
+### AUDIT-008 — Extension frontmatter parser is not YAML-compliant
 
 - **Classification:** Design Concern
 - **Severity:** Low
 - **Category:** Data Integrity / Maintainability
 - **Disposition:** Scheduled Post-Release
-- **Release impact:** Builtin files with quoted colons, multi-line values, or YAML lists will not parse correctly.
-- **Affected roles:** Content authors and maintainers of `hub-content/`.
+- **Release impact:** Builtin files with quoted colons or multi-line values may parse incorrectly.
 - **Affected files/locations:** `src/core/registry.ts:209-227`
-- **Evidence:** Parser splits each frontmatter line at the first `:` without YAML escaping or quote handling.
-- **Root cause:** Custom key-value parser instead of a YAML library.
-- **Impact:** Metadata in bundled files may be parsed incorrectly, leading to wrong `name`, `enabled`, or `trigger` values.
-- **Likelihood:** Low currently (demo files use simple key-value), but grows with content complexity.
-- **Recommended solution:** Either add a YAML parser (e.g., `js-yaml`) for frontmatter or update the README to describe the format as "simple `key: value` frontmatter" rather than YAML.
-- **Regression risks:** YAML parser may introduce a new runtime dependency; consider bundling or replacing with a tiny parser.
-- **Tests to add:** Add tests for quoted colons and multi-line values.
-- **Verification steps:** Create a builtin skill with `description: "A: B"` and verify it is parsed correctly.
+- **Recommended solution:** Use a YAML parser for frontmatter or update README to describe the format as simple `key: value`.
 
-### AUDIT-009 — README lists unregistered MCP commands
+### AUDIT-009 — README and `package.json` commands now consistent
 
-- **Classification:** Design Concern
+- **Classification:** Design Concern (resolved)
 - **Severity:** Low
 - **Category:** Documentation / Consistency
-- **Disposition:** Scheduled Post-Release
-- **Release impact:** Users may look for commands that do not exist.
-- **Affected files/locations:** `README.md` (commands table), `package.json` (`contributes.commands`)
-- **Evidence:** README lists `AI Agent Hub: Add MCP Server` and `AI Agent Hub: Show MCP Servers`; `package.json` registers only seven commands and neither is MCP-related.
-- **Recommended solution:** Either register the two MCP commands in `package.json` and `src/extension.ts` or remove them from the README.
-- **Regression risks:** Minimal.
+- **Disposition:** Closed
+- **Evidence:** `package.json` contributes the same 10 commands listed in `README.md`.
+- **Note:** No action required; tracked for completeness.
 
 ### AUDIT-010 — MCP port conflict check is config-only
 
@@ -457,30 +291,20 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Severity:** Low
 - **Category:** Reliability
 - **Disposition:** Scheduled Post-Release
-- **Release impact:** `McpManager` may fail to start if the port is already in use by another process.
+- **Release impact:** `McpManager` may fail if a port is already in use.
 - **Affected files/locations:** `src/core/mcpStore.ts:50-53`
-- **Evidence:** Port uniqueness is checked only against other stored MCP configs, not the OS.
-- **Recommended solution:** Add a bind check before spawning, or handle `EADDRINUSE` with a clearer error message.
-- **Regression risks:** Minor.
+- **Recommended solution:** Add an OS bind check before spawning or handle `EADDRINUSE` with a clear error.
 
-### AUDIT-011 — Audit report bundled into `.vsix`
+### AUDIT-011 — Audit report and skill files bundled into `.vsix`
 
-- **Classification:** Design Concern
-- **Severity:** Low
+- **Classification:** Confirmed Defect
+- **Severity:** Medium
 - **Category:** Packaging / Privacy
-- **Disposition:** Scheduled Post-Release
-- **Release impact:** `PRODUCTION_READINESS_AUDIT.md` is shipped to every user in the `.vsix` because `.vscodeignore` does not exclude it.
-- **Affected files/locations:**
-  - `.vscodeignore`
-  - `ai-agent-hub-0.0.7.vsix` contents
-- **Evidence:** `unzip -l ai-agent-hub-0.0.7.vsix` lists `extension/PRODUCTION_READINESS_AUDIT.md` (35.37 KB). `.vscodeignore` excludes `DUE_DILIGENCE_REVIEW.md` and `REQUIREMENTS_AND_FIX_PLAN.md` but not `PRODUCTION_READINESS_AUDIT.md`.
-- **Root cause:** Missing entry in `.vscodeignore`.
-- **Impact:** Slightly larger package; internal audit details exposed to end users. No security impact, but unnecessary and inconsistent with other dev docs.
-- **Likelihood:** Certain for current package.
-- **Recommended solution:** Add `PRODUCTION_READINESS_AUDIT.md` to `.vscodeignore`.
-- **Regression risks:** None.
-- **Tests to add:** CI packaging-validation step could also assert that no `*.md` audit docs are in the `.vsix`.
-- **Verification steps:** Package the extension and confirm `PRODUCTION_READINESS_AUDIT.md` is not in the `.vsix`.
+- **Disposition:** Open — Required Before Release
+- **Release impact:** `PRODUCTION_READINESS_AUDIT.md` (38.35 KB), `.agents/skills/...`, `CHANGELOG.md`, and `SECURITY.md` are shipped to every user.
+- **Affected files/locations:** `.vscodeignore`, `ai-agent-hub-0.0.7.vsix`
+- **Evidence:** `unzip -l ai-agent-hub-0.0.7.vsix` lists `extension/PRODUCTION_READINESS_AUDIT.md` and `extension/.agents/skills/ai-agent-hub-extension-testing/SKILL.md`.
+- **Recommended solution:** Add `PRODUCTION_READINESS_AUDIT.md`, `.agents/`, `CHANGELOG.md`, `SECURITY.md`, `docs/`, `server/`, `cli/`, `deploy/`, and `site/` to `.vscodeignore` (some already present; `PRODUCTION_READINESS_AUDIT.md` and `.agents/` are missing).
 
 ### AUDIT-012 — Validator silently skips validation when schema is missing
 
@@ -488,15 +312,173 @@ There is one user role. No admin, support, or read-only roles are required for a
 - **Severity:** Low
 - **Category:** Data Integrity / Reliability
 - **Disposition:** Scheduled Post-Release
-- **Release impact:** If a schema file is missing or fails to load, invalid data can be persisted and synced without warning.
+- **Release impact:** If a schema file is missing, invalid data can be persisted without warning.
 - **Affected files/locations:** `src/core/validator.ts:56-62`
-- **Evidence:** `validate()` returns an empty array when `this.ajv.getSchema(type)` is undefined.
-- **Root cause:** Graceful fallback treats "schema not loaded" as "valid".
-- **Impact:** In a packaged `.vsix` where schemas might be excluded by an `.vscodeignore` mistake, invalid content could bypass validation. Currently schemas are bundled, so the risk is low.
-- **Likelihood:** Low.
-- **Recommended solution:** Distinguish "schema missing" from "valid": return a dedicated error or throw when a requested schema is not loaded, and let callers decide whether to block.
-- **Regression risks:** Could cause tests to fail if schemas are not set up correctly.
-- **Tests to add:** Test that `Validator.validate` with an unknown schema returns a non-empty error list.
+- **Recommended solution:** Return a dedicated error when a requested schema is not loaded.
+
+### AUDIT-S001 — Server ships with hardcoded/default secrets and insecure defaults
+
+- **Classification:** Confirmed Defect
+- **Severity:** Critical
+- **Category:** Security / Configuration
+- **Disposition:** Open — Release Blocker
+- **Release impact:** Any deployment that does not override every environment variable is trivially compromised.
+- **Affected roles:** All server users, orgs, and the platform operator.
+- **Affected files/locations:**
+  - `server/src/config.ts:60-113` (`JWT_SECRET`, `SUPERADMIN_PASSWORD`, `DEV_API_KEY`, `DEV_SEED`, `CORS_ORIGIN`, `RLS_ENABLED`, `superadminEmail`)
+  - `server/src/index.ts:30-32` (`migrate()`, `seedDev()`, `seedSuperadmin()` called before listen)
+- **Evidence:**
+  - `JWT_SECRET` defaults to `dev-secret-change-me`.
+  - `SUPERADMIN_PASSWORD` defaults to `change-me` and `SUPERADMIN_EMAIL` to `admin@localhost`.
+  - `DEV_SEED` defaults to `true`, `DEV_API_KEY` to `hub_dev_localkey`.
+  - `CORS_ORIGIN` defaults to `*`.
+  - `seedSuperadmin()` runs on every boot if `superadminEmail` is set and creates/updates a platform admin with the configured password hash.
+- **Root cause:** Configuration uses unsafe fallbacks and `seedSuperadmin()` is unconditional.
+- **Impact:**
+  - Anyone can forge JWTs signed with the known `JWT_SECRET`.
+  - Anyone can log in as the default superadmin with password `change-me`.
+  - A fresh production instance silently seeds a `dev` org and a known API key if `DEV_SEED` is not disabled.
+  - CORS `*` allows any origin to call the API with credentials.
+- **Likelihood:** Certain for any deployment that copies the `.env.example` without full overrides.
+- **Recommended solution:**
+  1. Remove all unsafe fallbacks for security-critical values (`JWT_SECRET`, `SUPERADMIN_PASSWORD`, `DEV_API_KEY`) and fail fast with a clear error if they are not set.
+  2. Default `DEV_SEED` to `false` and only enable it in a dedicated `dev`/`test` Docker Compose override.
+  3. Default `RLS_ENABLED` to `true`.
+  4. Default `CORS_ORIGIN` to the value of `APP_BASE_URL` instead of `*`.
+  5. Update `.env.example` and `deploy/docker-compose.prod.yml` to require these values and provide a production-check script.
+- **Tests to add:** A startup test that asserts the server refuses to boot when `JWT_SECRET` or `SUPERADMIN_PASSWORD` are the default/empty.
+- **Verification steps:**
+  1. Run `npm start` without `JWT_SECRET` and confirm it exits with an error.
+  2. Run with `DEV_SEED=false` and confirm no dev org/API key is created.
+
+### AUDIT-S002 — Row-Level Security is disabled by default
+
+- **Classification:** Confirmed Defect
+- **Severity:** High
+- **Category:** Security / Multi-tenancy
+- **Disposition:** Open — Release Blocker
+- **Release impact:** Tenant isolation relies entirely on application-layer `org_id` filtering; a bug or SQL injection could leak data across orgs.
+- **Affected roles:** All org users.
+- **Affected files/locations:**
+  - `server/src/config.ts:80` (`RLS_ENABLED` defaults to `false`)
+  - `server/src/db/pool.ts:40-42` (`exec` only sets `app.current_org` when `config.rlsEnabled` is true)
+  - `server/migrations/005_rls.sql` (RLS policies installed but not enforced when off)
+- **Evidence:** `env('RLS_ENABLED', 'false') === 'true'`; `config.rlsEnabled` is `false` unless explicitly set.
+- **Root cause:** RLS is treated as an opt-in feature despite being a defense-in-depth control for multi-tenancy.
+- **Impact:** Any missed `org_id` filter or SQL injection could expose other tenants' data.
+- **Recommended solution:** Default `RLS_ENABLED` to `true`, require it in production, and provide a documented escape hatch only for the platform superadmin/global reads.
+
+### AUDIT-S003 — Server Dockerfile uses `npm install`, runs as root, and lacks production hardening
+
+- **Classification:** Confirmed Defect
+- **Severity:** High
+- **Category:** Security / Deployment
+- **Disposition:** Open — Required Before Release
+- **Release impact:** Production image is larger than necessary, may install unintended versions, and runs as root.
+- **Affected files/locations:** `server/Dockerfile`
+- **Evidence:**
+  ```dockerfile
+  FROM node:20-slim
+  COPY package.json ./
+  RUN npm install
+  COPY . .
+  RUN npm run build
+  EXPOSE 8080
+  CMD ["node", "dist/index.js"]
+  ```
+- **Root cause:** No multi-stage build, no `npm ci`, no `NODE_ENV=production`, no non-root user, no `.dockerignore`, no healthcheck in the Dockerfile.
+- **Impact:**
+  - `npm install` may install different versions than `package-lock.json`.
+  - Optional dev dependencies (e.g., `tsx`) are kept in the image.
+  - Container runs as root.
+  - Build cache is less effective and image size larger.
+- **Recommended solution:**
+  1. Use a multi-stage build: install in a `builder` stage with `npm ci`, build, then copy only `package.json`, `package-lock.json`, and `dist/` to a runtime stage.
+  2. Set `NODE_ENV=production` and run `npm ci --omit=dev` in the runtime stage.
+  3. Create a non-root user (`USER node`) and `WORKDIR /app` with correct permissions.
+  4. Add `HEALTHCHECK` and `.dockerignore`.
+
+### AUDIT-S004 — Server runtime dependency vulnerabilities
+
+- **Classification:** Probable Risk
+- **Severity:** High
+- **Category:** Security / Dependencies
+- **Disposition:** Open — Required Before Release
+- **Release impact:** Runtime-reachable packages have known high/critical CVEs.
+- **Affected roles:** All server users.
+- **Affected files/locations:** `server/package-lock.json`, `server/package.json`
+- **Evidence:**
+  ```bash
+  (cd server && npm audit --audit-level=low)
+  # 13 vulnerabilities (3 moderate, 9 high, 1 critical)
+  ```
+  Specific runtime-reachable paths:
+  - `protobufjs@6.11.6` (critical) via `hub-server` → `@xenova/transformers` → `onnxruntime-web` → `onnx-proto`.
+  - `sharp` (high) via `@xenova/transformers`.
+  - `hono@4.12.31` (high) via `@modelcontextprotocol/sdk`.
+  - `ip-address@10.2.0` (high) via `@modelcontextprotocol/sdk` → `express-rate-limit`.
+  - `nodemailer@6.10.1` (high, direct dependency).
+- **Root cause:** `@xenova/transformers` (optional dependency) and `@modelcontextprotocol/sdk` pull in vulnerable transitive packages; `nodemailer` is outdated.
+- **Impact:** Remote code execution, SSRF/trust-boundary bypass, SMTP command injection, and DoS are possible depending on the advisory.
+- **Recommended solution:**
+  1. Update `nodemailer` to a patched version.
+  2. Decide whether MiniLM embeddings are required in production. If not, remove `@xenova/transformers` from optional dependencies and rely on the `local` hash fallback.
+  3. Update `@modelcontextprotocol/sdk` to a patched version or override the vulnerable transitive packages.
+  4. Run `npm audit` until no high/critical runtime-reachable vulnerabilities remain.
+- **Tests to add:** Re-run the full server test suite after updates.
+
+### AUDIT-S005 — No validated production deployment, backups, or monitoring
+
+- **Classification:** Missing Requirement
+- **Severity:** High
+- **Category:** Operations / Reliability
+- **Disposition:** Open — Required Before Release
+- **Release impact:** The product has only run on `localhost` and in CI with ephemeral containers. There is no evidence of a working production deploy.
+- **Affected files/locations:** `deploy/docker-compose.yml`, `deploy/docker-compose.prod.yml`, `docs/DEPLOYMENT.md`, `docs/LAUNCH-READINESS.md`
+- **Evidence:** `docs/LAUNCH-READINESS.md` lists "Deploy to real infrastructure", "Backups — and a tested restore", "Monitoring & alerting", and "Payments actually live" as still open.
+- **Recommended solution:**
+  1. Build and run the production Docker Compose stack end-to-end.
+  2. Configure managed Postgres with automated backups and perform a restore drill.
+  3. Add error tracking (Sentry), uptime checks on `/ready`, and alerts on the `system_event` error stream.
+  4. Configure a real Stripe account, metered price, and webhook endpoint; replace `price_team`.
+
+### AUDIT-S006 — Server web UI has `helmet` CSP disabled
+
+- **Classification:** Probable Risk
+- **Severity:** Medium
+- **Category:** Security / Web
+- **Disposition:** Open — Required Before Release
+- **Release impact:** `contentSecurityPolicy: false` removes a key XSS defense for the customer/operator consoles.
+- **Affected files/locations:** `server/src/index.ts:37`
+- **Evidence:** `await app.register(helmet, { contentSecurityPolicy: false });`
+- **Root cause:** CSP was disabled to support inline CSS/JS in the hand-rolled HTML strings.
+- **Impact:** Any XSS vulnerability (e.g., reflected user input rendered without escaping) can execute scripts. The web UI does insert user data via `textContent` in most places, but a single missing escape is enough.
+- **Recommended solution:**
+  1. Move inline scripts/styles to external files and enable a strict CSP.
+  2. If inline scripts must remain, use nonces or hashes and keep `script-src 'self'` with `'nonce-...'`.
+  3. Audit all `innerHTML`/HTML concatenation for user-controlled values.
+
+### AUDIT-S007 — Dev seed runs unless explicitly disabled
+
+- **Classification:** Confirmed Defect
+- **Severity:** Medium
+- **Category:** Security / Configuration
+- **Disposition:** Open — Required Before Release
+- **Release impact:** A production deployment that forgets `DEV_SEED=false` creates a known `dev` org and API key (`hub_dev_localkey`).
+- **Affected files/locations:** `server/src/config.ts:73`, `server/src/db/migrate.ts:36-76`, `server/src/index.ts:31`
+- **Evidence:** `devSeed: env('DEV_SEED', 'true') === 'true'`; `seedDev()` runs before the server listens when enabled.
+- **Recommended solution:** Default `DEV_SEED` to `false`; only enable it in `deploy/docker-compose.yml` and CI, never in `docker-compose.prod.yml`.
+
+### AUDIT-S008 — Server has no lint/format checks
+
+- **Classification:** Missing Requirement
+- **Severity:** Low
+- **Category:** Code Quality / DevOps
+- **Disposition:** Open — Required Before Release
+- **Release impact:** No automated formatting or linting gate for server code.
+- **Affected files/locations:** `server/package.json` (no `lint` or `format` scripts), `.github/workflows/server-ci.yml`
+- **Evidence:** Server CI runs `typecheck`, `build`, `migrate`, and `test` only.
+- **Recommended solution:** Add `eslint` and `prettier` to `server/package.json` and to `.github/workflows/server-ci.yml`.
 
 ---
 
@@ -504,31 +486,31 @@ There is one user role. No admin, support, or read-only roles are required for a
 
 ### Immediate release blockers
 
-1. **AUDIT-001 — Fix `.vsix` packaging.** Decide between shipping `node_modules` or bundling. Implement, update `package.json` and `release.yml`, and add a packaging-validation CI step.
-2. **AUDIT-002 — Package and pin MCP runtime.** If MCP is in scope, add `mcp-proxy` to `dependencies` with an exact version and invoke the resolved binary. If not in scope, remove MCP UI/commands.
-3. **AUDIT-003 — Patch `fast-uri` / update `ajv`.** Ensure runtime dependency audit is clean.
+1. **AUDIT-001 — Fix extension `.vsix` packaging.** Remove `--no-dependencies` or add a bundler. Add a CI packaging-validation step.
+2. **AUDIT-S001 — Remove server default secrets.** Fail fast if `JWT_SECRET`, `SUPERADMIN_PASSWORD`, or `DEV_API_KEY` are unset or equal to defaults. Default `DEV_SEED=false` and `RLS_ENABLED=true`.
+3. **AUDIT-S002 — Enable RLS by default.** Set `RLS_ENABLED=true` as the default and require it in production.
+4. **AUDIT-S004 — Patch server runtime CVEs.** Update or remove `@xenova/transformers`, update `nodemailer`, update `@modelcontextprotocol/sdk` or its transitive deps. Re-run `npm audit` until no high/critical runtime vulnerabilities remain.
+5. **AUDIT-002 — Pin MCP runtime.** Add `mcp-proxy` to extension `dependencies` with an exact version and call the resolved binary.
 
 ### Required pre-release work
 
-4. **AUDIT-004 — Update vulnerable dev/build dependencies.** Prioritize `@vscode/vsce` and `vitest`.
-5. **AUDIT-005 — Prevent duplicate item-name data loss.** Enforce unique names per type or disambiguate file names.
-6. **AUDIT-006 — Add packaging / extension-host validation.** Catch missing dependencies and activation failures in CI.
-7. **AUDIT-007 — Decide on remote builtin-update location.** Consider moving updates to user-writable global storage.
+6. **AUDIT-S003 — Harden server Dockerfile.** Use `npm ci`, multi-stage build, non-root user, `NODE_ENV=production`, and a `HEALTHCHECK`.
+7. **AUDIT-003 — Patch `fast-uri` / update `ajv` in the extension.**
+8. **AUDIT-004 — Update extension dev/build dependency CVEs.** Prioritize `@vscode/vsce` and `vitest`.
+9. **AUDIT-005 — Prevent duplicate extension item-name data loss.**
+10. **AUDIT-006 — Add extension packaging / extension-host validation to CI.**
+11. **AUDIT-S006 — Enable CSP for server web UI.** Move inline scripts/styles out or use nonces/hashes.
+12. **AUDIT-011 — Exclude dev/audit docs and `.agents/` from `.vsix`.**
 
 ### Short-term post-release improvements
 
-8. **AUDIT-008 — Replace frontmatter parser or update README.**
-9. **AUDIT-009 — Align README command list with `package.json`.**
-10. **AUDIT-010 — Improve MCP port conflict handling.**
-11. **AUDIT-011 — Exclude `PRODUCTION_READINESS_AUDIT.md` from `.vsix`.**
-12. **AUDIT-012 — Harden Validator schema-missing behavior.**
-
-### Long-term architectural improvements
-
-- Add a bundler (webpack/esbuild) to reduce `.vsix` size and avoid shipping `node_modules`.
-- Add import/export and backup features for user content.
-- Consider marketplace-specific packaging and publishing checks.
-- Evaluate telemetry, crash reporting, and opt-in analytics if user base grows.
+13. **AUDIT-S005 — Validate production deployment.** Build and run `docker-compose.prod.yml`, configure backups, monitoring, and real Stripe.
+14. **AUDIT-S007 — Remove dev seed from production path.**
+15. **AUDIT-S008 — Add server lint/format to CI.**
+16. **AUDIT-007 — Move remote builtin updates to global storage.**
+17. **AUDIT-008 — Replace frontmatter parser or update README.**
+18. **AUDIT-010 — Improve MCP port conflict handling.**
+19. **AUDIT-012 — Harden Validator schema-missing behavior.**
 
 ---
 
@@ -538,46 +520,50 @@ There is one user role. No admin, support, or read-only roles are required for a
 
 | Risk | Rationale | Disposition |
 |------|-----------|-------------|
-| No telemetry / crash reporting | Local single-user MVP; can be added post-release | Accepted Risk |
-| No RBAC / multi-tenancy | Out of scope for a local dev tool | Accepted Risk |
-| No formal accessibility certification | VS Code webviews inherit platform a11y; manual keyboard testing recommended | Accepted Risk |
-| MCP executes arbitrary npm packages | User explicitly registers packages; mitigated by validation and `shell: false` | Accepted Risk (with documentation) |
+| No telemetry / crash reporting in extension | Local single-user MVP; can be added post-release | Accepted Risk |
+| MCP executes arbitrary npm packages locally | User explicitly registers packages; mitigated by validation and `shell: false` | Accepted Risk (with documentation) |
+| Optional LLM gateway requires customer BYO keys | Gateway is off by default; not a vendor LLM service | Accepted Risk |
+| SOC 2 / formal audit | Process control; can be pursued after first paying customers | Deferred |
 
 ### Unverified concerns
 
-- Real VS Code extension-host activation and command execution.
+- Real VS Code: extension-host activation and command execution after packaging fix.
 - Actual file sync into Cursor/Kiro/Copilot/Amazon Q config folders.
 - MCP server end-to-end startup against a real package.
-- Marketplace acceptance, icon, and metadata validation.
-- Windows path handling and `npx.cmd` behavior.
+- Docker production deploy, TLS termination, backup/restore, and Stripe webhook verification.
+- Load, concurrency, and penetration testing of the server.
+- Windows-specific extension and CLI behavior.
 
 ### Required manual / specialized testing before release
 
-1. Install the built `.vsix` in a clean VS Code profile and activate the extension.
-2. Open the Hub panel, add a skill, and sync to a test workspace.
-3. Verify files appear in the configured agent target folder with the correct layout/extension.
-4. If MCP ships, register and start `@modelcontextprotocol/server-filesystem` and verify the HTTP endpoint.
-5. Run `npm audit` on the final lockfile and confirm no moderate+ runtime vulnerabilities.
+1. Build and install the `.vsix` in a clean VS Code: profile; activate and open the Hub panel.
+2. Add a skill, sync to a test workspace, and verify files appear in the agent target folder.
+3. Run `docker compose -f deploy/docker-compose.yml -f deploy/docker-compose.prod.yml up --build` and exercise signup, login, org creation, API key creation, memory write, RAG query, and gateway proxy.
+4. Perform a Postgres backup and restore drill.
+5. Configure real Stripe, run a test checkout, and verify the webhook updates the org plan.
+6. Run `npm audit` on both `package-lock.json` and `server/package-lock.json` until no runtime high/critical vulnerabilities remain.
+7. Run a security review or light penetration test against the server's auth, RLS, and gateway routes.
 
 ### Readiness checklist
 
-| Area | Status | Evidence |
-|------|--------|----------|
-| Build | Pass | `npm run build` exits 0 |
-| Type checking | Pass | `tsc` with `strict: true` |
-| Lint | Pass | `npm run lint` exits 0 |
-| Format | Pass | `npm run format:check` exits 0 |
-| Unit tests | Pass | `npm test` — 38 tests pass |
-| Packaging | Fail | `.vsix` missing `node_modules` / runtime dependencies |
-| Security (access control) | Not Applicable | Local single-user extension |
-| Security (input validation) | Partial | Path validation, arg validation present; dependency CVEs remain |
-| Security (supply chain) | Fail | `mcp-proxy` fetched by `npx`; `fast-uri` and other CVEs present |
-| Deployment / CI | Partial | Workflows exist; packaging validation missing |
-| Monitoring / observability | Not Applicable | Local dev tool, no runtime service |
-| Backup / disaster recovery | Not Applicable | User content in Memento; manual backup not implemented |
-| Performance / scalability | Not Tested | In-memory registry and file writes; expected fine for small data |
-| UX / accessibility | Not Tested | Webview UI not exercised in a real VS Code host |
-| E2E / smoke tests | Fail | No extension-host or packaging smoke test |
+| Area | Extension Status | Server Status | Evidence |
+|------|-----------------|---------------|----------|
+| Build | Pass | Pass | `npm run build` / `npm run build` (server) |
+| Type checking | Pass | Pass | `tsc` / `tsc --noEmit` (server) |
+| Lint | Pass | Missing | Extension `npm run lint`; server has no lint script |
+| Format | Pass | Missing | Extension `npm run format:check`; server has no format script |
+| Unit tests | Pass | N/A | 38 tests pass |
+| Integration tests | N/A | Pass | 26 server tests pass against Postgres |
+| Packaging | Fail | N/A | `.vsix` missing `node_modules`; audit docs leak in |
+| Security (access control) | N/A | Partial | RBAC/RLS code exists; RLS disabled by default |
+| Security (input validation) | Partial | Partial | Path/arg validation in extension; Zod in server; dependency CVEs remain |
+| Security (supply chain) | Fail | Fail | `mcp-proxy` via `npx`; `fast-uri`, `protobufjs`, `nodemailer`, `hono`, `ip-address` CVEs |
+| Deployment / CI | Partial | Partial | Workflows exist; packaging validation missing; server lint missing |
+| Monitoring / observability | Not Applicable | Missing | No Sentry, uptime alerts, or dashboards wired |
+| Backup / disaster recovery | Not Applicable | Missing | Documented but not validated |
+| Performance / scalability | Not Tested | Not Tested | Single-request smoke tests only |
+| UX / accessibility | Not Tested | Not Tested | Web UIs not exercised manually |
+| E2E / smoke tests | Fail | Partial | No extension-host smoke; server tests cover core flows but not production deploy |
 
 ---
 
