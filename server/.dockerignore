@@ -1,4 +1,12 @@
 node_modules
 dist
-.env
+.git
+.github
+.vscode
 *.log
+*.md
+coverage
+.nyc_output
+.env
+.env.*
+!migrations

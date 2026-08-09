@@ -35,10 +35,14 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
       - name: Package VSIX
         run: npm run package
 
       - name: Verify VSIX contains runtime dependencies
         run: |
-          unzip -l ai-agent-hub-*.vsix | grep -q "extension/node_modules/ajv/" || { echo "ERROR: .vsix missing runtime dependencies"; exit 1; }
+          unzip -l ai-agent-hub-*.vsix | grep -q "extension/node_modules/ajv/" || { echo "ERROR: .vsix missing ajv"; exit 1; }
+          unzip -l ai-agent-hub-*.vsix | grep -q "extension/node_modules/mcp-proxy/" || { echo "ERROR: .vsix missing mcp-proxy"; exit 1; }
           unzip -l ai-agent-hub-*.vsix | grep -qE "extension/(PRODUCTION_READINESS|CHANGELOG|SECURITY|\.agents)" && { echo "ERROR: .vsix contains dev/audit files"; exit 1; } || true

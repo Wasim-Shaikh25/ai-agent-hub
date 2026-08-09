@@ -33,8 +33,27 @@ async function main(): Promise<void> {
 
   const app = Fastify({ logger: true, bodyLimit: 10 * 1024 * 1024, trustProxy: true });
 
-  // Security headers. CSP is relaxed for the dashboard's inline CSS/JS.
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // Security headers. CSP protects the dashboard; 'unsafe-inline' is kept
+  // because the UI is currently a single server-rendered page with inline
+  // scripts/styles. External resource loading is still restricted to 'self'.
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrcAttr: ["'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        styleSrcAttr: ["'unsafe-inline'"],
+        connectSrc: ["'self'"],
+        imgSrc: ["'self'", "data:"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'self'"],
+      },
+    },
+  });
   await app.register(cors, { origin: config.corsOrigin === '*' ? true : config.corsOrigin.split(','), credentials: true });
 
   // Rate limit per API key / IP so a noisy client can't overwhelm the server.
@@ -56,7 +75,8 @@ async function main(): Promise<void> {
   });
 
   // Don't leak internals; log the real error, return a clean envelope.
-  app.setErrorHandler((err, req, reply) => {
+  app.setErrorHandler((rawErr, req, reply) => {
+    const err = rawErr as Error & { statusCode?: number };
     const status = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
     if (status >= 500) req.log.error(err);
     reply.code(status).send({ error: { code: status === 429 ? 'rate_limited' : 'server_error', message: status >= 500 ? 'Internal server error' : err.message } });

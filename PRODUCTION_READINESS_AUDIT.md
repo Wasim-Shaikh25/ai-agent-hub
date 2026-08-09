@@ -13,32 +13,32 @@
 
 AI Agent Hub has expanded from a local VS Code: extension into a full SaaS platform: the extension (Content Plane) now connects to a `hub-server` (Context / Gateway / Governance Planes) that provides shared sessions, memory, code-aware RAG, MCP aggregation, RBAC, SSO, billing, and admin/operator consoles. PR #10 also added a CLI connector, a customer web app, a marketing landing page, Docker Compose stacks, and extensive legal/spec docs.
 
-The good news: both the extension unit tests (38 pass) and the server integration tests (26 pass) are green, and the server builds and typechecks cleanly. The architecture is well documented and the test suite covers auth, RLS, entitlements, RAG, gateway fallback, and MCP aggregation.
+The previous batch of release-blocker fixes (PR #16) added safe secret validation, RLS-by-default, and `.vsix` packaging. This batch (PR #17) pins the MCP runtime, patches server runtime CVEs, hardens the server Dockerfile, enables CSP, and adds CI packaging/audit gates. Root lint/build/test/format pass (42 tests), server typecheck/build/test pass (26 tests), `server/npm audit` reports zero vulnerabilities, and root `npm audit --omit=dev` reports zero production vulnerabilities.
 
-The bad news: **the product is not ready for production or public release.** The packaged VS Code: extension still cannot activate because runtime dependencies are omitted, and the server ships with hardcoded/default secrets, Row-Level Security disabled by default, a long list of runtime dependency CVEs, and no validated production deployment path.
+The extension `.vsix` now ships `ajv` and `mcp-proxy`, the server rejects unsafe defaults in production, RLS is enabled by default, and the production Docker path uses a multi-stage non-root image. Several unvalidated areas remain: real VS Code: Extension Host activation, production Docker Compose deployment, TLS/backup/monitoring, and load/penetration testing.
 
-**Final recommendation:** **STOP — DO NOT GO**
+**Final recommendation:** **CONDITIONAL GO**
 
-Do not publish the extension, deploy the server, or onboard paying customers until the packaging/runtime-dependency issue, the server's default security posture, and its runtime dependency CVEs are resolved.
+The release blockers tracked in `docs/release-blockers/tracker.md` are resolved. The product may proceed to a release candidate after a real VS Code: Extension Host smoke test and a production Docker Compose deployment test.
 
 ### Finding summary
 
+> **Note:** The table below reflects the original audit snapshot. The current status of each release blocker is tracked in `docs/release-blockers/tracker.md`. The fixed items in this PR include the previously critical/high packaging, secret, RLS, CVE, Dockerfile, and CSP findings.
+
 | Severity | Count | Examples |
 |----------|-------|----------|
-| Critical | 3 | Packaged `.vsix` cannot activate; server defaults to hardcoded `JWT_SECRET` / `SUPERADMIN_PASSWORD`; `protobufjs` critical CVE in server runtime path |
-| High | 6 | `fast-uri` via `ajv`; `mcp-proxy` unpinned; server `RLS_ENABLED=false` by default; server `Dockerfile` runs as root with `npm install`; `fastify`/`find-my-way`, `nodemailer`, `hono`, `ip-address` runtime CVEs |
-| Medium | 6 | No packaging validation in CI; missing production deploy/backup/monitoring; dev seed enabled by default; `PRODUCTION_READINESS_AUDIT.md` and `.agents/` leak into `.vsix`; duplicate item names can overwrite files; CSP disabled for web UI |
-| Low | 5 | YAML frontmatter parser not YAML-compliant; README command mismatch; MCP port conflict not OS-checked; `Validator` silently skips missing schemas; `CHANGELOG.md`/`SECURITY.md` bundled in `.vsix` |
+| Critical | 0 | — |
+| High | 0 | — |
+| Medium | 2 | Production deployment/backup/monitoring not validated; CSP uses `unsafe-inline` as a transitional measure |
+| Low | 4 | YAML frontmatter parser not YAML-compliant; MCP port conflict not OS-checked; `Validator` silently skips missing schemas; remote builtin updates may overwrite installed files |
 
 ### Major technical risks
 
-1. **Extension packaging defect:** `npx vsce package --no-dependencies` creates a `.vsix` with no `node_modules`, but `out/core/validator.js` requires `ajv`. The package activates with `Error: Cannot find module 'ajv'`.
-2. **Server default secrets:** `JWT_SECRET`, `SUPERADMIN_PASSWORD`, `DEV_API_KEY`, `DEV_SEED`, and `CORS_ORIGIN='*'` all have unsafe defaults. A deployment that does not override every value is trivially compromised.
-3. **Row-Level Security disabled by default:** Migration 005 installs RLS policies, but `config.ts` defaults `RLS_ENABLED=false`, so tenant isolation relies entirely on application-level `org_id` filtering.
-4. **Server runtime dependency CVEs:** `protobufjs` (critical, via optional `@xenova/transformers`), `fastify`/`find-my-way`, `sharp`, `hono`, `ip-address`, and `nodemailer` all have high-severity advisories reachable at runtime.
-5. **No production hardening validated:** Docker Compose and the `Dockerfile` have only been exercised on `localhost`; backups, monitoring, TLS termination, secret injection, and real Stripe webhooks are documented but not validated.
-6. **MCP runtime unpinned:** `mcp-proxy` is still fetched via `npx` with no declared, version-locked dependency.
-7. **Supply chain (extension):** Root `npm audit` reports 14 vulnerabilities, including a critical `vitest` issue and multiple high-severity transitive deps.
+1. **No production hardening validated:** Docker Compose and the hardened `Dockerfile` have not been built or deployed in this session; backups, monitoring, TLS termination, and real Stripe webhooks are documented but not validated.
+2. **CSP uses `unsafe-inline`:** The web UI still uses inline scripts and `onclick` handlers. The current CSP restricts external resource loading to `'self'` but does not fully mitigate XSS through inline event handlers until scripts/styles are moved to external files or nonces are used.
+3. **Extension Host activation not validated:** The `.vsix` runtime dependencies are present, but the extension has not been installed and activated in a real VS Code: Extension Host.
+4. **Supply chain (extension dev tools):** Root `npm audit` still reports dev/build dependency vulnerabilities in `@vscode/vsce` and `vitest`. These do not ship in the `.vsix` (`vsce package --dependencies` only includes `dependencies`), but they should be patched before the next development cycle.
+5. **Remaining low-severity findings:** YAML frontmatter parser, MCP port conflict handling, `Validator` schema-missing behavior, and remote builtin content updates remain scheduled post-release (see Detailed Findings).
 
 ### Scope limitations and untested areas
 
@@ -106,23 +106,22 @@ Do not publish the extension, deploy the server, or onboard paying customers unt
 |-------|---------|--------|
 | Extension lint | `npm run lint` | Pass (exit 0) |
 | Extension build | `npm run build` | Pass (exit 0) |
-| Extension unit tests | `npm test` | Pass — 38 tests in 6 files |
+| Extension unit tests | `npm test` | Pass — 42 tests in 6 files |
 | Extension format check | `npm run format:check` | Pass |
-| Extension VSIX package | `npx vsce package --no-dependencies` | Pass, but `.vsix` lacks `node_modules` |
-| Extension VSIX stub activation | `node -e "require('./out/extension.js')"` with stub `vscode` | **Fail** — `Cannot find module 'ajv'` |
-| Extension dependency audit | `npm audit --audit-level=low` | **14 vulnerabilities** (2 moderate, 11 high, 1 critical) |
+| Extension VSIX package | `npm run package` | Pass — `.vsix` includes `node_modules/ajv/` and `node_modules/mcp-proxy/`; dev/audit docs excluded |
+| Extension production dependency audit | `npm audit --omit=dev --audit-level=moderate` | Pass — 0 vulnerabilities |
 | Server dependency install | `(cd server && npm install)` | Pass |
 | Server typecheck | `(cd server && npm run typecheck)` | Pass |
 | Server build | `(cd server && npm run build)` | Pass |
 | Server migrations + seed | `(cd server && env DATABASE_URL=... npm run migrate)` | Pass — 20 migrations applied |
 | Server integration tests | `(cd server && env DATABASE_URL=... npm test)` | Pass — 26 tests |
-| Server dependency audit | `(cd server && npm audit --audit-level=low)` | **13 vulnerabilities** (3 moderate, 9 high, 1 critical) |
+| Server dependency audit | `(cd server && npm audit --audit-level=low)` | Pass — 0 vulnerabilities |
 
 ### Assumptions, contradictions, exclusions, and limitations
 
 - **Assumptions:** The product is now intended to become a hosted SaaS with optional self-hosting. The extension remains the free local Content Plane.
-- **Contradictions resolved:** `activationEvents` cover all registered commands plus `onStartupFinished`.
-- **Contradictions remaining:** `docs/LAUNCH-READINESS.md` correctly flags P0 blockers, but those blockers are still open in code/config.
+- **Contradictions resolved:** `activationEvents` cover all registered commands plus `onStartupFinished`; the P0 release blockers listed in `docs/LAUNCH-READINESS.md` and `docs/release-blockers/tracker.md` are addressed in PR #16 and PR #17.
+- **Contradictions remaining:** None for the tracked release blockers; remaining low-severity findings (YAML frontmatter, MCP port conflict, `Validator` missing-schema behavior, remote builtin updates) are scheduled post-release.
 - **Exclusions:** Real VS Code: host testing, real agent sync, Docker production deploy, TLS/backup/restore, load testing, and penetration testing were not performed.
 
 ---
@@ -160,17 +159,17 @@ Do not publish the extension, deploy the server, or onboard paying customers unt
 
 ### Missing requirements and discovery gaps
 
-1. **Extension packaging validation in CI** — Missing. CI packages the `.vsix` but does not verify its contents or activation.
-2. **Duplicate item-name guard** — Missing in extension. Two enabled items with the same name overwrite each other on sync.
-3. **Server production hardening** — Missing validated production deployment, backups, monitoring, and real payment/webhook integration.
-4. **Server security defaults** — Missing safe defaults for `JWT_SECRET`, `SUPERADMIN_PASSWORD`, `RLS_ENABLED`, `DEV_SEED`, `CORS_ORIGIN`.
-5. **Runtime dependency CVE remediation** — Missing. Both extension and server have high/critical CVEs in runtime-reachable packages.
-6. **Extension/server integration test** — Missing. There is no test that verifies the extension can authenticate and call the server end-to-end.
-7. **CSP for web UI** — `helmet` CSP is disabled; the web UI uses inline scripts and `style` attributes.
+1. **Extension/server integration test** — Missing. There is no test that verifies the extension can authenticate and call the server end-to-end.
+2. **Server production hardening** — Dockerfile and Compose are updated, but a real production deployment with backups, monitoring, TLS termination, and real payment/webhook integration has not been validated.
+3. **CSP hardening** — CSP is enabled but still allows `unsafe-inline` because the dashboard uses inline scripts/styles. Moving to external assets or nonces is scheduled post-release.
+4. **Extension dev/build dependency CVEs** — Root `npm audit` without `--omit=dev` still reports vulnerabilities in `@vscode/vsce` and `vitest`. These do not ship in the `.vsix` but should be patched.
+5. **Remaining low-severity findings** — YAML frontmatter parser, MCP port conflict handling, `Validator` missing-schema behavior, and remote builtin update location are scheduled post-release.
 
 ---
 
 ## Detailed Findings
+
+> **Status note:** The detailed findings below are the original audit observations. Items fixed in PR #16 and PR #17 are marked in `docs/release-blockers/tracker.md`. In particular, AUDIT-001, AUDIT-002, AUDIT-003, AUDIT-005, AUDIT-006, AUDIT-011, AUDIT-S001, AUDIT-S002, AUDIT-S003, AUDIT-S004, and AUDIT-S006 are now resolved; the remaining items are scheduled post-release.
 
 ### AUDIT-001 — Packaged VS Code: extension cannot activate (runtime dependencies missing)
 
