@@ -14,6 +14,7 @@ cli/**
 deploy/**
 docs/**
 site/**
+scripts/**
 tests/**
 __mocks__/**
 *.vsix

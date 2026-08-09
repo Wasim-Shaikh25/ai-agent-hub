@@ -8,7 +8,7 @@ Derived from `docs/release-blockers/requirements.md` and `PRODUCTION_READINESS_A
 - [x] [T1.2] Update `.vscodeignore` to allow production `node_modules` while excluding source maps, source `.ts`, tests, dev docs, and audit files.
 - [x] [T1.3] Add `.agents/`, `CHANGELOG.md`, `SECURITY.md`, `PRODUCTION_READINESS_AUDIT.md` to `.vscodeignore`.
 - [x] [T1.4] Run `npm run package`, inspect `unzip -l ai-agent-hub-*.vsix`, and confirm `extension/node_modules/ajv/` and `extension/node_modules/mcp-proxy/` are present and excluded files are absent.
-- [ ] [T1.5] In a clean Extension Host, install the `.vsix` and verify the extension activates without `Cannot find module 'ajv'`.
+- [x] [T1.5] In a clean Extension Host, install the `.vsix` and verify the extension activates without `Cannot find module 'ajv'`.
 
 ## FR2 — Server must refuse to start with unsafe default secrets
 
@@ -16,7 +16,7 @@ Derived from `docs/release-blockers/requirements.md` and `PRODUCTION_READINESS_A
 - [x] [T2.2] Make the validator throw in production and only allow `ALLOW_INSECURE_DEFAULTS=true` in non-production.
 - [x] [T2.3] Change `DEV_SEED` default from `true` to `false` and `RLS_ENABLED` default from `false` to `true`.
 - [x] [T2.4] Update integration tests to set safe test secrets and `NODE_ENV=test`.
-- [ ] [T2.5] Add unit tests for the validator covering missing, default, and safe values.
+- [x] [T2.5] Add unit tests for the validator covering missing, default, and safe values.
 
 ## FR3 — Row-Level Security must be production-default
 
@@ -39,7 +39,7 @@ Derived from `docs/release-blockers/requirements.md` and `PRODUCTION_READINESS_A
 - [x] [T5.1] Add `mcp-proxy` as an exact `dependency` in `package.json`.
 - [x] [T5.2] Refactor `src/core/mcpManager.ts` to resolve the `mcp-proxy` binary and spawn without `shell: true`.
 - [x] [T5.3] Validate `packageName` and each argument with a safe allow-list.
-- [ ] [T5.4] Add end-to-end test for MCP spawn.
+- [x] [T5.4] Add end-to-end test for MCP spawn.
 
 ## FR6 — Extension registry must reject duplicate item names
 
@@ -57,12 +57,12 @@ Derived from `docs/release-blockers/requirements.md` and `PRODUCTION_READINESS_A
 
 - [x] [T8.1] Rewrite `server/Dockerfile` with a `builder` stage (`npm ci`, `npm run build`) and a runtime stage (`npm ci --omit=dev`, `USER node`, `HEALTHCHECK`).
 - [x] [T8.2] Add `server/.dockerignore`.
-- [ ] [T8.3] Build the image locally and verify it starts and responds to `/health`.
+- [x] [T8.3] Build the image locally and verify it starts and responds to `/health`.
 
 ## FR9 — Server web UI must serve a CSP
 
 - [x] [T9.1] Register a `contentSecurityPolicy` in the Fastify instance.
-- [ ] [T9.2] Move inline `<script>` and `<style>` blocks to external files or use nonces (scheduled post-release; `unsafe-inline` is allowed for now).
+- [x] [T9.2] Use per-request CSP nonces for inline `<script>` and `<style>` blocks via `@fastify/helmet` and an `onSend` hook.
 
 ## FR10 — Documentation and schemas must be consistent
 

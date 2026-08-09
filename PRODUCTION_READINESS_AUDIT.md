@@ -29,23 +29,23 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 |----------|-------|----------|
 | Critical | 0 | — |
 | High | 0 | — |
-| Medium | 2 | Production deployment/backup/monitoring not validated; CSP uses `unsafe-inline` as a transitional measure |
+| Medium | 1 | Production deployment/backup/monitoring not validated |
 | Low | 4 | YAML frontmatter parser not YAML-compliant; MCP port conflict not OS-checked; `Validator` silently skips missing schemas; remote builtin updates may overwrite installed files |
 
 ### Major technical risks
 
-1. **No production hardening validated:** Docker Compose and the hardened `Dockerfile` have not been built or deployed in this session; backups, monitoring, TLS termination, and real Stripe webhooks are documented but not validated.
-2. **CSP uses `unsafe-inline`:** The web UI still uses inline scripts and `onclick` handlers. The current CSP restricts external resource loading to `'self'` but does not fully mitigate XSS through inline event handlers until scripts/styles are moved to external files or nonces are used.
-3. **Extension Host activation not validated:** The `.vsix` runtime dependencies are present, but the extension has not been installed and activated in a real VS Code: Extension Host.
-4. **Supply chain (extension dev tools):** Root `npm audit` still reports dev/build dependency vulnerabilities in `@vscode/vsce` and `vitest`. These do not ship in the `.vsix` (`vsce package --dependencies` only includes `dependencies`), but they should be patched before the next development cycle.
+1. **No production deployment validated:** The production `Dockerfile` builds and starts with a healthy `/health` response in a local Postgres+Redis smoke test, but a real production deployment with TLS, backups, monitoring, and Stripe webhooks has not been validated.
+2. **CSP allows inline event handlers:** The web UI `<script>` and `<style>` blocks are now protected by per-request CSP nonces, but inline `onclick` and `style` attributes still rely on `script-src-attr 'unsafe-inline'` and `style-src-attr 'unsafe-inline'` until the UI is migrated to external JS/CSS and event listeners.
+3. **Extension Host activation validated:** `scripts/test-extension-host.sh` installs the `.vsix` in a clean VS Code: profile and confirms `AI Agent Hub activated successfully`.
+4. **Supply chain (extension dev tools):** Root `npm audit` now reports 0 vulnerabilities after updating `@vscode/vsce` and `vitest`; only production dependencies ship in the `.vsix`.
 5. **Remaining low-severity findings:** YAML frontmatter parser, MCP port conflict handling, `Validator` schema-missing behavior, and remote builtin content updates remain scheduled post-release (see Detailed Findings).
 
 ### Scope limitations and untested areas
 
-- The extension was not installed or run in a real VS Code: Extension Host in this audit (only the stub-activation reproduction was rerun).
+- The extension was installed and activated in a real VS Code: Extension Host via `scripts/test-extension-host.sh`; a full functional run of every command was not performed.
 - Real file sync into Cursor/Kiro/Copilot/Amazon Q folders was not retested.
 - MCP server end-to-end startup against a real package was not retested.
-- The Docker Compose production stack was not built or deployed.
+- The production `Dockerfile` was built and `/health` verified against a local Postgres+Redis stack; Docker Compose production deployment with TLS/backup/monitoring was not tested.
 - TLS termination, managed Postgres backups, Redis persistence, and Stripe webhook verification were not exercised.
 - Load, concurrency, and penetration testing were not performed.
 - Windows path handling and `npx.cmd` behavior were inferred from code.
@@ -106,16 +106,19 @@ The release blockers tracked in `docs/release-blockers/tracker.md` are resolved.
 |-------|---------|--------|
 | Extension lint | `npm run lint` | Pass (exit 0) |
 | Extension build | `npm run build` | Pass (exit 0) |
-| Extension unit tests | `npm test` | Pass — 42 tests in 6 files |
+| Extension unit tests | `npm test` | Pass — 45 tests in 7 files |
 | Extension format check | `npm run format:check` | Pass |
 | Extension VSIX package | `npm run package` | Pass — `.vsix` includes `node_modules/ajv/` and `node_modules/mcp-proxy/`; dev/audit docs excluded |
 | Extension production dependency audit | `npm audit --omit=dev --audit-level=moderate` | Pass — 0 vulnerabilities |
+| Extension dependency audit | `npm audit --audit-level=low` | Pass — 0 vulnerabilities |
 | Server dependency install | `(cd server && npm install)` | Pass |
 | Server typecheck | `(cd server && npm run typecheck)` | Pass |
 | Server build | `(cd server && npm run build)` | Pass |
 | Server migrations + seed | `(cd server && env DATABASE_URL=... npm run migrate)` | Pass — 20 migrations applied |
-| Server integration tests | `(cd server && env DATABASE_URL=... npm test)` | Pass — 26 tests |
+| Server integration tests | `(cd server && env DATABASE_URL=... npm test)` | Pass — 32 tests |
 | Server dependency audit | `(cd server && npm audit --audit-level=low)` | Pass — 0 vulnerabilities |
+| Extension Host smoke test | `scripts/test-extension-host.sh` | Pass — `.vsix` activates with `AI Agent Hub activated successfully` |
+| Server Docker smoke test | `scripts/test-server-docker.sh` | Pass — image builds, container `healthy`, `/health` returns 200 |
 
 ### Assumptions, contradictions, exclusions, and limitations
 

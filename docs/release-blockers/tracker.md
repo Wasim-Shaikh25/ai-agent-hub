@@ -10,12 +10,12 @@
 | FR1 | T1.2 | Update `.vscodeignore` to allow production `node_modules` and exclude dev/audit docs | Done | Devin | `node_modules/**/*.map` and `mcp-proxy` dev files excluded; dev/audit docs excluded |
 | FR1 | T1.3 | Add `.agents/`, `CHANGELOG.md`, `SECURITY.md`, `PRODUCTION_READINESS_AUDIT.md` to `.vscodeignore` | Done | Devin | All dev/audit docs excluded from `.vsix` |
 | FR1 | T1.4 | Verify `.vsix` contains `node_modules/ajv/` and `node_modules/mcp-proxy/` and excludes audit files | Done | Devin | `unzip -l` shows both runtime deps and no dev/audit docs; `.vsix` size 4.72 MB |
-| FR1 | T1.5 | Clean Extension Host activation test | Partial | Devin | Runtime deps confirmed present and resolvable; real VS Code: Extension Host test still pending (covered by `__mocks__/vscode` unit tests) |
+| FR1 | T1.5 | Clean Extension Host activation test | Done | Devin | `scripts/test-extension-host.sh` installs `.vsix` in a clean VS Code: profile and confirms `AI Agent Hub activated successfully` in Extension Host output |
 | FR2 | T2.1 | Unsafe secret validation helper | Done | Devin | `assertSafeConfiguration()` in `server/src/config.ts` checks `JWT_SECRET`, `SUPERADMIN_PASSWORD`, `DEV_API_KEY` |
 | FR2 | T2.2 | Fail on unsafe defaults in production | Done | Devin | Throws in `production`; `ALLOW_INSECURE_DEFAULTS=true` is only allowed in non-production |
 | FR2 | T2.3 | Change `DEV_SEED` and `RLS_ENABLED` defaults | Done | Devin | `DEV_SEED` default `false`; `RLS_ENABLED` default `true` |
 | FR2 | T2.4 | Update integration tests with safe test secrets | Done | Devin | `server/test/helpers.mjs` sets `NODE_ENV=test`, `JWT_SECRET`, `SUPERADMIN_PASSWORD` |
-| FR2 | T2.5 | Unit tests for secret validation | Not started | TBD | Could add to `server/test/` |
+| FR2 | T2.5 | Unit tests for secret validation | Done | Devin | `server/test/config.test.mjs` tests production rejection and test/dev escape hatches |
 | FR3 | T3.1 | `rlsEnabled` default `true` | Done | Devin | `server/src/config.ts` |
 | FR3 | T3.2 | Verify `AsyncLocalStorage` org propagation | Done | Devin | Existing `server/src/db/pool.ts` path confirmed; RLS tests pass |
 | FR3 | T3.3 | RLS tenant-isolation integration test | Done | Devin | `server/test/rls.test.mjs` 3/3 passes |
@@ -29,7 +29,7 @@
 | FR5 | T5.1 | Add `mcp-proxy` dependency | Done | Devin | `package.json` has exact `mcp-proxy@6.7.0` |
 | FR5 | T5.2 | Refactor `mcpManager.ts` to use installed binary | Done | Devin | `src/core/mcpManager.ts` resolves `mcp-proxy/dist/bin/mcp-proxy.mjs` via `createRequire` and spawns `node` with `shell: false` |
 | FR5 | T5.3 | Validate `packageName` and args | Done | Devin | Existing `isValidNpmPackageName` and `isValidMcpArg` helpers used before spawn |
-| FR5 | T5.4 | Unit tests for MCP spawn | Partial | Devin | `mcpEnv.test.ts` covers validation; actual spawn path not unit-tested |
+| FR5 | T5.4 | Unit tests for MCP spawn | Done | Devin | `tests/core/mcpManager.test.ts` starts the bundled `mcp-proxy` with a fake MCP server and asserts `running` state; `scripts/test-mcp-spawn.sh` provides an integration smoke test |
 | FR6 | T6.1 | Enforce unique `type` + `name` in registry | Done | Devin | `assertUniqueName()` in `src/core/registry.ts` normalizes and compares trimmed lowercase names |
 | FR6 | T6.2 | Return clear duplicate-name error | Done | Devin | Throws `A ${type} named "${name}" already exists` |
 | FR6 | T6.3 | Registry duplicate unit tests | Done | Devin | `tests/core/registry.test.ts` covers add/update and whitespace/case duplicates |
@@ -38,14 +38,14 @@
 | FR7 | T7.3 | Add Postgres service to server CI | Done | Devin | `.github/workflows/server-ci.yml` already includes `postgres` service |
 | FR8 | T8.1 | Multi-stage, non-root `server/Dockerfile` | Done | Devin | `server/Dockerfile` uses `builder` + runtime stages, `npm ci --omit=dev`, `USER node`, `NODE_ENV=production`, `HEALTHCHECK` |
 | FR8 | T8.2 | Add `server/.dockerignore` | Done | Devin | Created `server/.dockerignore` |
-| FR8 | T8.3 | Local Docker build/health check | Partial | Devin | Dockerfile and compose updated; not built/started locally in this session |
+| FR8 | T8.3 | Local Docker build/health check | Done | Devin | `scripts/test-server-docker.sh` builds image, starts Postgres+Redis, and confirms container is `healthy` and `/health` returns 200 |
 | FR9 | T9.1 | Register Fastify CSP plugin | Done | Devin | `server/src/index.ts` enables `contentSecurityPolicy` with `default-src 'self'`, `script-src 'self' 'unsafe-inline'`, etc. |
-| FR9 | T9.2 | Remove/Nonce inline scripts and styles | Partial | Devin | CSP enabled with `unsafe-inline` to support existing inline scripts/styles; moving to external assets scheduled post-release |
+| FR9 | T9.2 | Nonce inline scripts and styles | Done | Devin | `@fastify/helmet` `enableCSPNonces: true` with `onSend` hook injecting nonces into `<script>` and `<style>` tags; inline event handlers still use `script-src-attr 'unsafe-inline'` until migrated |
 | FR10 | T10.1 | Align README command table with `package.json` | Done | Devin | Removed two unregistered MCP commands from README command table in PR #16 |
 | FR10 | T10.2 | Document or replace YAML frontmatter parser | Not started | TBD | Design concern; scheduled post-release |
 | TC | TC.1 | Update `PRODUCTION_READINESS_AUDIT.md` status | Done | Devin | Executive summary, finding summary, major risks, command results, and missing gaps updated to reflect PR #17 fixes |
-| TC | TC.2 | Root lint/build/test/format pass | Done | Devin | `npm run lint/build/test/format:check` all pass (42 tests) |
-| TC | TC.3 | Server typecheck/build/test pass | Done | Devin | `npm run typecheck/build/test` all pass (26 tests) |
+| TC | TC.2 | Root lint/build/test/format pass | Done | Devin | `npm run lint/build/test/format:check` all pass (45 tests) |
+| TC | TC.3 | Server typecheck/build/test pass | Done | Devin | `npm run typecheck/build/test` all pass (32 tests) |
 
 ## Status key
 
