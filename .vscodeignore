@@ -1,6 +1,5 @@
 .vscode/**
 .github/**
-node_modules/**
 out/**/*.map
 out/**/*.d.ts
 src/**
@@ -23,3 +22,7 @@ DUE_DILIGENCE_REVIEW.md
 REQUIREMENTS_AND_FIX_PLAN.md
 REQUIREMENTS.md
 PROGRESS.md
+PRODUCTION_READINESS_AUDIT.md
+CHANGELOG.md
+SECURITY.md
+.agents/**

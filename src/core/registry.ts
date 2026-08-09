@@ -92,6 +92,7 @@ export class Registry {
     fields: Omit<AnyHubItem, 'id' | 'source' | 'createdAt' | 'updatedAt'>,
   ): AnyHubItem {
     this.validateFields(type, fields);
+    this.assertUniqueName(type, String(fields.name).trim());
 
     const now = new Date().toISOString();
     const item = {
@@ -120,6 +121,9 @@ export class Registry {
     const item = this.findOrThrow(type, id);
     if (item.source === 'builtin') {
       throw new Error('Cannot edit a built-in item');
+    }
+    if (fields.name && fields.name !== item.name) {
+      this.assertUniqueName(type, String(fields.name).trim(), id);
     }
     const updated = { ...item, ...fields, updatedAt: new Date().toISOString() } as AnyHubItem;
     this.validateItem(updated);
@@ -192,6 +196,13 @@ export class Registry {
       throw new Error(`Item with id "${id}" not found`);
     }
     return item;
+  }
+
+  private assertUniqueName(type: ItemType, name: string, excludeId?: string): void {
+    const existing = this.collections[type].find((i) => i.name === name && i.id !== excludeId);
+    if (existing) {
+      throw new Error(`A ${type} named "${name}" already exists`);
+    }
   }
 
   /** Persists only user items for the given type. */
