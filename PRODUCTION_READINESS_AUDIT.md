@@ -121,7 +121,7 @@ Do not publish the extension, deploy the server, or onboard paying customers unt
 ### Assumptions, contradictions, exclusions, and limitations
 
 - **Assumptions:** The product is now intended to become a hosted SaaS with optional self-hosting. The extension remains the free local Content Plane.
-- **Contradictions resolved:** `package.json` and `README.md` now list the same 10 extension commands; `activationEvents` cover all of them plus `onStartupFinished`.
+- **Contradictions resolved:** `activationEvents` cover all registered commands plus `onStartupFinished`.
 - **Contradictions remaining:** `docs/LAUNCH-READINESS.md` correctly flags P0 blockers, but those blockers are still open in code/config.
 - **Exclusions:** Real VS Code: host testing, real agent sync, Docker production deploy, TLS/backup/restore, load testing, and penetration testing were not performed.
 
@@ -276,14 +276,17 @@ Do not publish the extension, deploy the server, or onboard paying customers unt
 - **Affected files/locations:** `src/core/registry.ts:209-227`
 - **Recommended solution:** Use a YAML parser for frontmatter or update README to describe the format as simple `key: value`.
 
-### AUDIT-009 — README and `package.json` commands now consistent
+### AUDIT-009 — README lists commands that are not registered
 
-- **Classification:** Design Concern (resolved)
+- **Classification:** Design Concern
 - **Severity:** Low
 - **Category:** Documentation / Consistency
-- **Disposition:** Closed
-- **Evidence:** `package.json` contributes the same 10 commands listed in `README.md`.
-- **Note:** No action required; tracked for completeness.
+- **Disposition:** Scheduled Post-Release
+- **Release impact:** Users may look for commands that do not exist.
+- **Affected files/locations:** `README.md` (`## Commands` table), `package.json` (`contributes.commands`), `src/extension.ts`
+- **Evidence:** `package.json` registers 10 commands (`aiAgentHub.open`, `setup`, `addSkill`, `addRule`, `addHook`, `syncToAgents`, `showAgents`, `connectServer`, `connectAgentsToHub`, `pullFromHub`). `README.md` lists 12 commands, including `AI Agent Hub: Add MCP Server` and `AI Agent Hub: Show MCP Servers`, which are not registered.
+- **Recommended solution:** Either register the two MCP commands in `package.json` and `src/extension.ts` or remove them from `README.md`.
+- **Regression risks:** Minimal.
 
 ### AUDIT-010 — MCP port conflict check is config-only
 
