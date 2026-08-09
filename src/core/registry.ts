@@ -258,7 +258,11 @@ export class Registry {
         const fmBlock = content.substring(3, endIndex).trim();
         body = content.substring(endIndex + 3).trim();
         try {
-          frontmatter = YAML.parse(fmBlock) as Record<string, unknown>;
+          const parsed: unknown = YAML.parse(fmBlock);
+          frontmatter =
+            parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+              ? (parsed as Record<string, unknown>)
+              : {};
         } catch {
           // Malformed frontmatter is treated as empty so the body is preserved.
           frontmatter = {};
