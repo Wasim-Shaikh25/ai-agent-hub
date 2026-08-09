@@ -33,6 +33,7 @@ jobs:
       EMBEDDINGS_PROVIDER: local
       DEV_API_KEY: hub_ci_key
       PORT: '8080'
+      ALLOW_INSECURE_DEFAULTS: 'true'
 
     steps:
       - uses: actions/checkout@v4
