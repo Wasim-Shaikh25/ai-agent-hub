@@ -37,7 +37,7 @@
 | FR8 | T8.3 | Local Docker build/health check | Not started | TBD | |
 | FR9 | T9.1 | Register Fastify CSP plugin | Not started | TBD | |
 | FR9 | T9.2 | Remove/Nonce inline scripts and styles | Not started | TBD | |
-| FR10 | T10.1 | Align README command table with `package.json` | Not started | TBD | README still lists two unregistered commands (AUDIT-009) |
+| FR10 | T10.1 | Align README command table with `package.json` | Done | Devin | Removed two unregistered MCP commands from README command table |
 | FR10 | T10.2 | Document or replace YAML frontmatter parser | Not started | TBD | |
 | TC | TC.1 | Update `PRODUCTION_READINESS_AUDIT.md` status | Not started | TBD | Do after all blockers addressed |
 | TC | TC.2 | Root lint/build/test/format pass | Done | Devin | `npm run lint/build/test/format:check` all pass (41 tests) |
