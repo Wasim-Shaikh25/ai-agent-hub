@@ -26,7 +26,7 @@ Do not publish the extension, deploy the server, or onboard paying customers unt
 | Severity | Count | Examples |
 |----------|-------|----------|
 | Critical | 3 | Packaged `.vsix` cannot activate; server defaults to hardcoded `JWT_SECRET` / `SUPERADMIN_PASSWORD`; `protobufjs` critical CVE in server runtime path |
-| High | 6 | `fast-uri` via `ajv`; `mcp-proxy` unpinned; server `RLS_ENABLED=false` by default; server `Dockerfile` runs as root with `npm install`; `nodemailer`, `hono`, `ip-address` runtime CVEs |
+| High | 6 | `fast-uri` via `ajv`; `mcp-proxy` unpinned; server `RLS_ENABLED=false` by default; server `Dockerfile` runs as root with `npm install`; `fastify`/`find-my-way`, `nodemailer`, `hono`, `ip-address` runtime CVEs |
 | Medium | 6 | No packaging validation in CI; missing production deploy/backup/monitoring; dev seed enabled by default; `PRODUCTION_READINESS_AUDIT.md` and `.agents/` leak into `.vsix`; duplicate item names can overwrite files; CSP disabled for web UI |
 | Low | 5 | YAML frontmatter parser not YAML-compliant; README command mismatch; MCP port conflict not OS-checked; `Validator` silently skips missing schemas; `CHANGELOG.md`/`SECURITY.md` bundled in `.vsix` |
 
@@ -35,7 +35,7 @@ Do not publish the extension, deploy the server, or onboard paying customers unt
 1. **Extension packaging defect:** `npx vsce package --no-dependencies` creates a `.vsix` with no `node_modules`, but `out/core/validator.js` requires `ajv`. The package activates with `Error: Cannot find module 'ajv'`.
 2. **Server default secrets:** `JWT_SECRET`, `SUPERADMIN_PASSWORD`, `DEV_API_KEY`, `DEV_SEED`, and `CORS_ORIGIN='*'` all have unsafe defaults. A deployment that does not override every value is trivially compromised.
 3. **Row-Level Security disabled by default:** Migration 005 installs RLS policies, but `config.ts` defaults `RLS_ENABLED=false`, so tenant isolation relies entirely on application-level `org_id` filtering.
-4. **Server runtime dependency CVEs:** `protobufjs` (critical, via optional `@xenova/transformers`), `sharp`, `hono`, `ip-address`, and `nodemailer` all have high-severity advisories reachable at runtime.
+4. **Server runtime dependency CVEs:** `protobufjs` (critical, via optional `@xenova/transformers`), `fastify`/`find-my-way`, `sharp`, `hono`, `ip-address`, and `nodemailer` all have high-severity advisories reachable at runtime.
 5. **No production hardening validated:** Docker Compose and the `Dockerfile` have only been exercised on `localhost`; backups, monitoring, TLS termination, secret injection, and real Stripe webhooks are documented but not validated.
 6. **MCP runtime unpinned:** `mcp-proxy` is still fetched via `npx` with no declared, version-locked dependency.
 7. **Supply chain (extension):** Root `npm audit` reports 14 vulnerabilities, including a critical `vitest` issue and multiple high-severity transitive deps.
@@ -121,7 +121,7 @@ Do not publish the extension, deploy the server, or onboard paying customers unt
 ### Assumptions, contradictions, exclusions, and limitations
 
 - **Assumptions:** The product is now intended to become a hosted SaaS with optional self-hosting. The extension remains the free local Content Plane.
-- **Contradictions resolved:** `package.json` and `README.md` now list the same 10 extension commands; `activationEvents` cover all of them plus `onStartupFinished`.
+- **Contradictions resolved:** `activationEvents` cover all registered commands plus `onStartupFinished`.
 - **Contradictions remaining:** `docs/LAUNCH-READINESS.md` correctly flags P0 blockers, but those blockers are still open in code/config.
 - **Exclusions:** Real VS Code: host testing, real agent sync, Docker production deploy, TLS/backup/restore, load testing, and penetration testing were not performed.
 
@@ -276,14 +276,17 @@ Do not publish the extension, deploy the server, or onboard paying customers unt
 - **Affected files/locations:** `src/core/registry.ts:209-227`
 - **Recommended solution:** Use a YAML parser for frontmatter or update README to describe the format as simple `key: value`.
 
-### AUDIT-009 — README and `package.json` commands now consistent
+### AUDIT-009 — README lists commands that are not registered
 
-- **Classification:** Design Concern (resolved)
+- **Classification:** Design Concern
 - **Severity:** Low
 - **Category:** Documentation / Consistency
-- **Disposition:** Closed
-- **Evidence:** `package.json` contributes the same 10 commands listed in `README.md`.
-- **Note:** No action required; tracked for completeness.
+- **Disposition:** Scheduled Post-Release
+- **Release impact:** Users may look for commands that do not exist.
+- **Affected files/locations:** `README.md` (`## Commands` table), `package.json` (`contributes.commands`), `src/extension.ts`
+- **Evidence:** `package.json` registers 10 commands (`aiAgentHub.open`, `setup`, `addSkill`, `addRule`, `addHook`, `syncToAgents`, `showAgents`, `connectServer`, `connectAgentsToHub`, `pullFromHub`). `README.md` lists 12 commands, including `AI Agent Hub: Add MCP Server` and `AI Agent Hub: Show MCP Servers`, which are not registered.
+- **Recommended solution:** Either register the two MCP commands in `package.json` and `src/extension.ts` or remove them from `README.md`.
+- **Regression risks:** Minimal.
 
 ### AUDIT-010 — MCP port conflict check is config-only
 
@@ -415,16 +418,18 @@ Do not publish the extension, deploy the server, or onboard paying customers unt
   Specific runtime-reachable paths:
   - `protobufjs@6.11.6` (critical) via `hub-server` → `@xenova/transformers` → `onnxruntime-web` → `onnx-proto`.
   - `sharp` (high) via `@xenova/transformers`.
+  - `fastify <=5.8.2` (high, direct dependency) and its transitive `find-my-way <=9.6.0`.
   - `hono@4.12.31` (high) via `@modelcontextprotocol/sdk`.
   - `ip-address@10.2.0` (high) via `@modelcontextprotocol/sdk` → `express-rate-limit`.
   - `nodemailer@6.10.1` (high, direct dependency).
-- **Root cause:** `@xenova/transformers` (optional dependency) and `@modelcontextprotocol/sdk` pull in vulnerable transitive packages; `nodemailer` is outdated.
+- **Root cause:** `fastify` and `nodemailer` are outdated direct dependencies; `@xenova/transformers` (optional dependency) and `@modelcontextprotocol/sdk` pull in vulnerable transitive packages.
 - **Impact:** Remote code execution, SSRF/trust-boundary bypass, SMTP command injection, and DoS are possible depending on the advisory.
 - **Recommended solution:**
-  1. Update `nodemailer` to a patched version.
-  2. Decide whether MiniLM embeddings are required in production. If not, remove `@xenova/transformers` from optional dependencies and rely on the `local` hash fallback.
-  3. Update `@modelcontextprotocol/sdk` to a patched version or override the vulnerable transitive packages.
-  4. Run `npm audit` until no high/critical runtime-reachable vulnerabilities remain.
+  1. Update `fastify` to a patched version (>=5.11.3) and let it pull the fixed `find-my-way`.
+  2. Update `nodemailer` to a patched version.
+  3. Decide whether MiniLM embeddings are required in production. If not, remove `@xenova/transformers` from optional dependencies and rely on the `local` hash fallback.
+  4. Update `@modelcontextprotocol/sdk` to a patched version or override the vulnerable transitive packages.
+  5. Run `npm audit` until no high/critical runtime-reachable vulnerabilities remain.
 - **Tests to add:** Re-run the full server test suite after updates.
 
 ### AUDIT-S005 — No validated production deployment, backups, or monitoring
