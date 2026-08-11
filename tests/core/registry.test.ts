@@ -201,6 +201,38 @@ describe('Registry', () => {
     }
   });
 
+  it('handles empty and comment-only frontmatter blocks without crashing', () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-agent-hub-empty-fm-'));
+    try {
+      const skillsDir = path.join(tmpDir, 'hub-content', 'skills');
+      fs.mkdirSync(skillsDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(skillsDir, 'empty-header.md'),
+        '---\n---\nBody after empty header.',
+        'utf-8',
+      );
+      fs.writeFileSync(
+        path.join(skillsDir, 'comment-header.md'),
+        '---\n# just a comment\n---\nBody after comment header.',
+        'utf-8',
+      );
+
+      registry.initialize(tmpDir);
+      const items = registry.getItems('skill');
+
+      const empty = items.find((i) => i.id === 'empty-header');
+      expect(empty).toBeDefined();
+      expect(empty?.content).toBe('Body after empty header.');
+
+      const comment = items.find((i) => i.id === 'comment-header');
+      expect(comment).toBeDefined();
+      expect(comment?.content).toBe('Body after comment header.');
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
   it('lets global storage overrides shadow bundled builtins with the same id', () => {
     const bundledDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-agent-hub-bundled-'));
     const globalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-agent-hub-global-'));
