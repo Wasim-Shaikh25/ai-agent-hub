@@ -64,6 +64,6 @@ Point the agent's base URL at the Hub for fallback, routing, and cost metering:
 ## What you get for free vs paid
 
 Free covers a single developer's core workflow (context, hybrid RAG, knowledge
-map, MCP, gateway fallback). Team/Enterprise add shared cross-agent context,
-cost analytics, semantic cache, quality routing, SSO, and self-host. See
+map, MCP, gateway fallback). The paid plan adds shared cross-agent context,
+cost analytics, semantic cache, and quality routing. See
 [PRICING.md](PRICING.md).

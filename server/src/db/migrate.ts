@@ -41,7 +41,7 @@ export async function seedDev(): Promise<void> {
 
   const org = await queryOne<{ id: string }>(
     `INSERT INTO org (name, slug, plan) VALUES ($1,$2,$3) RETURNING id`,
-    ['Dev Org', 'dev', 'enterprise'],
+    ['Dev Org', 'dev', 'paid'],
   );
   const user = await queryOne<{ id: string }>(
     `INSERT INTO app_user (email, name, is_platform_admin) VALUES ($1,$2,true) RETURNING id`,
@@ -103,8 +103,8 @@ export async function seedSuperadmin(): Promise<void> {
 
   // Give the superadmin a platform org so the JWT can carry a valid orgId.
   const platformOrg = await queryOne<{ id: string }>(
-    `INSERT INTO org (id, name, slug, plan) VALUES (gen_random_uuid(), 'Platform', 'platform', 'enterprise')
-     ON CONFLICT (slug) DO UPDATE SET name = 'Platform', plan = 'enterprise'
+    `INSERT INTO org (id, name, slug, plan) VALUES (gen_random_uuid(), 'Platform', 'platform', 'paid')
+     ON CONFLICT (slug) DO UPDATE SET name = 'Platform', plan = 'paid'
      RETURNING id`,
   );
 

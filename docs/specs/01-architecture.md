@@ -87,14 +87,14 @@
 | DB + vectors | Postgres + `pgvector` | one store for meta + embeddings |
 | Cache/limits | Redis (`ioredis`) | rate limits, hot session state |
 | Validation | `zod` | typed request/tool schemas |
-| Auth/SSO | API keys now → WorkOS later | enterprise SSO is table-stakes for paid |
+| Auth/SSO | API keys now → WorkOS later | SSO is a login option on the paid plan |
 | Billing | Stripe (later) | metered + seats |
 | Deploy | Docker Compose (self-host) + Fly/Render/K8s (SaaS) | same images both ways |
 
 ## 5. Deployment model
 
-- **One set of Docker images** serves both SaaS and self-host. Enterprise
-  self-host = a packaging/config change, not a rewrite.
+- **One set of Docker images** serves both SaaS and self-host. Paid self-host =
+  a packaging/config change, not a rewrite.
 - Local dev = the same compose stack (Postgres, Redis, LiteLLM, hub-server).
 - Data isolation: `org_id` on every row now; schema-per-org or RLS later for
   hard multi-tenant isolation.
@@ -102,6 +102,6 @@
 ## 6. Security invariants
 
 - Inference path is self-hostable → customer code/context need never leave their
-  network (enterprise upsell).
+  network (paid upsell).
 - Secrets (provider keys) held in LiteLLM config / env, never in client dotfiles.
 - Encrypt at rest; per-tenant scoping on every query.

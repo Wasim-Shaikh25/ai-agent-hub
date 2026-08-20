@@ -101,7 +101,7 @@ Then, in a browser and a terminal:
 8. **Smoke test the API** — the calls in `docs/specs/04-local-dev.md §4`.
 
 Everything above runs offline (local embeddings, dev SSO). Add provider/Stripe/
-WorkOS keys only when you want real inference / billing / enterprise SSO.
+WorkOS keys only when you want real inference / billing / SSO.
 
 ## 4c. Customer vs operator (important)
 

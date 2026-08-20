@@ -59,7 +59,7 @@ curl -s -X POST localhost:8080/auth/superadmin/verify-otp \
 curl -s -X POST localhost:8080/api/platform/orgs \
   -H "Authorization: Bearer $SUPER_TOKEN" \
   -H 'Content-Type: application/json' \
-  -d '{"name":"Acme","slug":"acme","adminEmail":"admin@acme.com","plan":"enterprise"}'
+  -d '{"name":"Acme","slug":"acme","adminEmail":"admin@acme.com","plan":"paid"}'
 
 # an SSO user with that email domain can now log in via the dev provider:
 curl -s "localhost:8080/auth/sso/callback?code=dev:admin@acme.com&state=eyJ..."

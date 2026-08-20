@@ -64,12 +64,12 @@ describe('auth flow and dashboards', () => {
     const res = await jfetch(server.base, '/api/platform/orgs', {
       method: 'POST',
       token: server.superToken,
-      body: { name: ORG.name, slug: ORG.slug, adminEmail: ORG.adminEmail, plan: 'enterprise' },
+      body: { name: ORG.name, slug: ORG.slug, adminEmail: ORG.adminEmail, plan: 'paid' },
     });
     assert.equal(res.status, 201);
     assert.equal(res.body.slug, ORG.slug);
     assert.equal(res.body.adminEmail, ORG.adminEmail);
-    assert.equal(res.body.plan, 'enterprise');
+    assert.equal(res.body.plan, 'paid');
   });
 
   it('org admin can sign in via SSO and becomes owner', async () => {
@@ -132,7 +132,7 @@ describe('auth flow and dashboards', () => {
     const res = await fetch(`${server.base}/admin`);
     const text = await res.text();
     assert.equal(res.status, 200);
-    assert.ok(text.includes('Admin') || text.includes('Team'), '/admin should render dashboard');
+    assert.ok(text.includes('Admin') || text.includes('Members'), '/admin should render dashboard');
   });
 
   it('user dashboard pages are visible', async () => {

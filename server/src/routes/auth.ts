@@ -3,7 +3,7 @@ import { queryOne, query } from '../db/pool.js';
 import { getSsoProvider } from '../auth/sso.js';
 import { signSession } from '../auth/jwt.js';
 import { hashPassword, verifyPassword } from '../auth/password.js';
-import { getPlan, entitled } from '../billing/entitlements.js';
+
 import { KeyService } from '../services/keyService.js';
 import { AuditService } from '../services/auditService.js';
 import { config } from '../config.js';
@@ -93,11 +93,6 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
 
     if (!targetOrg) {
       return reply.code(404).send({ error: { code: 'not_found', message: `No workspace found for "${orgSlug}" or domain ${emailDomain(profile.email)}` } });
-    }
-
-    // SSO is an Enterprise feature on the resolved workspace.
-    if (!entitled(await getPlan(targetOrg.id), 'sso')) {
-      return reply.code(402).send({ error: { code: 'upgrade_required', message: 'SSO requires the Enterprise plan', feature: 'sso' } });
     }
 
     // First user whose email matches the org's admin_email becomes owner; otherwise member.
