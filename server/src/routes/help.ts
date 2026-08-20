@@ -7,11 +7,11 @@ export async function registerHelpRoutes(app: FastifyInstance): Promise<void> {
 }
 
 const HELP_TOPICS = [
-  { title: 'Sign up and log in', body: 'You can create an account with your work email and password. After sign-up you get a workspace and an API key. Team owners can invite members from the Team tab.' },
+  { title: 'Sign up and log in', body: 'You can create an account with your work email and password. After sign-up you get a workspace and an API key. Owners can invite members from the Members tab.' },
   { title: 'Connect your agent', body: 'Install the AI Agent Hub VS Code extension, then run the AI Agent Hub: Connect to Server command and paste your API key. The extension will keep your skills and rules in sync.' },
   { title: 'API keys', body: 'Create and copy API keys from the Account page. Treat them like passwords. If you lose one, revoke it and create a new one.' },
   { title: 'Pick a model', body: 'On the Account page you can choose the default language model for your requests. Automatic routing is used when no model is selected.' },
-  { title: 'Plans and billing', body: 'The free plan includes core features. Upgrade to Team or Enterprise for more seats, SSO, and advanced governance. Billing is handled by Stripe.' },
+  { title: 'Plans and billing', body: 'The free plan includes core features. Upgrade to the paid plan for more seats, shared context, and advanced governance. Billing is handled by Stripe.' },
   { title: 'Open a support ticket', body: 'Use the form at the bottom of this page to report a problem. Include what you were doing, what you expected, and any error message.' },
   { title: 'Security and privacy', body: 'Rules and skills are stored in your workspace. The server only receives metadata, usage counts, and redacted snippets for RAG. See the Security page for details.' },
   { title: 'Organisation admin', body: 'Owners and admins can manage content, policies, team members, MCP servers, and API keys from the Admin console.' },

@@ -4,8 +4,8 @@
 
 Connect Cursor, Claude Code, Windsurf, Copilot, Codex, Cline and more to one
 place that gives them **shared context + memory**, **code-aware retrieval**, an
-**LLM gateway** (fallback, routing, cost metering), and **enterprise governance**
-(RBAC, audit, SSO, cost dashboards) — without touching the agents' internal
+**LLM gateway** (fallback, routing, cost metering), and **governance**
+(RBAC, audit, cost dashboards) — without touching the agents' internal
 prompts.
 
 - 🚀 **Get started:** [`docs/GETTING-STARTED.md`](docs/GETTING-STARTED.md)

@@ -136,7 +136,7 @@
   <div>
     <div class="eyebrow">One brain · every agent</div>
     <h1>Not another LLM router. The <span class="g">shared brain</span> for every AI coding agent.</h1>
-    <p class="lede">Give Cursor, Claude Code, Windsurf, Copilot and the rest one place for shared context &amp; memory, code-aware retrieval, model fallback &amp; cost control, and enterprise governance — without ever touching their internal prompts.</p>
+    <p class="lede">Give Cursor, Claude Code, Windsurf, Copilot and the rest one place for shared context &amp; memory, code-aware retrieval, model fallback &amp; cost control, and governance — without ever touching their internal prompts.</p>
     <div class="cta">
       <a class="btn" href="/login">Start free →</a>
       <a class="btn ghost" href="#why">Why not just a router?</a>
@@ -166,7 +166,7 @@
     <div class="card"><div class="ic">🧠</div><h3>Shared context &amp; memory</h3><p>Sessions, durable memory, and per-project RAG — shared across agents. A decision saved in Cursor is instantly available in Claude Code.</p></div>
     <div class="card"><div class="ic">🔎</div><h3>Code-aware retrieval</h3><p>Hybrid BM25 + semantic search, symbol-level chunking, and a knowledge map so agents navigate to the exact function or spec section.</p></div>
     <div class="card"><div class="ic">⚡</div><h3>LLM gateway</h3><p>Provider fallback when quota runs out, task→model routing, semantic cache, and precise token + USD metering. OpenAI &amp; Anthropic formats.</p></div>
-    <div class="card"><div class="ic">🛡️</div><h3>Governance</h3><p>Roles, audit log, per-model cost dashboard, budgets, PII/secret redaction, SSO, and hard tenant isolation.</p></div>
+    <div class="card"><div class="ic">🛡️</div><h3>Governance</h3><p>Roles, audit log, per-model cost dashboard, budgets, and PII/secret redaction.</p></div>
     <div class="card"><div class="ic">🔌</div><h3>Native MCP + aggregation</h3><p>Every agent connects over native MCP with one command. Register downstream MCP servers and expose them all through one endpoint.</p></div>
     <div class="card"><div class="ic">🏢</div><h3>Your data, your infra</h3><p>Context lives in your Postgres — never in the model provider, never on developer laptops. Self-host in your VPC.</p></div>
   </div>
@@ -192,8 +192,8 @@
         <li><span class="tick">✓</span> <b>Shared context + memory across different agents</b></li>
         <li><span class="tick">✓</span> <b>Code-aware hybrid retrieval + knowledge map</b></li>
         <li><span class="tick">✓</span> Gateway (fallback/routing/cost) as one component</li>
-        <li><span class="tick">✓</span> RBAC, audit, cost dashboards, SSO</li>
-        <li><span class="tick">✓</span> Self-host; data never leaves your network</li>
+        <li><span class="tick">✓</span> RBAC, audit, and cost dashboards</li>
+        <li><span class="tick">✓</span> Your data in your Postgres; never in the model provider</li>
       </ul>
     </div>
   </div>
@@ -214,7 +214,7 @@
   <div class="kicker">Pricing</div>
   <h2>Local is free. Collaboration &amp; governance are paid.</h2>
   <p class="sub">Open-core, enforced in code. Bring your own model keys — the Hub routes and governs, it never resells inference.</p>
-  <div class="price">
+  <div class="price" style="grid-template-columns:repeat(2,1fr);max-width:720px;margin:0 auto">
     <div class="tier">
       <div class="nm">Free</div><div class="pr">Individual developer</div>
       <ul>
@@ -226,21 +226,13 @@
     </div>
     <div class="tier mid">
       <span class="tag">Most popular</span>
-      <div class="nm">Team</div><div class="pr">Shared across your team</div>
+      <div class="nm">Paid</div><div class="pr">Shared across your team</div>
       <ul>
         <li><span class="tick">✓</span> Everything in Free, shared across agents</li>
         <li><span class="tick">✓</span> Semantic cache + quality routing</li>
         <li><span class="tick">✓</span> Cost dashboard + analytics</li>
         <li><span class="tick">✓</span> MCP aggregation, approvals, audit</li>
-      </ul>
-    </div>
-    <div class="tier">
-      <div class="nm">Enterprise</div><div class="pr">Governed &amp; self-hosted</div>
-      <ul>
-        <li><span class="tick">✓</span> Everything in Team</li>
-        <li><span class="tick">✓</span> SSO + hard tenant isolation (RLS)</li>
-        <li><span class="tick">✓</span> Self-host in your VPC</li>
-        <li><span class="tick">✓</span> Unlimited seats &amp; usage</li>
+        <li><span class="tick">✓</span> More seats, memory, and requests</li>
       </ul>
     </div>
   </div>

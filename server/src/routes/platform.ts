@@ -9,7 +9,7 @@ import { config } from '../config.js';
 import { AuditService } from '../services/auditService.js';
 
 const audit = new AuditService();
-const PLANS: Plan[] = ['free', 'team', 'enterprise'];
+const PLANS: Plan[] = ['free', 'paid'];
 
 /** Gathers a platform-wide snapshot for the copilot + overview tab. */
 async function snapshot(): Promise<PlatformSnapshot> {
@@ -67,7 +67,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     const name = (b.name ?? '').trim();
     const slug = (b.slug ?? '').trim().toLowerCase();
     const adminEmail = (b.adminEmail ?? '').trim().toLowerCase();
-    const plan = PLANS.includes(b.plan as Plan) ? (b.plan as Plan) : 'enterprise';
+    const plan = PLANS.includes(b.plan as Plan) ? (b.plan as Plan) : 'free';
     if (!name || !slug) return reply.code(400).send({ error: { code: 'bad_request', message: 'name and slug are required' } });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
       return reply.code(400).send({ error: { code: 'bad_request', message: 'Valid admin email required' } });
@@ -101,7 +101,7 @@ export async function registerPlatformRoutes(app: FastifyInstance): Promise<void
     const vals: unknown[] = [id];
     if (b.plan !== undefined) {
       if (!PLANS.includes(b.plan as Plan)) {
-        return reply.code(400).send({ error: { code: 'bad_request', message: 'plan must be free|team|enterprise' } });
+        return reply.code(400).send({ error: { code: 'bad_request', message: 'plan must be free|paid' } });
       }
       vals.push(b.plan);
       sets.push(`plan = $${vals.length}`);

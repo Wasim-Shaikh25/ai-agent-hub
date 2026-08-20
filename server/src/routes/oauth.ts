@@ -5,7 +5,7 @@ import { signSession } from '../auth/jwt.js';
 import { KeyService } from '../services/keyService.js';
 import { AuditService } from '../services/auditService.js';
 import { events } from '../services/eventService.js';
-import { getPlan, entitled } from '../billing/entitlements.js';
+
 
 const keys = new KeyService();
 const audit = new AuditService();
@@ -83,10 +83,6 @@ async function provisionOAuthUser(
 
     if (targetOrg) {
       const role = targetOrg.admin_email && email === targetOrg.admin_email.toLowerCase() ? 'owner' : 'member';
-      // OAuth auto-join is treated like SSO: requires an enterprise workspace.
-      if (!entitled(await getPlan(targetOrg.id), 'sso')) {
-        throw new Error('OAuth auto-join requires the Enterprise plan');
-      }
       await query('INSERT INTO membership (org_id, user_id, role) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [
         targetOrg.id,
         user!.id,

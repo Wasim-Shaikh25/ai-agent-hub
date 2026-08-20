@@ -82,7 +82,7 @@ const LOGIN_HTML = /* html */ `<!doctype html><html lang="en"><head><meta charse
     <div class="tabs"><div class="tab on" id="tabSignup" onclick="mode('signup')">Sign up</div><div class="tab" id="tabLogin" onclick="mode('login')">Log in</div></div>
     <h1 id="title">Create your account</h1>
     <p class="sub" id="sub">Start free — connect your first agent in minutes.</p>
-    <div id="orgWrap"><label>Team name</label><input id="orgName" placeholder="Acme Engineering"/></div>
+    <div id="orgWrap"><label>Workspace name</label><input id="orgName" placeholder="Acme Engineering"/></div>
     <label>Work email</label><input id="email" type="email" placeholder="you@company.com"/>
     <label>Password</label><input id="password" type="password" placeholder="At least 8 characters"/>
     <div id="forgotLink" style="text-align:right;font-size:12px;margin:-6px 0 10px;display:none"><a class="small" href="/forgot-password">Forgot password?</a></div>
@@ -216,7 +216,7 @@ const ACCOUNT_HTML = /* html */ `<!doctype html><html lang="en"><head><meta char
     <hr style="border:0;border-top:1px solid var(--line);margin:22px 0"/>
     <div class="row"><span class="k">Plan</span><span class="v" id="planName">…</span></div>
     <div class="row"><span class="k">Included features</span><span class="v" id="features" style="text-align:right;max-width:60%"></span></div>
-    <button id="upgrade" onclick="upgrade()">Upgrade to Team</button>
+    <button id="upgrade" onclick="upgrade()">Upgrade</button>
     <div class="msg" id="billmsg"></div>
     <p class="small" style="margin-top:16px">Next: <a href="/admin">admin console</a> · <a href="/dashboard">cost dashboard</a> · <a href="/activity">my activity</a> · connect an agent with <span class="mono">aihub connect cursor</span>.</p>
   </div>
@@ -272,7 +272,7 @@ async function newKey(){
 }
 async function upgrade(){
   const m=document.getElementById('billmsg');m.className='msg';m.textContent='…';
-  const r=await fetch('/api/billing/checkout',{method:'POST',headers:{...h(),'Content-Type':'application/json'},body:JSON.stringify({priceId:'price_team'})});
+  const r=await fetch('/api/billing/checkout',{method:'POST',headers:{...h(),'Content-Type':'application/json'},body:JSON.stringify({priceId:'price_paid'})});
   const d=await r.json();
   if(r.ok&&d.url){location.href=d.url;return;}
   m.className='msg err';m.textContent=(d.error&&d.error.message)||'Billing is not configured on this instance yet.';

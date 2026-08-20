@@ -1,12 +1,11 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { queryOne } from '../db/pool.js';
 
-export type Plan = 'free' | 'team' | 'enterprise';
+export type Plan = 'free' | 'paid';
 
 export type Feature =
   | 'shared_context' | 'semantic_cache' | 'quality_routing' | 'cost_dashboard'
-  | 'mcp_aggregation' | 'content_approvals' | 'audit'
-  | 'sso' | 'rls' | 'self_host';
+  | 'mcp_aggregation' | 'content_approvals' | 'audit';
 
 export interface Limits {
   seats: number;
@@ -15,15 +14,13 @@ export interface Limits {
   monthlyRequests: number;
 }
 
-const TEAM: Feature[] = ['shared_context', 'semantic_cache', 'quality_routing', 'cost_dashboard', 'mcp_aggregation', 'content_approvals', 'audit'];
-const ENTERPRISE: Feature[] = ['sso', 'rls', 'self_host'];
+const PAID: Feature[] = ['shared_context', 'semantic_cache', 'quality_routing', 'cost_dashboard', 'mcp_aggregation', 'content_approvals', 'audit'];
 
 const INF = Number.POSITIVE_INFINITY;
 
 export const PLANS: Record<Plan, { features: Set<Feature>; limits: Limits }> = {
   free: { features: new Set(), limits: { seats: 1, projects: 2, memoryRows: 500, monthlyRequests: 2000 } },
-  team: { features: new Set(TEAM), limits: { seats: 25, projects: INF, memoryRows: 100000, monthlyRequests: 100000 } },
-  enterprise: { features: new Set([...TEAM, ...ENTERPRISE]), limits: { seats: INF, projects: INF, memoryRows: INF, monthlyRequests: INF } },
+  paid: { features: new Set(PAID), limits: { seats: 25, projects: INF, memoryRows: 100000, monthlyRequests: 100000 } },
 };
 
 export function entitled(plan: Plan, feature: Feature): boolean {
@@ -46,7 +43,7 @@ async function orgState(orgId: string): Promise<{ plan: Plan; suspended: boolean
   const c = cache.get(orgId);
   if (c && Date.now() - c.ts < TTL) return c;
   const row = await queryOne<{ plan: string; suspended: boolean }>('SELECT plan, suspended FROM org WHERE id = $1', [orgId]);
-  const plan = (['free', 'team', 'enterprise'].includes(row?.plan ?? '') ? row!.plan : 'free') as Plan;
+  const plan = (['free', 'paid'].includes(row?.plan ?? '') ? row!.plan : 'free') as Plan;
   const state = { plan, suspended: Boolean(row?.suspended), ts: Date.now() };
   cache.set(orgId, state);
   return state;

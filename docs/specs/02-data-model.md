@@ -20,7 +20,7 @@ Org ──< Membership >── User
 ## 2. Core tables (see `server/migrations/001_init.sql` for the DDL)
 
 ### org
-`id`, `name`, `slug`, `plan` (`free|team|enterprise`), `admin_email` (unique,
+`id`, `name`, `slug`, `plan` (`free|paid`), `admin_email` (unique,
 optional — used for SSO/OAuth domain auto-join), `suspended` (bool — a
 suspended org is blocked at auth with `403 org_suspended`), `created_at`.
 

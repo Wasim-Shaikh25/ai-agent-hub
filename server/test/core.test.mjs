@@ -44,9 +44,9 @@ test('entitlements: free org is blocked from a paid feature (402)', async () => 
   assert.equal(audit.body.error.code, 'upgrade_required');
 });
 
-test('entitlements: an enterprise org is allowed the paid feature', async () => {
+test('entitlements: a paid org is allowed the paid feature', async () => {
   const { token } = await signup(base, 'ent');
-  await setPlan(claims(token).orgId, 'enterprise'); // set before first request so the plan cache is cold
+  await setPlan(claims(token).orgId, 'paid'); // set before first request so the plan cache is cold
   const audit = await jfetch(base, '/api/audit', { token });
   assert.equal(audit.status, 200);
   assert.ok(Array.isArray(audit.body));

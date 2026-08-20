@@ -40,7 +40,7 @@ SSO/OAuth login.
 
 `PUT /api/platform/orgs/:id` changes:
 
-- **plan** — `free | team | enterprise`; invalidates the entitlement cache
+- **plan** — `free | paid`; invalidates the entitlement cache
   immediately (`invalidatePlan`) so the change takes effect on the next request.
 - **suspended** — `true|false`. A suspended org is blocked at auth with
   `403 org_suspended` **before** any handler runs.

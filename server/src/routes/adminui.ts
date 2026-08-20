@@ -58,7 +58,7 @@ const api=async(p,o={})=>{const r=await fetch(p,{headers:o.body?HJ:H,...o});cons
 const el=(h)=>{const d=document.createElement('div');d.innerHTML=h;return d};
 const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-const TABS=[['overview','Overview'],['agents','Agents & Models'],['content','Content'],['policies','Policies'],['keys','API Keys'],['team','Team'],['mcp','MCP Servers'],['audit','Audit']];
+const TABS=[['overview','Overview'],['agents','Agents & Models'],['content','Content'],['policies','Policies'],['keys','API Keys'],['team','Members'],['mcp','MCP Servers'],['audit','Audit']];
 const nav=document.getElementById('nav');
 TABS.forEach(([id,label])=>{const a=el('<a data-t="'+id+'">'+label+'</a>').firstChild;a.onclick=()=>show(id);nav.appendChild(a)});
 function show(id){[...nav.children].forEach(a=>a.classList.toggle('on',a.dataset.t===id));(VIEWS[id]||(()=>{}))();location.hash=id}
@@ -116,9 +116,10 @@ const VIEWS={
  })},
  team(){guard(async()=>{
    const ms=await api('/api/members');
-   M.innerHTML='<div class="hdr"><h1>Team</h1></div><div class="card"><table><tr><th>Email</th><th>Role</th><th></th></tr>'+
-   ms.map(m=>'<tr><td>'+esc(m.email)+'</td><td><select id="r_'+m.userId+'">'+['viewer','member','admin','owner'].map(r=>'<option '+(m.role===r?'selected':'')+'>'+r+'</option>').join('')+'</select></td><td class="right"><button class="ghost" onclick="setRole(\\''+m.userId+'\\')">Save</button></td></tr>').join('')+'</table><p class="muted" style="font-size:12px;margin-top:8px">Invite via SSO (Enterprise) or share a signup link.</p></div>';
+   M.innerHTML='<div class="hdr"><h1>Members</h1></div><div class="card"><table><tr><th>Email</th><th>Role</th><th></th></tr>'+
+   ms.map(m=>'<tr><td>'+esc(m.email)+'</td><td><select id="r_'+m.userId+'">'+['viewer','member','admin','owner'].map(r=>'<option '+(m.role===r?'selected':'')+'>'+r+'</option>').join('')+'</select></td><td class="right"><button class="ghost" onclick="setRole(\\''+m.userId+'\\')">Save</button></td></tr>').join('')+'</table><p class="muted" style="font-size:12px;margin-top:8px">Invite via SSO or share a signup link.</p></div>';
  })},
+
  mcp(){guard(async()=>{
    const srv=await api('/api/mcp-servers');
    M.innerHTML='<div class="hdr"><h1>MCP Servers</h1></div>'+

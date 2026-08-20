@@ -62,11 +62,9 @@ export class BillingService {
 
   /** Applies a subscription-status change from a webhook, syncing the plan. */
   async applySubscriptionStatus(customerId: string, status: string): Promise<void> {
-    // active/trialing → at least Team (keep Enterprise if already set); otherwise Free.
+    // active/trialing → paid; otherwise free.
     const active = status === 'active' || status === 'trialing';
-    const planExpr = active
-      ? `CASE WHEN plan = 'enterprise' THEN 'enterprise' ELSE 'team' END`
-      : `'free'`;
+    const planExpr = active ? `'paid'` : `'free'`;
     await query(
       `UPDATE org SET subscription_status = $2, plan = ${planExpr} WHERE stripe_customer_id = $1`,
       [customerId, status],

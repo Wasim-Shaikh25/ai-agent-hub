@@ -24,7 +24,7 @@ above any router**:
 - Shared context/memory **across different agents** (Cursor → Kiro continuity).
 - Behavior governance (skills/rules) synced into each agent.
 - Per-session RAG + a context assembler that sends the *minimal correct* context.
-- Team policy, audit, cost — enterprise controls no free router has.
+- Team policy, audit, cost — paid controls no free router has.
 
 The gateway (LiteLLM) is an **internal, swappable component** — ~15% of the
 surface area. The Context + Governance planes are the product.
@@ -42,7 +42,7 @@ every AI coding agent your team uses.*
 | RAG | local repo only | team knowledge base, hosted vectors |
 | LLM gateway | BYO / self-run | managed fallback, cost caps, audit |
 | Governance | — | RBAC, policy, audit log, cost dashboards, SSO |
-| Deployment | local | SaaS **or** self-host in customer VPC (enterprise) |
+| Deployment | local | SaaS **or** self-host in customer VPC (paid) |
 
 Principle: **local = free, collaborative + governed = paid.** The paid features
 genuinely require a server, so there is no "why can't I self-host the free bit"
