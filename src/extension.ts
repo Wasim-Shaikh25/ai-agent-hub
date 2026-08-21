@@ -13,7 +13,8 @@ import { RepoSyncStore } from './core/repoSyncStore';
 import { McpStore } from './core/mcpStore';
 import { McpManager } from './core/mcpManager';
 import { HubClient } from './core/hubClient';
-import { connectServer, connectAgentsToHub, pullFromHub } from './commands/hubServer';
+import { UniversalMcpProxy } from './core/universalMcpProxy';
+import { connectServer, connectAgentsToHub, pullFromHub, startUniversalMcpProxy } from './commands/hubServer';
 import { HubPanel } from './ui/hubPanel';
 import { SetupPanel } from './ui/setupPanel';
 import { openHub } from './commands/openHub';
@@ -47,6 +48,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const mcpStore = new McpStore(storage);
     const mcpManager = new McpManager();
     const hubClient = new HubClient(context);
+    const universalProxy = new UniversalMcpProxy();
     const syncEngine = new SyncEngine(
       registry,
       agentConfig,
@@ -114,6 +116,9 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.registerCommand('aiAgentHub.connectAgentsToHub', () =>
         connectAgentsToHub(hubClient),
       ),
+      vscode.commands.registerCommand('aiAgentHub.startUniversalMcpProxy', () =>
+        startUniversalMcpProxy(universalProxy, hubClient, agentConfig, fileWriter),
+      ),
       vscode.commands.registerCommand('aiAgentHub.pullFromHub', () => pullFromHub(hubClient)),
     );
 
@@ -122,6 +127,7 @@ export function activate(context: vscode.ExtensionContext): void {
       dispose: () => {
         hubPanel.dispose();
         setupPanel.dispose();
+        universalProxy.stop();
         mcpManager.stopAll();
         logger.dispose();
       },
