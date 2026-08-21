@@ -3,7 +3,17 @@ import * as https from 'https';
 import * as net from 'net';
 import { URL } from 'url';
 
-const HOP_BY_HOP = new Set(['content-length', 'transfer-encoding', 'connection', 'keep-alive', 'upgrade', 'proxy-authenticate', 'proxy-authorization', 'te', 'trailer']);
+const HOP_BY_HOP = new Set([
+  'content-length',
+  'transfer-encoding',
+  'connection',
+  'keep-alive',
+  'upgrade',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+]);
 
 /**
  * A local HTTP proxy that exposes the Hub's MCP endpoint in a single,
@@ -53,7 +63,11 @@ export class UniversalMcpProxy {
 
       if (req.method !== 'POST' || req.url !== '/mcp') {
         res.writeHead(404, { 'Content-Type': 'application/json' }).end(
-          JSON.stringify({ jsonrpc: '2.0', error: { code: -32601, message: 'Not found' }, id: null }),
+          JSON.stringify({
+            jsonrpc: '2.0',
+            error: { code: -32601, message: 'Not found' },
+            id: null,
+          }),
         );
         return;
       }
@@ -97,7 +111,12 @@ export class UniversalMcpProxy {
     });
   }
 
-  private forward(req: http.IncomingMessage, res: http.ServerResponse, hubUrl: URL, hubApiKey: string): void {
+  private forward(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    hubUrl: URL,
+    hubApiKey: string,
+  ): void {
     const headers: http.OutgoingHttpHeaders = {
       Authorization: `Bearer ${hubApiKey}`,
       'Content-Type': req.headers['content-type'] || 'application/json',

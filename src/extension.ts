@@ -14,7 +14,12 @@ import { McpStore } from './core/mcpStore';
 import { McpManager } from './core/mcpManager';
 import { HubClient } from './core/hubClient';
 import { UniversalMcpProxy } from './core/universalMcpProxy';
-import { connectServer, connectAgentsToHub, pullFromHub, startUniversalMcpProxy } from './commands/hubServer';
+import {
+  connectServer,
+  connectAgentsToHub,
+  pullFromHub,
+  startUniversalMcpProxy,
+} from './commands/hubServer';
 import { HubPanel } from './ui/hubPanel';
 import { SetupPanel } from './ui/setupPanel';
 import { openHub } from './commands/openHub';
